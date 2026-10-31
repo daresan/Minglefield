@@ -197,7 +197,10 @@ class ActionService:
                 grant, agent = json.loads(row[1]), json.loads(row[4])
                 if type(grant) is not dict or type(agent) is not dict:
                     raise _Reject("invalid_policy")
-                if grant.get("agent_id") != row[0] or agent.get("agent_id") != row[0]:
+                if (grant.get("agent_id") != row[0] or agent.get("agent_id") != row[0]
+                        or grant.get("delegation_id") != delegation_id):
+                    raise _Reject("invalid_policy")
+                # The persisted grant identity must agree with the selected DB row.
                     raise _Reject("invalid_policy")
                 if row[5]:
                     raise _Reject("agent_suspended")
@@ -221,7 +224,14 @@ class ActionService:
                     raise _Reject("scope_denied")
                 if grant.get("target_id") != target_id:
                     raise _Reject("target_denied")
-                if not _time(grant["issued_at"]) <= at < _time(grant["expires_at"]):
+                issued_at, expires_at = grant.get("issued_at"), grant.get("expires_at")
+                if type(issued_at) is not str or type(expires_at) is not str:
+                    raise _Reject("invalid_policy")
+                try:
+                    issued, expires = _time(issued_at), _time(expires_at)
+                except (ValueError, TypeError, OverflowError):
+                    raise _Reject("invalid_policy")
+                if issued >= expires or not issued <= at < expires:
                     raise _Reject("outside_validity")
                 request_json = _canonical(dict(version=1, user_id=session[0], agent_id=agent_id,
                     delegation_id=delegation_id, target_id=target_id, action_type=action_type,

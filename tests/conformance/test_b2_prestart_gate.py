@@ -186,6 +186,31 @@ class PrestartGateTests(unittest.TestCase):
         self.assertEqual((result.state, result.reason), ("denied", "invalid_original_session"))
         self.assertEqual(self.counts(), (1, 3, 100))
 
+    def test_corrupt_stored_claim_digest_rejected_without_mutation(self):
+        claim = self.claimed()
+        for stored in ("not-a-digest", "F" * 64, "g" * 64):
+            with self.subTest(stored=stored):
+                db = sqlite3.connect(self.db)
+                try:
+                    db.execute("UPDATE action_jobs SET claim_token_hash=? WHERE job_id=?",
+                               (stored, claim.job_id))
+                    db.commit()
+                finally:
+                    db.close()
+                result = PrestartGate(self.service).authorize(
+                    job_id=claim.job_id, worker_id="worker.one",
+                    claim_token=claim.claim_token)
+                self.assertEqual(result.state, "rejected")
+                self.assertEqual(self.query("SELECT state FROM action_jobs"), [("claimed",)])
+                self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_invalid_unicode_claim_token_rejected_without_mutation(self):
+        claim = self.claimed()
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token="\\ud800")
+        self.assertEqual(result.state, "rejected")
+        self.assertEqual(self.counts(), (1, 2, 100))
+
 
 if __name__ == "__main__":
     unittest.main()

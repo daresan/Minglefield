@@ -1,0 +1,16 @@
+{
+  "map_versions": [
+    "0.1"
+  ],
+  "interaction_profiles": [
+    "event_driven",
+    "real_time"
+  ],
+  "codecs": [
+    "json"
+  ],
+  "capabilities": [
+    "map.action_submit",
+    "map.observation_push"
+  ]
+}

@@ -295,5 +295,53 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual((result.state, result.reason), ("denied", "request_binding_mismatch"))
         self.assertEqual(self.counts(), (1, 2, 100))
 
+    def test_corrupt_grant_budget_limit_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["max_spend_minor"] = True
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_corrupt_request_version_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            request["version"] = True
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_corrupt_request_parameters_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            request["parameters"] = []
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
 if __name__ == "__main__":
     unittest.main()

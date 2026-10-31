@@ -42,7 +42,11 @@ class _Reject(Exception):
 def _canonical(value):
     """B1 JSON canonical form; object order irrelevant, arrays/type distinctions kept."""
     def validate(item):
-        if item is None or type(item) in (str, bool, int):
+        if item is None or type(item) in (bool, int):
+            return
+        if type(item) is str:
+            if any(0xD800 <= ord(ch) <= 0xDFFF for ch in item):
+                raise ValueError("isolated Unicode surrogate")
             return
         if type(item) is float and math.isfinite(item):
             return
@@ -51,7 +55,8 @@ def _canonical(value):
                 validate(child)
             return
         if type(item) is dict and all(type(key) is str for key in item):
-            for child in item.values():
+            for key, child in item.items():
+                validate(key)
                 validate(child)
             return
         raise ValueError("non-JSON value")

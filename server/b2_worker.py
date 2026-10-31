@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from b2_schema import migrate_b2
-from action_service import _time
+from action_service import _time, MAX_INT
 
 
 @dataclass(frozen=True)
@@ -96,6 +96,9 @@ class ClaimWorker:
                     or agent.get("agent_id") != agent_id
                     or grant.get("delegation_id") != delegation_id):
                 return "invalid_policy"
+            revision = agent.get("revision")
+            if type(revision) is not int or not 0 <= revision <= MAX_INT:
+                return "invalid_policy"
             if grant.get("status") != "active" or grant.get("requester_user_id") != user_id:
                 return "grant_inactive"
             if rule is None or rule.scope != request["scope"]:
@@ -112,7 +115,11 @@ class ClaimWorker:
             if grant.get("target_id") != request["target_id"]:
                 return "target_denied"
             at = datetime.fromtimestamp(now, timezone.utc)
-            if not _time(grant["issued_at"]) <= at < _time(grant["expires_at"]):
+            issued_at, expires_at = grant.get("issued_at"), grant.get("expires_at")
+            if type(issued_at) is not str or type(expires_at) is not str:
+                return "invalid_policy"
+            issued, expires = _time(issued_at), _time(expires_at)
+            if issued >= expires or not issued <= at < expires:
                 return "outside_validity"
             if type(cost) is not int or cost < 0:
                 return "invalid_cost"

@@ -49,8 +49,8 @@ class V4CompatibilityTests(unittest.TestCase):
         second = service.submit(**(self.args | {"idempotency_key": "request.2"}))
         self.assertTrue(second.allowed)
         self.assertEqual(ClaimWorker(service).claim_next("worker.two").job_id, second.job_id)
-        self.assertEqual(self.query("SELECT state FROM action_jobs ORDER BY job_id"),
-                         sorted([("ready",), ("claimed",)]))
+        self.assertEqual(dict(self.query("SELECT job_id,state FROM action_jobs")),
+                         {first.job_id: "ready", second.job_id: "claimed"})
         self.assertEqual(self.counts(), (2, 5, 200))
 
     def test_v4_rejects_bad_claim_without_mutation(self):

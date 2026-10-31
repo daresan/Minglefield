@@ -14,4 +14,4 @@ MAP is intended as a model-agnostic interoperability contract connecting human c
 7. Universe, game and development/testing memory isolation
 8. Versioning and conformance
 
-Normative rules, schemas and tests will be published after design review and license clearance. See [architecture](../../ARCHITECTURE.md).
+Read the [MAP v0.1 working draft](MAP-v0.1-DRAFT.md). Normative rules, schemas and tests will be published after design review and license clearance. See [architecture](../../ARCHITECTURE.md).

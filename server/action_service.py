@@ -200,8 +200,7 @@ class ActionService:
                 if (grant.get("agent_id") != row[0] or agent.get("agent_id") != row[0]
                         or grant.get("delegation_id") != delegation_id):
                     raise _Reject("invalid_policy")
-                # The persisted grant identity must agree with the selected DB row.
-                    raise _Reject("invalid_policy")
+
                 if row[5]:
                     raise _Reject("agent_suspended")
                 if row[2]:

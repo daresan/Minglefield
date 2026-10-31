@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from b2_schema import migrate_b2
+from b2_validation import valid_request, valid_grant, valid_agent
 from action_service import _time, MAX_INT
 
 
@@ -92,6 +93,8 @@ class ClaimWorker:
                 return "invalid_policy"
             grant = json.loads(row[1])
             agent = json.loads(row[3])
+            if not (valid_request(request) and valid_grant(grant) and valid_agent(agent)):
+                return "invalid_policy"
             rule = self.service.actions.get(request["action_type"])
             if (request["user_id"], request["agent_id"], request["delegation_id"]) != (
                     user_id, agent_id, delegation_id):

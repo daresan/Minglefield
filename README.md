@@ -39,3 +39,5 @@ We welcome design feedback, technical discussion and help defining MAP, open con
 **GitHub Sponsors is live:** [Support Minglefield's development](https://github.com/sponsors/daresan). Milestone-based crowdfunding is still in planning. See [FUNDING.md](FUNDING.md) for scope and status.
 
 Minglefield is an independent project. No affiliation with a game platform, AI vendor or other organization is implied.
+
+MAP shared-agent permissions: [authorization and emergency controls draft](docs/map/AGENT-AUTHORIZATION-v0.1-DRAFT.md).

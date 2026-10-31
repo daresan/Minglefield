@@ -47,3 +47,29 @@ class StoredPolicyShapes(unittest.TestCase):
         result = self.service.submit(**self.args)
         self.assertFalse(result.allowed)
         self.assertEqual(fixture.SubmissionTests.counts(self), (0, 0, 0))
+
+    def test_non_object_grant_must_fail_closed(self):
+        with closing(sqlite3.connect(self.db)) as db:
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(["invalid"]),))
+            db.commit()
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_non_object_agent_must_fail_closed(self):
+        with closing(sqlite3.connect(self.db)) as db:
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(["invalid"]),))
+            db.commit()
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_non_object_nested_policy_must_fail_closed(self):
+        with closing(sqlite3.connect(self.db)) as db:
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["policy"] = ["invalid"]
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))

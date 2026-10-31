@@ -5,3 +5,5 @@
 Shared-agent draft checks cover operator approval role, allowed/denied requester and scope, expiry, revocation and suspension. They are illustrative policy checks, **not** production-grade enforcement or proven emergency shutdown.
 
 Run policy engine unit tests: `python -m unittest discover -s tests/conformance -p 'test_*.py' -v`. These tests exercise a runnable in-memory prototype; they do not prove production security.
+
+SQLite v0.2 tests: `test_sqlite_policy_engine.py` covers restart persistence, concurrent budget reservations, duplicate operations and deny rules. The same unittest discovery command runs both engine suites.

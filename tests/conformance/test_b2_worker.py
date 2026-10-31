@@ -143,7 +143,7 @@ class WorkerClaimTests(unittest.TestCase):
         job = self.service.submit(**self.args)
         self.assertTrue(job.allowed)
         self.actions.clear()
-        result = ClaimWorker(self.service).claim_next("worker.one")
+        result = ClaimWorker(self.new_service()).claim_next("worker.one")
         self.assertEqual((result.state, result.reason), ("denied", "action_rule_changed"))
         self.assertEqual(self.counts(), (1, 2, 100))
 

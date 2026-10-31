@@ -43,3 +43,7 @@ The first [Python Policy Engine prototype](../../server/POLICY_ENGINE.md) now im
 ## SQLite v0.2 experiment
 
 [SQLite transactional policy engine](../../server/SQLITE_POLICY_ENGINE.md) persists agent records, grants, revocations, suspensions and operation reservations. Its authorization and accounting decisions are serialized with SQLite `BEGIN IMMEDIATE` transactions. Authentication, trusted time, distributed revocation and real runtime cancellation remain unresolved.
+
+## Local identity and session prototype v0.3
+
+[Session security reference](../../server/SESSION_SECURITY.md) demonstrates local credential enrollment, hashed bearer tokens, durable session revocation and a gateway that supplies verified requester identity and server time to the SQLite policy engine. This is not an identity provider or atomic production dispatcher.

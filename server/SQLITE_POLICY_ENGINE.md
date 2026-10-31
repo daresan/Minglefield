@@ -32,6 +32,17 @@ The class expects *schema-validated* agent/grant dictionaries and *authenticated
 
 ## Explicit limitations
 
+Phase A adds optional `expected_agent_id` to `authorize()`. When supplied, it is
+checked against the persistent delegation's agent inside the same transaction,
+before deduplication or reservation. The gateway always supplies the verified
+session's agent ID. Existing trusted direct callers may omit it for compatibility;
+this low-level API still requires an authenticated caller and is not a public API.
+
+The agent-level `max_spend_minor` is currently applied to each grant separately,
+not to the aggregate of all grants. Multiple grants can exceed an intended
+agent-wide cap. This remains an **unresolved P1**, with executable expected-failure
+tests for both engines. See [Phase A security regressions](PHASE_A_SECURITY.md).
+
 - No cryptographic authentication, token validation, verified legal identities or real multi-operator approval quorum.
 - No distributed policy enforcement; SQLite is suitable for one host and one shared local database file, **not** multiple independently replicated runtimes.
 - No actual process cancellation. Suspension prevents subsequent authorization decisions only; in-flight actions must be stopped by a separate trusted runtime.

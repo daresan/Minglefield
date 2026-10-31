@@ -73,7 +73,7 @@ class PolicyEngine:
                 return Decision(False, "outside_validity")
             if type(cost_minor) is not int or cost_minor < 0:
                 return Decision(False, "invalid_cost")
-            if cost_minor and operation_id is None:
+            if cost_minor and not operation_id:
                 return Decision(False, "operation_id_required")
             opkey = (delegation_id, operation_id) if operation_id is not None else None
             fingerprint = (verified_requester, scope, target_id, cost_minor)

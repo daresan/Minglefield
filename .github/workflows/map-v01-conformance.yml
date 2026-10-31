@@ -3,12 +3,14 @@ name: MAP v0.1 Draft Conformance
 on:
   push:
     paths:
+      - 'server/**'
       - '.github/workflows/map-v01-conformance.yml'
       - 'schemas/map/**'
       - 'examples/map/**'
       - 'tests/conformance/**'
   pull_request:
     paths:
+      - 'server/**'
       - '.github/workflows/map-v01-conformance.yml'
       - 'schemas/map/**'
       - 'examples/map/**'

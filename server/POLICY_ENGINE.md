@@ -28,6 +28,13 @@ GitHub Actions runs both commands on changes to the relevant directories.
 - Fail-closed decision reasons and a per-process lock around state changes.
 
 ## Critical limitations
+
+Phase A aligns paid-operation input handling with SQLite: a positive cost with
+an absent or empty operation ID returns `operation_id_required`. Costs must be
+nonnegative Python integers (booleans are rejected). Zero-cost calls retain their
+existing optional/empty-ID behavior. Fingerprints, deduplication scope and retry
+results are unchanged; this is reservation deduplication, not execution idempotency.
+See [Phase A security regressions](PHASE_A_SECURITY.md).
 - The caller supplies *verified* identities; this prototype **does not authenticate** users or validate cryptographic delegation grants.
 - Input must be validated against MAP schemas **before** entering the engine; it trusts the agent/grant record shape.
 - Policy and state are in memory. Restarts lose grants, revocations, suspension state, spending totals and operation deduplication. It is not safe for multi-process or distributed use.

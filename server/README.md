@@ -1,6 +1,6 @@
 # Optional Minglefield server core
 
-**Planned; no implementation yet.** May provide authoritative sessions, identity/policy enforcement, discovery and reference hosting. Compatible independent hosts are permitted.
+**Experimental reference implementations are available** for policy decisions, SQLite persistence and local bearer sessions. There is no production server, action executor or runtime cancellation yet. Discovery and reference hosting remain planned. Compatible independent hosts are permitted.
 
 Candidate license: AGPL 3.0; exact variant and dependency boundaries pending legal review.
 

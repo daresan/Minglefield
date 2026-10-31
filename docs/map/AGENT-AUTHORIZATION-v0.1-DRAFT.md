@@ -39,3 +39,7 @@ See [identity and delegation](IDENTITY-DELEGATION-v0.1-DRAFT.md) and [message mo
 ## Executable prototype
 
 The first [Python Policy Engine prototype](../../server/POLICY_ENGINE.md) now implements local decision checks, scoped grants, spending limits, revocation and suspension, with unit tests. It is **not** an authenticated, durable or distributed enforcement service.
+
+## SQLite v0.2 experiment
+
+[SQLite transactional policy engine](../../server/SQLITE_POLICY_ENGINE.md) persists agent records, grants, revocations, suspensions and operation reservations. Its authorization and accounting decisions are serialized with SQLite `BEGIN IMMEDIATE` transactions. Authentication, trusted time, distributed revocation and real runtime cancellation remain unresolved.

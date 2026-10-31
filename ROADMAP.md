@@ -13,6 +13,7 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 ## Stage 1 — Minglefield Foundation (first milestone)
 - [ ] Define MAP v0.1: identity, discovery, sessions, observations, actions, permissions, fairness and memory boundaries.
+- [x] Add draft game manifest and capability negotiation schemas, examples and conformance workflow (CI result pending verification).
 - [ ] Publish machine-readable schemas, example messages and basic conformance tests.
 - [ ] Choose and publish open-source licenses for code, specifications, SDKs and documentation as appropriate.
 - [ ] Establish contribution, AI-assisted contribution, security and governance rules.

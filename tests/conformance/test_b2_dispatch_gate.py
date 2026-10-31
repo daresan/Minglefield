@@ -129,7 +129,7 @@ class DispatchGateTests(unittest.TestCase):
 
     def test_malformed_session_expiry_denies_without_intent(self):
         claim = self.prepare()
-        self.execute("UPDATE auth_sessions SET expires_at=NULL")
+        self.execute("UPDATE auth_sessions SET expires_at='invalid-expiry'")
         result = self.dispatch(claim)
         self.assertEqual((result.state, result.reason),
                          ("denied", "invalid_original_session"))

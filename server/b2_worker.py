@@ -69,7 +69,9 @@ class ClaimWorker:
             s.expires_at,s.revoked,p.disabled FROM auth_sessions s
             JOIN auth_principals p ON p.user_id=s.user_id WHERE s.token_hash=?""",
             (session_hash,)).fetchone()
-        if (not session or session[4] or session[5] or now >= session[3]
+        if (not session or session[4] or session[5]
+                or type(session[3]) not in (int, float)
+                or not math.isfinite(session[3]) or now >= session[3]
                 or session[:3] != (user_id, agent_id, delegation_id)):
             return "invalid_original_session"
         row = db.execute("""SELECT g.agent_id,g.grant_json,g.revoked,

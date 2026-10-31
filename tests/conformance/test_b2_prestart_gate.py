@@ -1,4 +1,6 @@
 """B2.2 pre-start authorization and claim fencing tests."""
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 
 import test_action_submission as fixture
@@ -61,6 +63,66 @@ class PrestartGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "schema v3"):
             PrestartGate(self.service).authorize(job_id=claim.job_id,
                 worker_id="worker.one", claim_token=claim.claim_token)
+
+    def test_revoked_grant_after_claim_denies(self):
+        claim = self.claimed()
+        self.assertTrue(self.policy.revoke(
+            delegation_id="grant.01", verified_actor="user.alice").allowed)
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason), ("denied", "grant_revoked"))
+        self.assertEqual(self.counts(), (1, 3, 100))
+
+    def test_suspended_agent_after_claim_denies(self):
+        claim = self.claimed()
+        self.assertTrue(self.policy.set_suspended(
+            agent_id=self.agent["agent_id"], verified_actor="user.alice",
+            suspended=True).allowed)
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason), ("denied", "agent_suspended"))
+        self.assertEqual(self.counts(), (1, 3, 100))
+
+    def test_concurrent_gate_allows_exactly_one_transition(self):
+        claim = self.claimed()
+        gate = PrestartGate(self.service)
+        def authorize(_):
+            return gate.authorize(job_id=claim.job_id, worker_id="worker.one",
+                                  claim_token=claim.claim_token)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(authorize, range(8)))
+        self.assertEqual(sum(result.state == "ready" for result in results), 1)
+        self.assertEqual(sum(result.state == "rejected" for result in results), 7)
+        self.assertEqual(self.query(
+            "SELECT COUNT(*) FROM action_audit WHERE event_type='job.ready'"), [(1,)])
+        self.assertEqual(self.counts(), (1, 3, 100))
+
+    def test_audit_failure_rolls_back_ready_transition(self):
+        claim = self.claimed()
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("""CREATE TRIGGER reject_ready_audit BEFORE INSERT ON action_audit
+                WHEN NEW.event_type='job.ready'
+                BEGIN SELECT RAISE(ABORT,'injected ready audit failure'); END""")
+            db.commit()
+        finally:
+            db.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "injected ready audit failure"):
+            PrestartGate(self.service).authorize(
+                job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("claimed",)])
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_restart_preserves_claim_fencing(self):
+        claim = self.claimed()
+        restarted = PrestartGate(self.new_service())
+        self.assertEqual(restarted.authorize(
+            job_id=claim.job_id, worker_id="worker.other",
+            claim_token=claim.claim_token).state, "rejected")
+        self.assertEqual(restarted.authorize(
+            job_id=claim.job_id, worker_id="worker.one",
+            claim_token=claim.claim_token).state, "ready")
+        self.assertEqual(self.counts(), (1, 3, 100))
 
 
 if __name__ == "__main__":

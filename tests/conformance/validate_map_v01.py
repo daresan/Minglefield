@@ -27,6 +27,10 @@ SCHEMA_FILES = [
     "game-manifest.schema.json",
     "capability-offer.schema.json",
     "negotiation-result.schema.json",
+    "agent-descriptor.schema.json",
+    "delegation-grant.schema.json",
+    "delegation-revocation.schema.json",
+    "agent-suspension.schema.json",
 ]
 
 
@@ -113,9 +117,56 @@ def main() -> None:
     ):
         raise AssertionError("inconsistent negotiation result incorrectly accepted")
 
+
+    # Draft shared-agent examples and stateful authorization controls.
+    agent = read_json(EXAMPLES / "shared-agent.json")
+    grant = read_json(EXAMPLES / "delegation-grant.json")
+    revocation = read_json(EXAMPLES / "delegation-revocation.json")
+    suspension = read_json(EXAMPLES / "agent-suspension.json")
+    for name, value in [
+        ("agent-descriptor.schema.json", agent),
+        ("delegation-grant.schema.json", grant),
+        ("delegation-revocation.schema.json", revocation),
+        ("agent-suspension.schema.json", suspension),
+    ]:
+        check(name, value, name)
+    operators = {
+        operator["user_id"]: set(operator["roles"])
+        for operator in agent["operators"]
+    }
+
+    def authorize(requester, scope, at, revoked=False, suspended=False):
+        from datetime import datetime
+        def dt(value):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return (
+            not suspended
+            and not revoked
+            and agent["state"] == "active"
+            and grant["status"] == "active"
+            and grant["agent_id"] == agent["agent_id"]
+            and requester == grant["requester_user_id"]
+            and scope in grant["scopes"]
+            and scope in agent["policy"]["allowed_scopes"]
+            and dt(grant["issued_at"]) <= dt(at) < dt(grant["expires_at"])
+        )
+
+    assert "approver" in operators[grant["issuer_user_id"]]
+    assert revocation["delegation_id"] == grant["delegation_id"]
+    assert suspension["agent_id"] == agent["agent_id"]
+    assert authorize("user.charlie", "game.test_feedback", "2026-10-31T12:15:00Z")
+    assert not authorize("user.other", "game.test_feedback", "2026-10-31T12:15:00Z")
+    assert not authorize("user.charlie", "game.develop", "2026-10-31T12:15:00Z")
+    assert not authorize("user.charlie", "game.test_feedback", "2026-10-31T15:00:00Z")
+    assert not authorize("user.charlie", "game.test_feedback", "2026-10-31T12:35:00Z", revoked=True)
+    assert not authorize("user.charlie", "game.test_feedback", "2026-10-31T12:35:00Z", suspended=True)
+    invalid_agent = dict(agent)
+    invalid_agent["operators"] = []
+    assert not validators["agent-descriptor.schema.json"].is_valid(invalid_agent)
+
     print(
         f"PASS: {len(schemas)} schemas, {len(trace)} action trace messages, "
-        f"{len(cases)} negotiation cases, 3 negative controls"
+        f"{len(cases)} negotiation cases, 3 baseline negative controls, shared-agent authorization checks"
     )
 
 

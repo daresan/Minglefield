@@ -72,6 +72,21 @@ class PrestartMigrationTests(unittest.TestCase):
         self.assertEqual(self.query("SELECT state FROM action_jobs"), [("queued",)])
         self.assertEqual(self.counts(), (1, 1, 100))
 
+    def test_action_service_submit_and_replay_after_v3_migration(self):
+        first = self.service.submit(**self.args)
+        self.assertTrue(first.allowed)
+        migrate_b2(self.db)
+        migrate_b2_prestart(self.db)
+        restarted = self.new_service()
+        replay = restarted.submit(**self.args)
+        self.assertTrue(replay.allowed)
+        self.assertEqual(replay.job_id, first.job_id)
+        second = restarted.submit(**(self.args | {"idempotency_key": "request.2"}))
+        self.assertTrue(second.allowed)
+        self.assertNotEqual(second.job_id, first.job_id)
+        self.assertEqual(self.counts(), (2, 2, 200))
+        self.assertEqual(self.query("PRAGMA foreign_key_check"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

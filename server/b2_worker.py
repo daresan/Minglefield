@@ -109,6 +109,27 @@ class ClaimWorker:
             if concurrency is not None and (type(concurrency) is not int
                     or not 0 <= concurrency <= MAX_INT):
                 return "invalid_policy"
+            # The persisted descriptor must not claim a suspended agent is active.
+            if (agent.get("state") != "active"
+                    or type(agent.get("accountable_party_id")) is not str
+                    or not 1 <= len(agent["accountable_party_id"]) <= 128):
+                return "invalid_policy"
+            operators = agent.get("operators")
+            roles = {"admin", "approver", "runtime_operator", "billing", "auditor"}
+            if type(operators) is not list or not operators:
+                return "invalid_policy"
+            seen = set()
+            for operator in operators:
+                if type(operator) is not dict or set(operator) != {"user_id", "roles"}:
+                    return "invalid_policy"
+                operator_id = operator["user_id"]
+                assigned = operator["roles"]
+                if (type(operator_id) is not str or not 1 <= len(operator_id) <= 128
+                        or operator_id in seen or type(assigned) is not list or not assigned
+                        or any(type(role) is not str or role not in roles for role in assigned)
+                        or len(assigned) != len(set(assigned))):
+                    return "invalid_policy"
+                seen.add(operator_id)
             revision = agent.get("revision")
             if type(revision) is not int or not 0 <= revision <= MAX_INT:
                 return "invalid_policy"

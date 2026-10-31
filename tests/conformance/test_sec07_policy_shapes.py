@@ -13,6 +13,10 @@ import test_action_submission as fixture
 
 class StoredPolicyShapes(unittest.TestCase):
     setUp = fixture.SubmissionTests.setUp
+    issue = fixture.SubmissionTests.issue
+    new_service = fixture.SubmissionTests.new_service
+    counts = fixture.SubmissionTests.counts
+    query = fixture.SubmissionTests.query
 
     def mutate_json(self, table, column, field, value):
         with closing(sqlite3.connect(self.db)) as db:

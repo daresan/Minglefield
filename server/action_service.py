@@ -204,7 +204,13 @@ class ActionService:
                 if grant["status"] != "active" or grant["requester_user_id"] != session[0]:
                     raise _Reject("requester_or_grant_mismatch")
                 policy = agent.get("policy", {})
-                if rule.scope not in grant["scopes"] or rule.scope not in policy.get("allowed_scopes", []):
+                grant_scopes = grant.get("scopes")
+                allowed_scopes = policy.get("allowed_scopes")
+                if (type(grant_scopes) is not list or type(allowed_scopes) is not list
+                        or any(type(scope) is not str or not scope for scope in grant_scopes)
+                        or any(type(scope) is not str or not scope for scope in allowed_scopes)):
+                    raise _Reject("invalid_policy")
+                if rule.scope not in grant_scopes or rule.scope not in allowed_scopes:
                     raise _Reject("scope_denied")
                 if grant.get("target_id") != target_id:
                     raise _Reject("target_denied")

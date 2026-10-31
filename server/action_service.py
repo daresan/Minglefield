@@ -121,6 +121,10 @@ class ActionService:
                 actor_user_id TEXT NOT NULL, event_type TEXT NOT NULL CHECK(event_type='job.queued'),
                 created_at REAL NOT NULL,
                 FOREIGN KEY(job_id) REFERENCES action_jobs(job_id))""")
+            # Add a non-secret reference for new submissions; old B1 jobs remain NULL.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(action_jobs)")}
+            if "session_token_hash" not in columns:
+                db.execute("ALTER TABLE action_jobs ADD COLUMN session_token_hash TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS grants_agent_budget ON grants(agent_id)")
             db.execute("INSERT OR IGNORE INTO action_schema VALUES(1,1)")
 
@@ -158,7 +162,7 @@ class ActionService:
                     raise ValueError("invalid server clock")
                 at = datetime.fromtimestamp(now, timezone.utc)
                 session = db.execute("""SELECT s.user_id,s.agent_id,s.delegation_id,
-                    s.expires_at,s.revoked,p.disabled FROM auth_sessions s
+                    s.expires_at,s.revoked,p.disabled,s.token_hash FROM auth_sessions s
                     JOIN auth_principals p ON p.user_id=s.user_id WHERE s.token_hash=?""",
                                      (_digest(token),)).fetchone()
                 if (not session or session[4] or session[5] or now >= session[3]
@@ -223,9 +227,12 @@ class ActionService:
                 db.execute("UPDATE grants SET spent_minor=spent_minor+? WHERE delegation_id=?",
                            (cost, delegation_id))
                 job_id = "job." + uuid.uuid4().hex
-                db.execute("""INSERT INTO action_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                db.execute("""INSERT INTO action_jobs
+                    (job_id,user_id,agent_id,delegation_id,idempotency_key,fingerprint,
+                     request_json,cost_minor,pricing_revision,policy_revision,state,
+                     created_at,session_token_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (job_id, session[0], agent_id, delegation_id, idempotency_key, fingerprint,
-                     request_json, cost, rule.revision, agent["revision"], "queued", now))
+                     request_json, cost, rule.revision, agent["revision"], "queued", now, session[6]))
                 db.execute("INSERT INTO action_audit VALUES(?,?,?,?,?)",
                     ("event." + uuid.uuid4().hex, job_id, session[0], "job.queued", now))
                 return Submission(True, "queued", job_id)

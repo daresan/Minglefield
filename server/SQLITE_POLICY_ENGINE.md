@@ -24,9 +24,8 @@ Uses only Python standard-library `sqlite3` for storage. JSON Schema validation 
 Example:
 
 ```python
-from server.sqlite_policy_engine import SQLitePolicyEngine
-# When run from repo root, first add server/ to sys.path, or use
-# PYTHONPATH=server and import sqlite_policy_engine instead.
+# Set PYTHONPATH=server, or insert server/ into sys.path first.
+from sqlite_policy_engine import SQLitePolicyEngine
 ```
 
 The class expects *schema-validated* agent/grant dictionaries and *authenticated* `verified_actor` / `verified_requester` identities supplied by a trusted caller.

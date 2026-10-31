@@ -1,4 +1,5 @@
 """B2.2 pre-start authorization and claim fencing tests."""
+import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 import unittest
@@ -210,6 +211,36 @@ class PrestartGateTests(unittest.TestCase):
             job_id=claim.job_id, worker_id="worker.one", claim_token="\\ud800")
         self.assertEqual(result.state, "rejected")
         self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_malformed_grant_policy_denies_without_ready(self):
+        claim = self.claimed()
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE grants SET grant_json=? WHERE delegation_id=?",
+                       ('{invalid-json', 'grant.01'))
+            db.commit()
+        finally:
+            db.close()
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 3, 100))
+
+    def test_malformed_request_policy_denies_without_ready(self):
+        claim = self.claimed()
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE action_jobs SET request_json=? WHERE job_id=?",
+                       (json.dumps({"action_type": "game.feedback"}), claim.job_id))
+            db.commit()
+        finally:
+            db.close()
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 3, 100))
 
 
 if __name__ == "__main__":

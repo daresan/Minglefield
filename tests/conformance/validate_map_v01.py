@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Validate the MAP v0.1 draft JSON schemas and example trace (Python 3.11+)."""
+"""MAP v0.1 draft schema and negotiation conformance smoke tests.
+
+Requires Python 3.11+ and jsonschema>=4.18. Uses only local schemas; no network.
+"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator, RefResolver
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS = ROOT / "schemas" / "map" / "v0.1"
-TRACE = ROOT / "examples" / "map" / "v0.1" / "async-action-trace.json"
+EXAMPLES = ROOT / "examples" / "map" / "v0.1"
 TYPES = {
     "action.submit": "action-submit.schema.json",
     "action.ack": "action-ack.schema.json",
@@ -17,37 +21,102 @@ TYPES = {
     "observation.push": "observation-push.schema.json",
     "protocol.error": "error.schema.json",
 }
+SCHEMA_FILES = [
+    "envelope.schema.json",
+    *TYPES.values(),
+    "game-manifest.schema.json",
+    "capability-offer.schema.json",
+    "negotiation-result.schema.json",
+]
 
 
-def load(name: str) -> dict:
-    return json.loads((SCHEMAS / name).read_text(encoding="utf-8"))
+def read_json(path: Path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def negotiate(manifest: dict, offer: dict) -> dict:
+    """Illustrative JSON-only negotiation. Does NOT authenticate participants."""
+    common_versions = set(manifest["map_versions"]) & set(offer["map_versions"])
+    if not common_versions:
+        return {"status": "incompatible", "reason": "no_common_version"}
+    version = max(common_versions, key=lambda v: tuple(map(int, v.split("."))))
+    profiles = set(offer["interaction_profiles"])
+    profile = next((p for p in manifest["interaction_profiles"] if p in profiles), None)
+    if profile is None:
+        return {"status": "incompatible", "reason": "no_common_profile"}
+    common_codecs = set(manifest["codecs"]) & set(offer["codecs"])
+    if not common_codecs:
+        return {"status": "incompatible", "reason": "no_common_codec"}
+    # Only the JSON reference codec is implemented in this draft.
+    if "json" not in common_codecs:
+        return {"status": "incompatible", "reason": "no_common_codec"}
+    required = set(manifest["capabilities"]["required"])
+    offered = set(offer["capabilities"])
+    if not required <= offered:
+        return {"status": "incompatible", "reason": "missing_required_capability"}
+    optional = set(manifest["capabilities"]["optional"]) & offered
+    return {
+        "status": "compatible",
+        "map_version": version,
+        "interaction_profile": profile,
+        "codec": "json",
+        "capabilities": sorted(required | optional),
+    }
 
 
 def main() -> None:
-    schemas = {name: load(name) for name in ["envelope.schema.json", *TYPES.values()]}
+    schemas = {name: read_json(SCHEMAS / name) for name in SCHEMA_FILES}
+    registry = Registry().with_resources(
+        (schema["$id"], Resource.from_contents(schema)) for schema in schemas.values()
+    )
+    validators = {}
     for name, schema in schemas.items():
         Draft202012Validator.check_schema(schema)
-    store = {}
-    for name, schema in schemas.items():
-        store[schema["$id"]] = schema
-        store[name] = schema
-    messages = json.loads(TRACE.read_text(encoding="utf-8"))
-    assert isinstance(messages, list) and messages
-    for i, message in enumerate(messages):
-        kind = message["type"]
-        schema = schemas[TYPES[kind]]
-        resolver = RefResolver(base_uri=schema["$id"], referrer=schema, store=store)
-        validator = Draft202012Validator(schema, resolver=resolver, format_checker=Draft202012Validator.FORMAT_CHECKER)
-        errors = list(validator.iter_errors(message))
+        validators[name] = Draft202012Validator(
+            schema, registry=registry, format_checker=Draft202012Validator.FORMAT_CHECKER
+        )
+
+    def check(name: str, value, label: str) -> None:
+        errors = list(validators[name].iter_errors(value))
         if errors:
-            raise AssertionError(f"trace[{i}] {kind}: {errors[0].message}")
-    # Negative control: an action without its required idempotency key must fail.
-    invalid = dict(messages[0])
+            raise AssertionError(f"{label}: {errors[0].message}")
+
+    trace = read_json(EXAMPLES / "async-action-trace.json")
+    if not isinstance(trace, list) or not trace:
+        raise AssertionError("empty action trace")
+    for index, msg in enumerate(trace):
+        check(TYPES[msg["type"]], msg, f"trace[{index}]")
+    invalid = dict(trace[0])
     invalid.pop("idempotency_key")
-    schema = schemas[TYPES["action.submit"]]
-    resolver = RefResolver(base_uri=schema["$id"], referrer=schema, store=store)
-    assert not Draft202012Validator(schema, resolver=resolver).is_valid(invalid)
-    print(f"PASS: {len(schemas)} schemas, {len(messages)} example messages, 1 negative control")
+    if validators[TYPES["action.submit"]].is_valid(invalid):
+        raise AssertionError("negative action test unexpectedly passed")
+
+    manifest = read_json(EXAMPLES / "game-manifest.json")
+    offer = read_json(EXAMPLES / "capability-offer.json")
+    check("game-manifest.schema.json", manifest, "manifest")
+    check("capability-offer.schema.json", offer, "offer")
+    cases = read_json(EXAMPLES / "negotiation-cases.json")
+    for case in cases:
+        check("capability-offer.schema.json", case["offer"], case["name"] + " offer")
+        actual = negotiate(manifest, case["offer"])
+        check("negotiation-result.schema.json", actual, case["name"] + " result")
+        if actual != case["expected"]:
+            raise AssertionError(f"{case['name']}: expected {case['expected']}, got {actual}")
+
+    # Negative controls for required manifest fields and invalid negotiation result.
+    bad_manifest = dict(manifest)
+    bad_manifest.pop("game_id")
+    if validators["game-manifest.schema.json"].is_valid(bad_manifest):
+        raise AssertionError("missing game_id incorrectly accepted")
+    if validators["negotiation-result.schema.json"].is_valid(
+        {"status": "compatible", "reason": "no_common_version"}
+    ):
+        raise AssertionError("inconsistent negotiation result incorrectly accepted")
+
+    print(
+        f"PASS: {len(schemas)} schemas, {len(trace)} action trace messages, "
+        f"{len(cases)} negotiation cases, 3 negative controls"
+    )
 
 
 if __name__ == "__main__":

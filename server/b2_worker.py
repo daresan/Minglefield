@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from b2_schema import migrate_b2
 from b2_validation import valid_request, valid_grant, valid_agent
-from action_service import _time, MAX_INT
+from action_service import _time
 
 
 @dataclass(frozen=True)
@@ -86,11 +86,6 @@ class ClaimWorker:
             return "agent_suspended"
         try:
             request = json.loads(raw)
-            if type(request) is not dict:
-                return "invalid_policy"
-            if (type(request.get("version")) is not int or request["version"] != 1
-                    or type(request.get("parameters")) is not dict):
-                return "invalid_policy"
             grant = json.loads(row[1])
             agent = json.loads(row[3])
             if not (valid_request(request) and valid_grant(grant) and valid_agent(agent)):
@@ -104,37 +99,8 @@ class ClaimWorker:
                     or agent.get("agent_id") != agent_id
                     or grant.get("delegation_id") != delegation_id):
                 return "invalid_policy"
-            if (type(grant.get("issuer_user_id")) is not str
-                    or not grant["issuer_user_id"]
-                    or len(grant["issuer_user_id"]) > 128):
-                return "invalid_policy"
-            concurrency = agent.get("policy", {}).get("max_concurrent_tasks") if type(agent.get("policy")) is dict else None
-            if concurrency is not None and (type(concurrency) is not int
-                    or not 0 <= concurrency <= MAX_INT):
-                return "invalid_policy"
-            # The persisted descriptor must not claim a suspended agent is active.
-            if (agent.get("state") != "active"
-                    or type(agent.get("accountable_party_id")) is not str
-                    or not 1 <= len(agent["accountable_party_id"]) <= 128):
-                return "invalid_policy"
-            operators = agent.get("operators")
-            roles = {"admin", "approver", "runtime_operator", "billing", "auditor"}
-            if type(operators) is not list or not operators:
-                return "invalid_policy"
-            seen = set()
-            for operator in operators:
-                if type(operator) is not dict or set(operator) != {"user_id", "roles"}:
-                    return "invalid_policy"
-                operator_id = operator["user_id"]
-                assigned = operator["roles"]
-                if (type(operator_id) is not str or not 1 <= len(operator_id) <= 128
-                        or operator_id in seen or type(assigned) is not list or not assigned
-                        or any(type(role) is not str or role not in roles for role in assigned)
-                        or len(assigned) != len(set(assigned))):
-                    return "invalid_policy"
-                seen.add(operator_id)
-            revision = agent.get("revision")
-            if type(revision) is not int or not 0 <= revision <= MAX_INT:
+            # The descriptor must agree with the authoritative suspension flag.
+            if agent["state"] != "active":
                 return "invalid_policy"
             if grant.get("status") != "active" or grant.get("requester_user_id") != user_id:
                 return "grant_inactive"
@@ -143,13 +109,8 @@ class ClaimWorker:
             policy = agent.get("policy")
             scopes = grant.get("scopes")
             allowed = policy.get("allowed_scopes") if type(policy) is dict else None
-            if (type(scopes) is not list or type(allowed) is not list
-                    or any(type(scope) is not str or not scope for scope in scopes)
-                    or any(type(scope) is not str or not scope for scope in allowed)):
+            if type(policy) is not dict or type(allowed) is not list:
                 return "invalid_policy"
-            for limit in (grant.get("max_spend_minor"), policy.get("max_spend_minor")):
-                if limit is not None and (type(limit) is not int or not 0 <= limit <= MAX_INT):
-                    return "invalid_policy"
             if rule.scope not in scopes or rule.scope not in allowed:
                 return "scope_denied"
             if grant.get("target_id") != request["target_id"]:

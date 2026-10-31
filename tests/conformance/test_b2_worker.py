@@ -147,6 +147,24 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual((result.state, result.reason), ("denied", "action_rule_changed"))
         self.assertEqual(self.counts(), (1, 2, 100))
 
+    def test_fifo_claim_order_by_created_at_then_job_id(self):
+        first = self.service.submit(**self.args)
+        second = self.service.submit(**(self.args | {"idempotency_key": "request.2"}))
+        self.assertTrue(first.allowed)
+        self.assertTrue(second.allowed)
+        # Deterministic timestamps make the documented job_id tie-breaker testable.
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE action_jobs SET created_at=? WHERE job_id=?", (self.now - 2, first.job_id))
+            db.execute("UPDATE action_jobs SET created_at=? WHERE job_id=?", (self.now - 1, second.job_id))
+            db.commit()
+        finally:
+            db.close()
+        worker = ClaimWorker(self.service)
+        self.assertEqual(worker.claim_next("worker.one").job_id, first.job_id)
+        self.assertEqual(worker.claim_next("worker.two").job_id, second.job_id)
+        self.assertEqual(worker.claim_next("worker.three").state, "empty")
+
 
 if __name__ == "__main__":
     unittest.main()

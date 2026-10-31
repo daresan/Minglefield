@@ -26,7 +26,6 @@ class StoredPolicyShapes(unittest.TestCase):
             db.execute(f"UPDATE {table} SET {column}=?", (json.dumps(document),))
             db.commit()
 
-    @unittest.expectedFailure
     def test_string_grant_scopes_must_not_authorize(self):
         self.mutate_json("grants", "grant_json", "scopes", "game.test_feedback")
         result = self.service.submit(**self.args)
@@ -35,7 +34,7 @@ class StoredPolicyShapes(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_string_agent_scopes_must_not_authorize(self):
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
             agent["policy"]["allowed_scopes"] = "game.test_feedback"
             db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))

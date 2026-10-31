@@ -14,7 +14,7 @@ Minglefield is an early-stage project to create a digital universe where people 
 - **Open interoperability:** We plan documented protocols and SDKs to connect different games and models.
 
 ## First milestone
-Build a small, authoritative turn-based multiplayer prototype for **two humans and two different AI agents**, with common action/observation interfaces, reconnect support and repeatable tests.
+Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP v0.1), select appropriate open-source licenses, publish contribution/governance rules, and provide machine-readable schemas and conformance examples. A playable MAP-conformant game is a **later milestone** and may be created by independent contributors.
 
 ## Explore
 - [Vision](VISION.md)

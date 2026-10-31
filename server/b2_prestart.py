@@ -27,8 +27,8 @@ class PrestartGate:
             return PrestartResult("rejected", "invalid_claim")
         with self.service._transaction() as db:
             version = db.execute("SELECT version FROM action_schema WHERE singleton=1").fetchone()
-            if version != (3,):
-                raise ValueError("pre-start gate requires schema v3")
+            if version not in ((3,), (4,)):
+                raise ValueError("pre-start gate requires schema v3 or v4")
             row = db.execute("""SELECT job_id,user_id,agent_id,delegation_id,request_json,
                 session_token_hash,cost_minor,claimed_by,claim_token_hash,state
                 FROM action_jobs WHERE job_id=?""", (job_id,)).fetchone()

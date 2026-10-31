@@ -203,8 +203,11 @@ class ActionService:
                     raise _Reject("agent_suspended")
                 if row[2]:
                     raise _Reject("grant_revoked")
-                if grant["status"] != "active" or grant["requester_user_id"] != session[0]:
+                if grant.get("status") != "active" or grant.get("requester_user_id") != session[0]:
                     raise _Reject("requester_or_grant_mismatch")
+                revision = agent.get("revision")
+                if type(revision) is not int or revision < 0 or revision > MAX_INT:
+                    raise _Reject("invalid_policy")
                 policy = agent.get("policy")
                 if type(policy) is not dict:
                     raise _Reject("invalid_policy")

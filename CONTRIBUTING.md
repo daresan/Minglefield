@@ -6,9 +6,9 @@ Thanks for your interest. Minglefield is at the **concept and project-setup stag
 The repository does **not yet have a finalized open-source license**. Until a license is added and contributor terms are clarified, **please do not submit third-party code or assets**. You can still open issues with ideas, design notes, requirements, reproducible experiments and questions.
 
 ## Suggested contributions now
-- Help refine the first playable human/AI game demonstration.
+- Help define MAP v0.1 interoperability requirements and conformance tests.
 - Review safety and fairness assumptions for autonomous players.
-- Propose an interoperable observation/action protocol.
+- Propose versioned observation/action schemas and game/agent compatibility profiles.
 - Identify accessibility, moderation and privacy requirements.
 - Suggest testing strategies and architecture trade-offs.
 

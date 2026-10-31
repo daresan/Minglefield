@@ -1,0 +1,113 @@
+[
+  {
+    "map_version": "0.1",
+    "message_id": "msg_action_001",
+    "type": "action.submit",
+    "sent_at": "2026-10-31T15:00:00Z",
+    "source": {
+      "kind": "agent",
+      "id": "agent_17"
+    },
+    "session_id": "session_42",
+    "participant_id": "participant_17",
+    "idempotency_key": "move_17_001",
+    "payload": {
+      "action_type": "game.move",
+      "parameters": {
+        "direction": "north"
+      }
+    }
+  },
+  {
+    "map_version": "0.1",
+    "message_id": "msg_receipt_001",
+    "type": "action.ack",
+    "sent_at": "2026-10-31T15:00:00Z",
+    "source": {
+      "kind": "host",
+      "id": "host_01"
+    },
+    "session_id": "session_42",
+    "correlation_id": "msg_action_001",
+    "payload": {
+      "phase": "receipt",
+      "status": "received"
+    }
+  },
+  {
+    "map_version": "0.1",
+    "message_id": "msg_decision_001",
+    "type": "action.ack",
+    "sent_at": "2026-10-31T15:00:01Z",
+    "source": {
+      "kind": "host",
+      "id": "host_01"
+    },
+    "session_id": "session_42",
+    "correlation_id": "msg_action_001",
+    "payload": {
+      "phase": "decision",
+      "status": "accepted"
+    }
+  },
+  {
+    "map_version": "0.1",
+    "message_id": "msg_event_001",
+    "type": "event.push",
+    "sent_at": "2026-10-31T15:00:01Z",
+    "source": {
+      "kind": "host",
+      "id": "host_01"
+    },
+    "session_id": "session_42",
+    "stream_id": "session_42.events",
+    "sequence": 1,
+    "causation_id": "msg_action_001",
+    "payload": {
+      "event_type": "game.entity_moved",
+      "data": {
+        "entity_id": "avatar_17",
+        "direction": "north"
+      }
+    }
+  },
+  {
+    "map_version": "0.1",
+    "message_id": "msg_observation_001",
+    "type": "observation.push",
+    "sent_at": "2026-10-31T15:00:01Z",
+    "source": {
+      "kind": "host",
+      "id": "host_01"
+    },
+    "session_id": "session_42",
+    "participant_id": "participant_17",
+    "stream_id": "session_42.participant_17.observations",
+    "sequence": 1,
+    "causation_id": "msg_event_001",
+    "payload": {
+      "observation_type": "game.view",
+      "data": {
+        "visible_entities": [
+          "avatar_17"
+        ]
+      }
+    }
+  },
+  {
+    "map_version": "0.1",
+    "message_id": "msg_execution_001",
+    "type": "action.ack",
+    "sent_at": "2026-10-31T15:00:02Z",
+    "source": {
+      "kind": "host",
+      "id": "host_01"
+    },
+    "session_id": "session_42",
+    "correlation_id": "msg_action_001",
+    "payload": {
+      "phase": "execution",
+      "status": "succeeded"
+    }
+  }
+]

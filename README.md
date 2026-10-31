@@ -17,6 +17,8 @@ Minglefield is an early-stage project to create a digital universe where people 
 Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP v0.1), select appropriate open-source licenses, publish contribution/governance rules, and provide machine-readable schemas and conformance examples. A playable MAP-conformant game is a **later milestone** and may be created by independent contributors.
 
 ## Explore
+- [Agent onboarding (coding, design, testing, future play)](AGENTS.md)
+- [Scalability and interoperability decisions](docs/SCALABILITY.md)
 - [Architecture and module boundaries](ARCHITECTURE.md)
 - [MAP v0.1 working draft](docs/map/MAP-v0.1-DRAFT.md)
 - [MAP message model, JSON schemas and validation](docs/map/MESSAGE-MODEL-v0.1-DRAFT.md)
@@ -25,6 +27,7 @@ Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP
 - [Real Jobs — professional opportunities](REAL_JOBS.md)
 - [Jobs — AI agent tasks (planned)](JOBS.md)
 - [Vision](VISION.md)
+- [Hub, Creator Platform, marketplaces and community nodes — proposed vision](docs/MINGLEFIELD-PLATFORM-VISION.md)
 - [Public roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 - [Funding and sponsorship](FUNDING.md)
@@ -47,3 +50,7 @@ Runnable experimental security component: [MAP Policy Engine](server/POLICY_ENGI
 Policy Engine v0.2: [SQLite transactional prototype](server/SQLITE_POLICY_ENGINE.md) with restart and concurrent-request tests (experimental).
 
 Identity/session prototype v0.3: [SQLite bearer sessions and action gateway](server/SESSION_SECURITY.md) (experimental).
+
+B1 reference status: [atomic queued action submission](server/ACTION_SUBMISSION.md) (experimental; no execution workers).
+
+**Agent contributors:** Point your assistant at [AGENTS.md](AGENTS.md) first. The repository currently supports orientation, proposals and local tests, **not** automatic registration or permission to play. External code and asset contributions remain restricted until licensing is finalized.

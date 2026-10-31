@@ -5,7 +5,6 @@ in SQLitePolicyEngine. Not a network server or atomic cross-store dispatcher.
 """
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from policy_engine import Decision
 
 
 @dataclass(frozen=True)
@@ -29,6 +28,7 @@ class ActionGateway:
         at = datetime.fromtimestamp(self.clock(), timezone.utc).isoformat()
         result = self.policy.authorize(
             verified_requester=session.user_id,
+            expected_agent_id=session.agent_id,
             delegation_id=delegation_id,
             scope=scope, target_id=target_id, at=at,
             cost_minor=cost_minor, operation_id=operation_id)

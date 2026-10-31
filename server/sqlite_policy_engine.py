@@ -86,14 +86,16 @@ class SQLitePolicyEngine:
             return Decision(True, "grant_added")
 
     def authorize(self, *, verified_requester, delegation_id, scope, target_id, at,
-                  cost_minor=0, operation_id=None):
+                  cost_minor=0, operation_id=None, expected_agent_id=None):
         with self._tx() as db:
             row = db.execute("""SELECT g.grant_json,g.revoked,g.spent_minor,
-                                       a.descriptor,a.suspended
+                                       a.descriptor,a.suspended,g.agent_id
                                 FROM grants g JOIN agents a ON g.agent_id=a.agent_id
                                 WHERE g.delegation_id=?""", (delegation_id,)).fetchone()
             if row is None:
                 return Decision(False, "unknown_grant")
+            if expected_agent_id is not None and row[5] != expected_agent_id:
+                return Decision(False, "agent_delegation_mismatch")
             grant, revoked, spent, agent, suspended = json.loads(row[0]), row[1], row[2], json.loads(row[3]), row[4]
             if suspended:
                 return Decision(False, "agent_suspended")

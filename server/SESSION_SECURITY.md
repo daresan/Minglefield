@@ -23,6 +23,15 @@ Session tokens are bearer secrets: transmit only over authenticated TLS, never l
 Both stores can share a SQLite database file. The gateway verifies a session and then performs policy authorization in **separate transactions**, leaving a time-of-check/time-of-use window for revocation and suspension. No action is actually dispatched or cancelled here. A production dispatcher must enforce the final decision atomically or via a trusted runtime enforcement boundary, and recheck immediately before execution.
 
 ## Remaining risks
+
+Phase A now compares the verified session's agent ID with the persistent
+delegation's `grants.agent_id` inside the policy transaction, including retries.
+Mismatch returns `agent_delegation_mismatch` before reservation. Session issuance
+still accepts binding claims; it does not itself establish agent authority.
+Session verification remains a separate transaction: revocation after verification
+can still be followed by an allowed policy decision and budget reservation.
+See [Phase A security regressions](PHASE_A_SECURITY.md) for executable reproductions
+and the explicitly unresolved cross-delegation budget gap.
 - No OAuth/OIDC, MFA, password-based authentication, signed identity claims, role-based enrollment, verified real-world identity, credential rotation or incident audit.
 - No session-to-transport channel binding, anti-theft protections, rate limits, token refresh or session listing.
 - Session revocation is durable but not an in-flight task kill; it only blocks later checks.

@@ -9,3 +9,13 @@ Run policy engine unit tests: `python -m unittest discover -s tests/conformance 
 SQLite v0.2 tests: `test_sqlite_policy_engine.py` covers restart persistence, concurrent budget reservations, duplicate operations and deny rules. The same unittest discovery command runs both engine suites.
 
 Session v0.3 tests: `test_session_security.py` covers token verification, expiry, binding, durable revocation and policy gateway integration. Unittest discovery includes this module.
+
+Phase A: `test_phase_a_regressions.py` covers persistent agent binding and input
+validation. It also contains **three expected failures for unresolved P1 risks**:
+session revocation between transactions and aggregate agent budgets in both engines.
+See [the security record](../../server/PHASE_A_SECURITY.md). Report these known
+failures explicitly even when unittest exits successfully.
+
+B1: `test_action_submission.py` verifies the new atomic submission path separately
+from legacy APIs. See [the B1 contract](../../server/ACTION_SUBMISSION.md) for migration,
+accounting, canonicalization and security boundaries. No test executes external actions.

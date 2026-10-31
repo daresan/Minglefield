@@ -12,6 +12,7 @@ class DispatchGateTests(unittest.TestCase):
     issue = fixture.SubmissionTests.issue
     new_service = fixture.SubmissionTests.new_service
     query = fixture.SubmissionTests.query
+    execute = fixture.SubmissionTests.execute
     counts = fixture.SubmissionTests.counts
 
     def prepare(self):

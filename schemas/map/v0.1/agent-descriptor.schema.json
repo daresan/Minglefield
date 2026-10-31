@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daresan/Minglefield/blob/main/schemas/map/v0.1/agent-descriptor.schema.json",
+  "title": "MAP v0.1 draft agent-descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "operators",
+    "accountable_party_id",
+    "state",
+    "revision"
+  ],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "operators": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "user_id",
+          "roles"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "roles": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "admin",
+                "approver",
+                "runtime_operator",
+                "billing",
+                "auditor"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "accountable_party_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "state": {
+      "enum": [
+        "active",
+        "suspended"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "runtime": {
+      "enum": [
+        "self_hosted",
+        "third_party_cloud",
+        "minglefield_managed"
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_spend_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_concurrent_tasks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowed_scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

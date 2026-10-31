@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daresan/Minglefield/blob/main/schemas/map/v0.1/action-ack.schema.json",
+  "title": "MAP action.ack draft",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "session_id",
+        "correlation_id",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "action.ack"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "phase",
+            "status"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "phase": {
+              "enum": [
+                "receipt",
+                "decision",
+                "execution"
+              ]
+            },
+            "status": {
+              "enum": [
+                "received",
+                "accepted",
+                "rejected",
+                "succeeded",
+                "failed"
+              ]
+            },
+            "code": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+            },
+            "detail": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "phase": {
+                    "const": "receipt"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "status": {
+                    "const": "received"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "phase": {
+                    "const": "decision"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "accepted",
+                      "rejected"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "phase": {
+                    "const": "execution"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "succeeded",
+                      "failed"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

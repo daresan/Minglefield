@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daresan/Minglefield/blob/main/schemas/map/v0.1/negotiation-result.schema.json",
+  "title": "MAP v0.1 draft capability negotiation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status"
+  ],
+  "properties": {
+    "status": {
+      "enum": [
+        "compatible",
+        "incompatible"
+      ]
+    },
+    "map_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "interaction_profile": {
+      "enum": [
+        "turn_based",
+        "real_time",
+        "hybrid",
+        "event_driven"
+      ]
+    },
+    "codec": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "reason": {
+      "enum": [
+        "no_common_version",
+        "no_common_profile",
+        "no_common_codec",
+        "missing_required_capability"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "compatible"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "map_version",
+          "interaction_profile",
+          "codec",
+          "capabilities"
+        ],
+        "not": {
+          "required": [
+            "reason"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "incompatible"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "reason"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "map_version"
+              ]
+            },
+            {
+              "required": [
+                "interaction_profile"
+              ]
+            },
+            {
+              "required": [
+                "codec"
+              ]
+            },
+            {
+              "required": [
+                "capabilities"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

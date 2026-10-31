@@ -1,0 +1,15 @@
+{
+  "delegation_id": "grant.01",
+  "agent_id": "agent.shared.01",
+  "issuer_user_id": "user.alice",
+  "requester_user_id": "user.charlie",
+  "scopes": [
+    "game.test_feedback"
+  ],
+  "target_id": "game.maze",
+  "issued_at": "2026-10-31T12:00:00Z",
+  "expires_at": "2026-10-31T14:00:00Z",
+  "status": "active",
+  "max_spend_minor": 200,
+  "approval_ref": "approval.01"
+}

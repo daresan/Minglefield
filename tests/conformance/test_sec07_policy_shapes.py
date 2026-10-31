@@ -32,7 +32,6 @@ class StoredPolicyShapes(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertEqual(fixture.SubmissionTests.counts(self), (0, 0, 0))
 
-    @unittest.expectedFailure
     def test_string_agent_scopes_must_not_authorize(self):
         with closing(sqlite3.connect(self.db)) as db:
             agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
@@ -43,7 +42,6 @@ class StoredPolicyShapes(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertEqual(fixture.SubmissionTests.counts(self), (0, 0, 0))
 
-    @unittest.expectedFailure
     def test_boolean_grant_budget_must_fail_closed(self):
         self.mutate_json("grants", "grant_json", "max_spend_minor", True)
         result = self.service.submit(**self.args)

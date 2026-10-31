@@ -375,5 +375,37 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
         self.assertEqual(self.counts(), (1, 2, 100))
 
+    def test_malformed_agent_operators_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["operators"] = [{"user_id": "user.alice", "roles": ["unknown_role"]}]
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_inconsistent_agent_state_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["state"] = "suspended"
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
 if __name__ == "__main__":
     unittest.main()

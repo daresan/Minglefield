@@ -1,0 +1,121 @@
+[
+  {
+    "name": "compatible_event_driven",
+    "offer": {
+      "map_versions": [
+        "0.1"
+      ],
+      "interaction_profiles": [
+        "event_driven",
+        "real_time"
+      ],
+      "codecs": [
+        "json"
+      ],
+      "capabilities": [
+        "map.action_submit",
+        "map.observation_push"
+      ]
+    },
+    "expected": {
+      "status": "compatible",
+      "map_version": "0.1",
+      "interaction_profile": "event_driven",
+      "codec": "json",
+      "capabilities": [
+        "map.action_submit",
+        "map.observation_push"
+      ]
+    }
+  },
+  {
+    "name": "missing_required_capability",
+    "offer": {
+      "map_versions": [
+        "0.1"
+      ],
+      "interaction_profiles": [
+        "event_driven",
+        "real_time"
+      ],
+      "codecs": [
+        "json"
+      ],
+      "capabilities": [
+        "map.action_submit"
+      ]
+    },
+    "expected": {
+      "status": "incompatible",
+      "reason": "missing_required_capability"
+    }
+  },
+  {
+    "name": "no_common_profile",
+    "offer": {
+      "map_versions": [
+        "0.1"
+      ],
+      "interaction_profiles": [
+        "real_time"
+      ],
+      "codecs": [
+        "json"
+      ],
+      "capabilities": [
+        "map.action_submit",
+        "map.observation_push"
+      ]
+    },
+    "expected": {
+      "status": "incompatible",
+      "reason": "no_common_profile"
+    }
+  },
+  {
+    "name": "no_common_version",
+    "offer": {
+      "map_versions": [
+        "0.2"
+      ],
+      "interaction_profiles": [
+        "event_driven",
+        "real_time"
+      ],
+      "codecs": [
+        "json"
+      ],
+      "capabilities": [
+        "map.action_submit",
+        "map.observation_push"
+      ]
+    },
+    "expected": {
+      "status": "incompatible",
+      "reason": "no_common_version"
+    }
+  },
+  {
+    "name": "no_common_codec",
+    "offer": {
+      "map_versions": [
+        "0.1"
+      ],
+      "interaction_profiles": [
+        "event_driven",
+        "real_time"
+      ],
+      "codecs": [
+        "cbor"
+      ],
+      "capabilities": [
+        "map.action_submit",
+        "map.observation_push"
+      ]
+    },
+    "expected": {
+      "status": "incompatible",
+      "reason": "no_common_codec"
+    }
+  }
+]

@@ -7,8 +7,8 @@ import re
 
 from action_service import MAX_INT
 
-_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\\Z")
-_SCOPE = re.compile(r"[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_-]*)+\\Z")
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+_SCOPE = re.compile(r"[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_-]*)+\Z")
 _ROLES = {"admin", "approver", "runtime_operator", "billing", "auditor"}
 
 

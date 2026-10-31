@@ -148,6 +148,21 @@ class DispatchGateTests(unittest.TestCase):
             [("denied", None, None)])
         self.assertEqual(self.counts(), (1, 4, 100))
 
+
+    def test_corrupt_delegation_after_ready_denies_dispatch(self):
+        claim = self.prepare()
+        import json
+        with sqlite3.connect(self.db) as db:
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["delegation_id"] = "grant.other"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+        result = self.dispatch(claim)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 4, 100))
+        self.assertEqual(self.query("SELECT effect_idempotency_key FROM action_jobs"), [(None,)])
+
+
     def test_adapter_configuration_is_immutable_snapshot(self):
         adapters = {"game.feedback": ("fake.test", "1")}
         gate = DispatchGate(self.service, adapters=adapters)

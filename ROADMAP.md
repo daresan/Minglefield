@@ -7,6 +7,8 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [x] Publish the initial project vision, roadmap and contribution guidelines.
 - [ ] Select and review open-source licenses before accepting external code contributions.
 - [ ] Establish public discussion and issue templates.
+- [x] Publish Real Jobs category and initial Austrian legal counsel expression-of-interest call.
+- [x] Publish MAP v0.1 non-normative working draft.
 - [ ] Complete the initial funding platform setup and compliance checks.
 
 ## Stage 1 — Minglefield Foundation (first milestone)

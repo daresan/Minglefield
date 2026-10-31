@@ -120,10 +120,16 @@ class SQLitePolicyEngine:
                 if previous is not None:
                     return Decision(previous[0] == fingerprint,
                                     "already_allowed" if previous[0] == fingerprint else "operation_id_conflict")
-            limits = [v for v in (grant.get("max_spend_minor"),
-                       agent.get("policy", {}).get("max_spend_minor")) if v is not None]
-            if limits and spent + cost_minor > min(limits):
+            grant_limit = grant.get("max_spend_minor")
+            agent_limit = agent.get("policy", {}).get("max_spend_minor")
+            if grant_limit is not None and spent + cost_minor > grant_limit:
                 return Decision(False, "budget_exceeded")
+            if agent_limit is not None:
+                agent_spent = db.execute(
+                    "SELECT COALESCE(SUM(spent_minor), 0) FROM grants WHERE agent_id=?",
+                    (row[5],)).fetchone()[0]
+                if agent_spent + cost_minor > agent_limit:
+                    return Decision(False, "budget_exceeded")
             db.execute("UPDATE grants SET spent_minor=spent_minor+? WHERE delegation_id=?",
                        (cost_minor,delegation_id))
             if operation_id is not None:

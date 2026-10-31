@@ -184,5 +184,38 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual(self.counts(), (2, 4, 200))
 
 
+    def test_corrupt_grant_delegation_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["delegation_id"] = "grant.other"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_string_scopes_do_not_authorize_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["scopes"] = "game.test_feedback"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+
 if __name__ == "__main__":
     unittest.main()

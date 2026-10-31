@@ -51,3 +51,6 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 - [x] Commit experimental Python MAP Policy Engine and unit tests (in-memory, not production-ready).
 - [ ] Verify GitHub Actions pass and implement durable, authenticated policy enforcement and real runtime cancellation.
+
+- [x] Commit experimental SQLite-backed policy engine with transactional authorization and restart/concurrency tests.
+- [ ] Confirm v0.2 test results on Windows and CI; then implement trusted identity, server clock and runtime cancellation.

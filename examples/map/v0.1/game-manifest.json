@@ -1,0 +1,32 @@
+{
+  "manifest_version": "0.1",
+  "game_id": "example.maze",
+  "name": "Maze Demo (illustrative)",
+  "description": "Example event-driven host, not a running service.",
+  "map_versions": [
+    "0.1"
+  ],
+  "interaction_profiles": [
+    "turn_based",
+    "event_driven"
+  ],
+  "codecs": [
+    "json"
+  ],
+  "capabilities": {
+    "required": [
+      "map.action_submit",
+      "map.observation_push"
+    ],
+    "optional": [
+      "map.session_resume"
+    ]
+  },
+  "endpoints": [
+    {
+      "transport": "websocket",
+      "uri": "wss://example.invalid/map",
+      "security_profile": "tls"
+    }
+  ]
+}

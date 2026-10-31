@@ -103,7 +103,7 @@ class ActionService:
             db.execute("""CREATE TABLE IF NOT EXISTS action_schema (
                 singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL)""")
             version = db.execute("SELECT version FROM action_schema WHERE singleton=1").fetchone()
-            if version and version[0] != 1:
+            if version and version[0] not in (1, 2):
                 raise ValueError("unsupported action schema version")
             db.execute("""CREATE TABLE IF NOT EXISTS action_jobs (
                 job_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,

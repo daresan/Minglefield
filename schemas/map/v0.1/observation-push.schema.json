@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daresan/Minglefield/blob/main/schemas/map/v0.1/observation-push.schema.json",
+  "title": "MAP observation.push draft",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "session_id",
+        "participant_id",
+        "stream_id",
+        "sequence",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "observation.push"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "observation_type",
+            "data"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "observation_type": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)+$"
+            },
+            "data": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 """B2.3b dispatch intent tests; no effects."""
+import sqlite3
 import unittest
 import test_action_submission as fixture
 from b2_worker import ClaimWorker

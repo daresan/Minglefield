@@ -1,0 +1,36 @@
+name: MAP v0.1 Draft Conformance
+
+on:
+  push:
+    paths:
+      - '.github/workflows/map-v01-conformance.yml'
+      - 'schemas/map/**'
+      - 'examples/map/**'
+      - 'tests/conformance/**'
+  pull_request:
+    paths:
+      - '.github/workflows/map-v01-conformance.yml'
+      - 'schemas/map/**'
+      - 'examples/map/**'
+      - 'tests/conformance/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate schemas and negotiation traces
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install validator dependency
+        run: python -m pip install 'jsonschema==4.23.0'
+      - name: Validate MAP v0.1 draft
+        run: python tests/conformance/validate_map_v01.py

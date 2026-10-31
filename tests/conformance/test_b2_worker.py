@@ -165,6 +165,24 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual(worker.claim_next("worker.two").job_id, second.job_id)
         self.assertEqual(worker.claim_next("worker.three").state, "empty")
 
+    def test_fifo_equal_timestamps_use_job_id_tiebreaker(self):
+        first = self.service.submit(**self.args)
+        second = self.service.submit(**(self.args | {"idempotency_key": "request.2"}))
+        self.assertTrue(first.allowed)
+        self.assertTrue(second.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE action_jobs SET created_at=?", (self.now,))
+            db.commit()
+        finally:
+            db.close()
+        expected = sorted((first.job_id, second.job_id))
+        worker = ClaimWorker(self.service)
+        actual = [worker.claim_next(f"worker.{i}").job_id for i in range(2)]
+        self.assertEqual(actual, expected)
+        self.assertEqual(worker.claim_next("worker.last").state, "empty")
+        self.assertEqual(self.counts(), (2, 4, 200))
+
 
 if __name__ == "__main__":
     unittest.main()

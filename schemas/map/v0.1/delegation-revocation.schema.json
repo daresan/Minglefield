@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daresan/Minglefield/blob/main/schemas/map/v0.1/delegation-revocation.schema.json",
+  "title": "MAP v0.1 draft delegation-revocation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "revocation_id",
+    "delegation_id",
+    "agent_id",
+    "actor_user_id",
+    "occurred_at",
+    "reason"
+  ],
+  "properties": {
+    "revocation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "delegation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "agent_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "actor_user_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "enum": [
+        "operator_request",
+        "requester_request",
+        "policy_violation",
+        "incident",
+        "expiry",
+        "administrative"
+      ]
+    }
+  }
+}

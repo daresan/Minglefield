@@ -144,6 +144,48 @@ class PrestartGateTests(unittest.TestCase):
             claim_token=claim.claim_token).state, "ready")
         self.assertEqual(self.counts(), (1, 3, 100))
 
+    def test_job_update_failure_rolls_back_gate(self):
+        claim = self.claimed()
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("""CREATE TRIGGER reject_ready_update BEFORE UPDATE ON action_jobs
+                WHEN NEW.state='ready'
+                BEGIN SELECT RAISE(ABORT,'injected ready update failure'); END""")
+            db.commit()
+        finally:
+            db.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "injected ready update failure"):
+            PrestartGate(self.service).authorize(
+                job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("claimed",)])
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_unknown_job_and_invalid_claim_inputs_do_not_mutate(self):
+        claim = self.claimed()
+        gate = PrestartGate(self.service)
+        cases = [
+            ("job.unknown", "worker.one", claim.claim_token),
+            (claim.job_id, "", claim.claim_token),
+            (claim.job_id, "worker.one", ""),
+            (claim.job_id, "worker.one", None),
+            (claim.job_id, "worker.one", 123),
+            (claim.job_id, "worker.one", "x" * 513),
+        ]
+        for job_id, worker_id, token in cases:
+            with self.subTest(job_id=job_id, worker_id=worker_id, token=repr(token)[:20]):
+                result = gate.authorize(job_id=job_id, worker_id=worker_id, claim_token=token)
+                self.assertEqual(result.state, "rejected")
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("claimed",)])
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_expired_original_session_after_claim_denies(self):
+        claim = self.claimed()
+        self.now += 901
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_original_session"))
+        self.assertEqual(self.counts(), (1, 3, 100))
+
 
 if __name__ == "__main__":
     unittest.main()

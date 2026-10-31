@@ -27,8 +27,8 @@ class ClaimWorker:
                 "SELECT version FROM action_schema WHERE singleton=1").fetchone()
         if version == (1,):
             migrate_b2(service.database)
-        elif version not in ((2,), (3,)):
-            raise ValueError("claim worker requires action schema v1, v2 or v3")
+        elif version not in ((2,), (3,), (4,)):
+            raise ValueError("claim worker requires action schema v1, v2, v3 or v4")
 
     def claim_next(self, worker_id):
         if not isinstance(worker_id, str) or not 1 <= len(worker_id) <= 128:
@@ -38,8 +38,8 @@ class ClaimWorker:
             if not isinstance(now, (int, float)) or not math.isfinite(now):
                 raise ValueError("invalid server clock")
             version = db.execute("SELECT version FROM action_schema WHERE singleton=1").fetchone()
-            if version not in ((2,), (3,)):
-                raise ValueError("worker requires schema v2 or v3")
+            if version not in ((2,), (3,), (4,)):
+                raise ValueError("worker requires schema v2, v3 or v4")
             job = db.execute("""SELECT job_id,user_id,agent_id,delegation_id,request_json,
                 session_token_hash,cost_minor FROM action_jobs WHERE state='queued'
                 ORDER BY created_at,job_id LIMIT 1""").fetchone()

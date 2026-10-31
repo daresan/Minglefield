@@ -1,6 +1,7 @@
 """B2.3b dispatch intent tests; no effects."""
 import sqlite3
 import unittest
+from contextlib import closing
 import test_action_submission as fixture
 from b2_worker import ClaimWorker
 from b2_prestart import PrestartGate
@@ -153,7 +154,7 @@ class DispatchGateTests(unittest.TestCase):
     def test_corrupt_delegation_after_ready_denies_dispatch(self):
         claim = self.prepare()
         import json
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
             grant["delegation_id"] = "grant.other"
             db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))

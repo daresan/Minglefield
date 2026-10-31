@@ -93,8 +93,12 @@ agent, delegation, target, action type, derived scope and the full parameters.
 Sorted JSON object keys, compact separators and escaped Unicode form the B1
 canonical encoding. Array order and scalar type distinctions are retained:
 `1` and `1.0` are distinct, as are distinct Unicode sequences. Non-finite floats,
-non-string object keys, non-JSON values and parameter encodings over 64 KiB are
-rejected. This is a defined Python reference format, not a claim of RFC 8785 or
+non-string object keys, isolated Unicode surrogate code points in keys or values,
+non-JSON values and parameter encodings over 64 KiB are
+rejected. The 64 KiB bound counts characters in the ASCII-only escaped
+canonical representation, so it also counts its UTF-8 bytes; it is not a raw
+transport byte limit. Deeply nested parameters are rejected when recursion
+limits are reached. This is a defined Python reference format, not a claim of RFC 8785 or
 cross-codec canonicalization. Raw JSON parsing and duplicate-key rejection belong
 to a future transport adapter.
 
@@ -138,3 +142,15 @@ Run from the repository root:
 python -B -m unittest discover -s tests/conformance -p 'test_*.py' -v
 python -B tests/conformance/validate_map_v01.py
 ```
+
+## Scaling and resource boundaries
+
+See [scalability direction](../docs/SCALABILITY.md) for the proposed separation of
+wire protocol, submission, worker lifecycle and future database backends. The
+current single-file SQLite writer lock is a local correctness reference, not a
+horizontal-scaling design. B1 enforces the serialized 64 KiB parameter bound
+before opening its write transaction, but does not yet define independent
+transport-level body-size, nesting-depth, or rate limits.
+
+Additional tests: `tests/conformance/test_unicode_boundary.py` and
+`tests/conformance/test_action_payload_limits.py`.

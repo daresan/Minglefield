@@ -2,7 +2,7 @@
 
 Minglefield is an **early-stage open-source project**, not yet a released game or operational platform.
 
-We are preparing voluntary sponsorship and, later, a milestone-based crowdfunding campaign to help build the first human-and-AI playable prototype.
+**GitHub Sponsors is now live:** [Sponsor the project founder on GitHub](https://github.com/sponsors/daresan). The founder operates the sponsorship profile as an individual; payment administration is handled through the configured Open Collective arrangement. A separate milestone-based crowdfunding campaign may follow after planning and eligibility checks.
 
 ## What support would fund
 - Core game and agent protocol development.
@@ -11,7 +11,7 @@ We are preparing voluntary sponsorship and, later, a milestone-based crowdfundin
 - A reproducible public demonstration.
 
 ## Funding status
-**Funding pages are being prepared.** We will add verified official links here once the relevant platforms have approved and activated them. No payment is being requested through this repository at present.
+**Active:** [GitHub Sponsors — daresan](https://github.com/sponsors/daresan). GitHub has approved the public personal sponsorship profile. Sponsorship tiers and payout terms are displayed on that profile; please consult it for the current available options. **Not yet active:** a Minglefield-specific Kickstarter campaign and the future Minglefield Foundry marketplace.
 
 ## Accountability
 We intend to publish achievable milestones, progress updates and clear information about how funds support the project. Support does not purchase equity, investment returns, guaranteed release dates or gameplay advantages. Any future rewards will be described separately with their terms.

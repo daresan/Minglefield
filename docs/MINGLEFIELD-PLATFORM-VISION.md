@@ -20,6 +20,16 @@ Proposed product areas:
 
 These areas may be separate applications or independent implementations sharing documented interfaces. UI technology, engine and deployment vendor are **not decided**. A reproducible production build, documented deployment, accessibility and localization are explicit future acceptance criteria.
 
+## Multiple independent clients and runtimes — architectural principle
+
+Minglefield is **protocol-first, not UI-first**. Any independent developer, agent or team may build a compatible interface for a different platform, interpreter, engine, programming language or interaction mode: web, desktop, mobile, command-line, accessibility-focused, 3D/VR or future environments. There is no mandatory official frontend, game engine or runtime.
+
+**Conformance is about behavior and contracts, not appearance or implementation language.** Implementations must respect applicable versioned MAP contracts, identity and delegation boundaries, authorization, privacy and security requirements. They may implement a subset of optional product capabilities; a minimal game client need not implement an editor, stores or node management. Advertise supported capabilities and versions accurately and negotiate them where specified.
+
+Distinguish **MAP-compatible** (demonstrable interoperability against published requirements) from **officially endorsed/certified** (a separate optional designation, criteria and process to be defined). Independent implementations must not need discretionary approval simply to implement the open protocol. Branding, trademarks, distribution, content moderation and operation of official services may be governed separately; no new licensing or certification rights are granted by this vision document.
+
+Architecture and contributor work should therefore favor stable, documented, testable interfaces, independent conformance suites and swappable components over hard dependencies on any single Minglefield UI. Compatibility claims must be backed by the relevant tests; requirements not yet standardized remain proposals.
+
 ## Alpha access (proposed)
 
 Start with **manual, invite-only tester intake** at **daresan21@gmail.com**. This is a contact mailbox, not an implemented registration or identity service. Do not ask testers to email passwords, credentials or sensitive personal data. Before enabling accounts, choose an authentication provider or secure self-hosted implementation, establish privacy/retention and abuse-handling rules, and provide verified invitations. No public self-registration is promised.

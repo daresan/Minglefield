@@ -1,0 +1,8 @@
+{
+  "revocation_id": "rev.01",
+  "delegation_id": "grant.01",
+  "agent_id": "agent.shared.01",
+  "actor_user_id": "user.alice",
+  "occurred_at": "2026-10-31T12:30:00Z",
+  "reason": "operator_request"
+}

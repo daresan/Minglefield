@@ -87,6 +87,9 @@ class ClaimWorker:
             request = json.loads(raw)
             if type(request) is not dict:
                 return "invalid_policy"
+            if (type(request.get("version")) is not int or request["version"] != 1
+                    or type(request.get("parameters")) is not dict):
+                return "invalid_policy"
             grant = json.loads(row[1])
             agent = json.loads(row[3])
             rule = self.service.actions.get(request["action_type"])
@@ -112,6 +115,9 @@ class ClaimWorker:
                     or any(type(scope) is not str or not scope for scope in scopes)
                     or any(type(scope) is not str or not scope for scope in allowed)):
                 return "invalid_policy"
+            for limit in (grant.get("max_spend_minor"), policy.get("max_spend_minor")):
+                if limit is not None and (type(limit) is not int or not 0 <= limit <= MAX_INT):
+                    return "invalid_policy"
             if rule.scope not in scopes or rule.scope not in allowed:
                 return "scope_denied"
             if grant.get("target_id") != request["target_id"]:

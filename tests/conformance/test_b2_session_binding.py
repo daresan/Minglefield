@@ -3,15 +3,15 @@ import hashlib
 import sqlite3
 import unittest
 
-from test_action_submission import SubmissionTests
+from test_action_submission import SubmissionTests as _SubmissionFixture
 
 
 class SessionBindingTests(unittest.TestCase):
-    setUp = SubmissionTests.setUp
-    issue = SubmissionTests.issue
-    new_service = SubmissionTests.new_service
-    query = SubmissionTests.query
-    counts = SubmissionTests.counts
+    setUp = _SubmissionFixture.setUp
+    issue = _SubmissionFixture.issue
+    new_service = _SubmissionFixture.new_service
+    query = _SubmissionFixture.query
+    counts = _SubmissionFixture.counts
 
     def test_new_job_binds_verified_session_without_bearer(self):
         result = self.service.submit(**self.args)

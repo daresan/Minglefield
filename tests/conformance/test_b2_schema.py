@@ -2,16 +2,16 @@
 import sqlite3
 import unittest
 
-from test_action_submission import SubmissionTests as _SubmissionFixture
+import test_action_submission as _submission_fixture
 from b2_schema import migrate_b2
 
 
 class B2MigrationTests(unittest.TestCase):
-    setUp = _SubmissionFixture.setUp
-    issue = _SubmissionFixture.issue
-    new_service = _SubmissionFixture.new_service
-    query = _SubmissionFixture.query
-    counts = _SubmissionFixture.counts
+    setUp = _submission_fixture.SubmissionTests.setUp
+    issue = _submission_fixture.SubmissionTests.issue
+    new_service = _submission_fixture.SubmissionTests.new_service
+    query = _submission_fixture.SubmissionTests.query
+    counts = _submission_fixture.SubmissionTests.counts
 
     def test_migrate_populated_b1_preserves_rows_and_reservations(self):
         first = self.service.submit(**self.args)

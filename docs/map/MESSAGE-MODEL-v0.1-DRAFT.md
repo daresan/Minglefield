@@ -67,7 +67,7 @@ python tests/conformance/validate_map_v01.py
 ```
 
 ## 6. Remaining design decisions
-- Full session/discovery/capability schemas and negotiation failure rules.
+- Game manifest and capability negotiation draft schemas now exist; lifecycle messages, transport discovery, authentication and production-grade negotiation rules remain open. See [capability negotiation](CAPABILITY-NEGOTIATION-v0.1-DRAFT.md).
 - Required/optional semantics for `target`, `expires_at`, `trace_id` and extensions.
 - Identifier scope, exact idempotency retention, stream replay and snapshot rules.
 - Codec registry, canonical mapping and security constraints for alternate encodings.

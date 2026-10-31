@@ -125,3 +125,50 @@ class DispatchGateTests(unittest.TestCase):
     def test_invalid_adapter_configuration_rejected(self):
         with self.assertRaises(ValueError):
             DispatchGate(self.service, adapters={"game.feedback": ("", "1")})
+
+
+    def test_malformed_session_expiry_denies_without_intent(self):
+        claim = self.prepare()
+        self.execute("UPDATE auth_sessions SET expires_at=NULL")
+        result = self.dispatch(claim)
+        self.assertEqual((result.state, result.reason),
+                         ("denied", "invalid_original_session"))
+        self.assertEqual(self.query(
+            "SELECT state,effect_idempotency_key,adapter_id,dispatched_at FROM action_jobs"),
+            [("denied", None, None, None)])
+        self.assertEqual(self.counts(), (1, 4, 100))
+
+    def test_malformed_grant_json_denies_without_intent(self):
+        claim = self.prepare()
+        self.execute("UPDATE grants SET grant_json='not json'")
+        result = self.dispatch(claim)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.query(
+            "SELECT state,effect_idempotency_key,dispatch_fingerprint FROM action_jobs"),
+            [("denied", None, None)])
+        self.assertEqual(self.counts(), (1, 4, 100))
+
+    def test_adapter_configuration_is_immutable_snapshot(self):
+        adapters = {"game.feedback": ("fake.test", "1")}
+        gate = DispatchGate(self.service, adapters=adapters)
+        adapters["game.feedback"] = ("fake.changed", "2")
+        self.assertEqual(gate.adapters["game.feedback"], ("fake.test", "1"))
+        with self.assertRaises(TypeError):
+            gate.adapters["game.feedback"] = ("fake.changed", "2")
+        claim = self.prepare()
+        result = gate.commit_intent(job_id=claim.job_id, worker_id="worker.one",
+                                    claim_token=claim.claim_token)
+        self.assertEqual(result.state, "dispatch_committed")
+        self.assertEqual(self.query("SELECT adapter_id,adapter_version FROM action_jobs"),
+                         [("fake.test", "1")])
+        self.assertEqual(self.counts(), (1, 4, 100))
+
+    def test_bad_claim_preserves_all_dispatch_fields_and_budget(self):
+        claim = self.prepare()
+        before = self.counts()
+        result = self.dispatch(claim, claim_token="bad")
+        self.assertEqual(result.state, "rejected")
+        self.assertEqual(self.counts(), before)
+        self.assertEqual(self.query("""SELECT state,effect_idempotency_key,
+            dispatch_fingerprint,adapter_id,adapter_version,dispatched_at
+            FROM action_jobs"""), [("ready", None, None, None, None, None)])

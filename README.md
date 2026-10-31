@@ -45,3 +45,5 @@ MAP shared-agent permissions: [authorization and emergency controls draft](docs/
 Runnable experimental security component: [MAP Policy Engine](server/POLICY_ENGINE.md) (in-memory; not production-ready).
 
 Policy Engine v0.2: [SQLite transactional prototype](server/SQLITE_POLICY_ENGINE.md) with restart and concurrent-request tests (experimental).
+
+Identity/session prototype v0.3: [SQLite bearer sessions and action gateway](server/SESSION_SECURITY.md) (experimental).

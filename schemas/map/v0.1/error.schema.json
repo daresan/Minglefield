@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daresan/Minglefield/blob/main/schemas/map/v0.1/error.schema.json",
+  "title": "MAP error draft",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "correlation_id",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "protocol.error"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "invalid_message",
+                "unsupported_version",
+                "unsupported_capability",
+                "unauthorized",
+                "forbidden",
+                "session_not_found",
+                "invalid_state",
+                "rate_limited",
+                "expired",
+                "conflict",
+                "internal_error"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "retry_after_ms": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  ]
+}

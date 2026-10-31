@@ -1,6 +1,6 @@
-"""Phase A fixes and executable, explicitly unresolved P1 reproductions.
+"""Phase A fixes and executable P1 regression reproductions.
 
-Expected failures assert the desired security property. An unexpected success
+The remaining expected failure asserts the desired security property. An unexpected success
 requires reviewing/removing the marker; it must not silently hide a later fix.
 """
 import copy
@@ -120,7 +120,6 @@ class PhaseARegressions(unittest.TestCase):
             engine.authorize(**(self.args | dict(delegation_id=grant["delegation_id"])),
                              cost_minor=200, operation_id="budget")
 
-    @unittest.expectedFailure
     def test_known_p1_sqlite_agent_budget_must_cover_all_grants(self):
         self.reserve_across_grants(self.policy)
         db = sqlite3.connect(self.db)
@@ -132,7 +131,6 @@ class PhaseARegressions(unittest.TestCase):
         self.assertLessEqual(total, self.agent["policy"]["max_spend_minor"],
                              "P1: agent cap is currently applied separately per grant")
 
-    @unittest.expectedFailure
     def test_known_p1_memory_agent_budget_must_cover_all_grants(self):
         self.reserve_across_grants(self.memory)
         self.assertLessEqual(sum(self.memory.spent.values()),

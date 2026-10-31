@@ -243,5 +243,19 @@ class PrestartGateTests(unittest.TestCase):
         self.assertEqual(self.counts(), (1, 3, 100))
 
 
+    def test_corrupt_delegation_after_claim_denies_prestart(self):
+        claim = self.claimed()
+        import json
+        with sqlite3.connect(self.db) as db:
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["delegation_id"] = "grant.other"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+        result = PrestartGate(self.service).authorize(job_id=claim.job_id, worker_id='worker.one', claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 3, 100))
+
+
+
 if __name__ == "__main__":
     unittest.main()

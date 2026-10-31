@@ -34,3 +34,6 @@ jobs:
         run: python -m pip install 'jsonschema==4.23.0'
       - name: Validate MAP v0.1 draft
         run: python tests/conformance/validate_map_v01.py
+      - name: Run policy engine unit tests
+        run: python -m unittest discover -s tests/conformance -p 'test_*.py' -v
+

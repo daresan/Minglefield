@@ -3,13 +3,20 @@ import sqlite3
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
+import test_action_submission as fixture
 from test_b2_dispatch_gate import DispatchGateTests
 from b2_fake_adapter import DeterministicFakeAdapter, FakeOutcome, FakeOutcomeRecorder
 
 
-class FakeOutcomeTests(DispatchGateTests):
-    # Do not inherit the parent test methods as additional tests.
-    __test__ = False
+class FakeOutcomeTests(unittest.TestCase):
+    setUp = fixture.SubmissionTests.setUp
+    issue = fixture.SubmissionTests.issue
+    new_service = fixture.SubmissionTests.new_service
+    query = fixture.SubmissionTests.query
+    execute = fixture.SubmissionTests.execute
+    counts = fixture.SubmissionTests.counts
+    prepare = DispatchGateTests.prepare
+    dispatch = DispatchGateTests.dispatch
 
     def committed(self):
         claim = self.prepare()
@@ -30,7 +37,6 @@ class FakeOutcomeTests(DispatchGateTests):
             with self.subTest(scenario=scenario):
                 # Each subtest has a fresh independent DB.
                 if scenario != "success":
-                    self.tearDown() if hasattr(self, "tearDown") else None
                     self.setUp()
                 job_id, key = self.committed()
                 outcome = DeterministicFakeAdapter().invoke(scenario=scenario)

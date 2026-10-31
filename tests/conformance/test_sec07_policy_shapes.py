@@ -73,3 +73,29 @@ class StoredPolicyShapes(unittest.TestCase):
         result = self.service.submit(**self.args)
         self.assertFalse(result.allowed)
         self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_missing_grant_requester_must_fail_closed(self):
+        with closing(sqlite3.connect(self.db)) as db:
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            del grant["requester_user_id"]
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_missing_grant_status_must_fail_closed(self):
+        with closing(sqlite3.connect(self.db)) as db:
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            del grant["status"]
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_invalid_agent_revision_must_fail_closed(self):
+        self.mutate_json("agents", "descriptor", "revision", ["invalid"])
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))

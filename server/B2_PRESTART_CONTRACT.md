@@ -1,7 +1,7 @@
 # MAP v0.4 — B2.2 pre-start authorization design
 
-Status: **proposed contract, not implemented**. Branch: `wip/map-v04-phase-b1`.
-B2.1 claim-only is locally validated (101 tests, three known expected failures).
+Status: **B2.2 implemented and locally validated; security review remains open**. Branch: `wip/map-v04-phase-b1`.
+As of 2026-10-31: 115 tests OK (three known expected failures), nine focused pre-start tests OK, MAP v0.1 validator PASS and `git diff --check` clean, per maintainer's local Windows run.
 No changes to MAP v0.1 wire protocol, `main`, or external executors.
 
 ## Decision: no automatic retry of external effects
@@ -14,7 +14,7 @@ idempotency guarantee risks duplicate effects. Operator reconciliation and
 
 ## B2.2 scope: pre-start gate, no effects
 
-B2.2 should add a trusted internal operation that consumes `job_id`,
+B2.2 implements a trusted internal operation that consumes `job_id`,
 `worker_id` and the original opaque claim token. It must never accept a
 user-supplied principal or policy decision. The token is only a fencing
 credential, **not** permission to execute.
@@ -42,15 +42,15 @@ Current schema v2 permits only `queued`, `claimed`, `denied` and audit
 events `job.queued`, `job.claimed`, `job.denied`. It cannot persist a
 `started` state or a successful pre-start event.
 
-Therefore implement B2.2 with an explicit schema v3 migration, after tests
-for populated-v2 preservation and rollback. Proposed new state:
+B2.2 uses an explicit schema v3 migration, after tests
+for populated-v2 preservation and rollback. Implemented new state:
 `ready` (authorization passed but **no effect started**). Do **not** call
 it `started`: that would falsely imply execution. A later B2.3 transaction
 may move `ready -> running` only after a fresh policy check and an agreed
 executor/idempotency contract. In B2.2, `ready` remains inert and is never
 automatically retried.
 
-Proposed v3 transitions:
+Implemented v3 transitions (future transitions shown for context):
 
 ```text
 queued  -> claimed | denied       (B2.1)
@@ -82,3 +82,11 @@ B1 service startup.
 2. Add the trusted pre-start gate and focused tests.
 3. Run full conformance locally; review security invariants before any
    executor integration.
+
+## Implementation and remaining review (2026-10-31)
+
+- `server/b2_prestart_schema.py`: opt-in transactional v2→v3 migration; no automatic upgrade.
+- `server/b2_prestart.py`: `PrestartGate.authorize(job_id=..., worker_id=..., claim_token=...)` verifies claim ownership and current authorization, writes `ready` or `denied` with audit atomically. No effects.
+- `tests/conformance/test_b2_prestart_schema.py` and `test_b2_prestart_gate.py`: migration preservation/rollback, valid and rejected claims, original session revocation, grant revocation, agent suspension, concurrency, audit-write rollback, restart and schema guard.
+- **Not yet fully covered:** fault injection on the job-state UPDATE itself; post-claim session/grant expiry; malformed stored claim digests and unusual token inputs; malformed policy data; negative tests for unknown job, incomplete claim and legacy null binding at gate; stronger structural checks on repeated v3 migration; compatibility of B2.1 claim worker with v3 for newly queued jobs (currently worker requires v2). These are follow-up hardening tasks, not proven security properties.
+- **Boundary:** `ready` is a durable authorization record, **not** execution permission that can be trusted indefinitely. A future executor must re-check policy at the actual execution boundary, define idempotency and crash reconciliation, and never automatically replay uncertain external effects.

@@ -32,6 +32,28 @@ class DispatchGateTests(unittest.TestCase):
         return DispatchGate(self.new_service(), adapters={"game.feedback": ("fake.test", "1")}).commit_intent(
             **(args | changes))
 
+ 
+    def test_corrupt_structural_records_after_ready_fail_closed(self):
+        for table, column, mutation in (
+                ("agents", "descriptor", lambda data: data.update({"operators": []})),
+                ("grants", "grant_json", lambda data: data.update({"issuer_user_id": "bad id"})),
+                ("action_jobs", "request_json", lambda data: data.update({"parameters": []}))):
+            with self.subTest(table=table):
+                self.setUp()
+                claim = self.prepare()
+                with closing(sqlite3.connect(self.db)) as db:
+                    raw = db.execute(f"SELECT {column} FROM {table}").fetchone()[0]
+                    data = json.loads(raw)
+                    mutation(data)
+                    db.execute(f"UPDATE {table} SET {column}=?", (json.dumps(data),))
+                    db.commit()
+                result = self.dispatch(claim)
+                self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+                self.assertEqual(self.query(
+                    "SELECT state,effect_idempotency_key FROM action_jobs"),
+                    [("denied", None)])
+                self.assertEqual(self.counts(), (1, 4, 100))
+
     def test_commits_intent_once(self):
         claim = self.prepare()
         self.assertEqual(self.dispatch(claim).state, "dispatch_committed")

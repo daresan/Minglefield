@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 from sys import path
 from unittest.mock import patch
@@ -110,7 +111,7 @@ class PhaseARegressions(unittest.TestCase):
         self.assertIsNone(original(self.token))
         self.assertFalse(result.allowed, "revoked session must not reserve")
         self.assertEqual(result.reason, "invalid_session")
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute(
                 "SELECT spent_minor FROM grants WHERE delegation_id='grant.01'"
             ).fetchone()[0], 0)

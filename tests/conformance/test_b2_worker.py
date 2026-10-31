@@ -110,6 +110,43 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual(restarted.claim_next("worker.two").state, "empty")
         self.assertEqual(self.counts(), (1, 2, 100))
 
+    def test_revoked_grant_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        self.assertTrue(self.policy.revoke(
+            delegation_id="grant.01", verified_actor="user.alice").allowed)
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "grant_revoked"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_suspended_agent_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        self.assertTrue(self.policy.set_suspended(
+            agent_id=self.agent["agent_id"], verified_actor="user.alice",
+            suspended=True).allowed)
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "agent_suspended"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_expired_original_session_denies_even_with_new_session(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        replacement = self.issue()
+        self.assertNotEqual(replacement, self.token)
+        self.now += 901
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_original_session"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_removed_action_rule_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        self.actions.clear()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "action_rule_changed"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
 
 if __name__ == "__main__":
     unittest.main()

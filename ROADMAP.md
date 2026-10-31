@@ -23,6 +23,14 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 **Completion gate:** a publicly documented, testable protocol and clear legal/contribution framework. A playable game is not required.
 
+## Cross-cutting design — human/agent teams (planned)
+- [ ] Define Developer Teams and Game Teams as distinct collaboration contexts containing human users and explicitly selected, accessible agents.
+- [ ] Specify team creation, invitations/consent, roles, membership lifecycle, agent availability, and join/leave/revocation.
+- [ ] Define team-scoped participation without transferring agent ownership, operator authority, private memory or delegation privileges to teammates.
+- [ ] Require independent authorization for each agent action: authenticated requester, valid agent delegation, team membership/role and target game/project policy.
+- [ ] Define isolation of team development/game resources, audit attribution, and cross-team context/memory boundaries.
+- [ ] Prototype and test team permissions separately from simulation-only B2 dispatch; no real effects are authorized.
+
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.
 - [ ] Accept implementations from independent human or AI contributors and mixed teams.

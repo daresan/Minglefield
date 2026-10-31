@@ -6,6 +6,7 @@ No external effects are performed.
 import json
 import sqlite3
 import unittest
+from contextlib import closing
 
 import test_action_submission as fixture
 
@@ -14,11 +15,12 @@ class StoredPolicyShapes(unittest.TestCase):
     setUp = fixture.SubmissionTests.setUp
 
     def mutate_json(self, table, column, field, value):
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             row = db.execute(f"SELECT {column} FROM {table}").fetchone()
             document = json.loads(row[0])
             document[field] = value
             db.execute(f"UPDATE {table} SET {column}=?", (json.dumps(document),))
+            db.commit()
 
     @unittest.expectedFailure
     def test_string_grant_scopes_must_not_authorize(self):
@@ -33,6 +35,7 @@ class StoredPolicyShapes(unittest.TestCase):
             agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
             agent["policy"]["allowed_scopes"] = "game.test_feedback"
             db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
         result = self.service.submit(**self.args)
         self.assertFalse(result.allowed)
         self.assertEqual(fixture.SubmissionTests.counts(self), (0, 0, 0))

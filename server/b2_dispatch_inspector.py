@@ -43,7 +43,16 @@ class DispatchInspector:
                 raise ValueError("invalid stored job state")
             events = tuple(event[0] for event in db.execute(
                 """SELECT event_type FROM action_audit WHERE job_id=?
-                   ORDER BY created_at,event_id""", (job_id,)))
+                   ORDER BY CASE event_type
+                     WHEN 'job.queued' THEN 0
+                     WHEN 'job.claimed' THEN 1
+                     WHEN 'job.ready' THEN 2
+                     WHEN 'job.denied' THEN 3
+                     WHEN 'job.dispatch_committed' THEN 4
+                     WHEN 'job.succeeded' THEN 5
+                     WHEN 'job.failed' THEN 5
+                     WHEN 'job.outcome_unknown' THEN 5
+                     ELSE 6 END, created_at,event_id""", (job_id,)))
             if state == "dispatch_committed":
                 classification = "unresolved_intent_manual_review"
             elif state == "outcome_unknown":

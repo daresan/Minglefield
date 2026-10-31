@@ -35,3 +35,7 @@ These are **record schemas**, not yet MAP wire-envelope message types. Their tra
 - Real-world harm response, insurance, GDPR and EU/Austrian legal classification.
 
 See [identity and delegation](IDENTITY-DELEGATION-v0.1-DRAFT.md) and [message model](MESSAGE-MODEL-v0.1-DRAFT.md).
+
+## Executable prototype
+
+The first [Python Policy Engine prototype](../../server/POLICY_ENGINE.md) now implements local decision checks, scoped grants, spending limits, revocation and suspension, with unit tests. It is **not** an authenticated, durable or distributed enforcement service.

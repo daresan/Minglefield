@@ -7,3 +7,7 @@ Candidate license: AGPL 3.0; exact variant and dependency boundaries pending leg
 ## Experimental policy engine
 
 [MAP Policy Engine prototype and usage](POLICY_ENGINE.md) implements an in-memory policy decision point with tests. It is not a production authorization service.
+
+## SQLite-backed v0.2 prototype
+
+[SQLite policy engine](SQLITE_POLICY_ENGINE.md) adds durable local state and transactional concurrency tests. Authentication and real runtime cancellation remain future work.

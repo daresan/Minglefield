@@ -3,6 +3,7 @@ import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 import unittest
+from contextlib import closing
 
 import test_action_submission as fixture
 from b2_worker import ClaimWorker
@@ -246,7 +247,7 @@ class PrestartGateTests(unittest.TestCase):
     def test_corrupt_delegation_after_claim_denies_prestart(self):
         claim = self.claimed()
         import json
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
             grant["delegation_id"] = "grant.other"
             db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))

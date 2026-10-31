@@ -14,4 +14,4 @@ MAP is intended as a model-agnostic interoperability contract connecting human c
 7. Universe, game and development/testing memory isolation
 8. Versioning and conformance
 
-Read the [MAP v0.1 working draft](MAP-v0.1-DRAFT.md), [message model and processing rules](MESSAGE-MODEL-v0.1-DRAFT.md), [game manifest and capability negotiation](CAPABILITY-NEGOTIATION-v0.1-DRAFT.md), and [draft JSON schemas](../../schemas/map/v0.1/). Normative rules, schemas and tests will be published after design review and license clearance. See [architecture](../../ARCHITECTURE.md).
+Read the [MAP v0.1 working draft](MAP-v0.1-DRAFT.md), [message model and processing rules](MESSAGE-MODEL-v0.1-DRAFT.md), [game manifest and capability negotiation](CAPABILITY-NEGOTIATION-v0.1-DRAFT.md), [identity and delegation](IDENTITY-DELEGATION-v0.1-DRAFT.md), and [draft JSON schemas](../../schemas/map/v0.1/). Normative rules, schemas and tests will be published after design review and license clearance. See [architecture](../../ARCHITECTURE.md).

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daresan/Minglefield/blob/main/schemas/map/v0.1/envelope.schema.json",
+  "title": "MAP v0.1 draft message envelope",
+  "description": "JSON reference encoding of the transport-neutral MAP logical envelope. Draft, not normative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "map_version",
+    "message_id",
+    "type",
+    "sent_at",
+    "source",
+    "payload"
+  ],
+  "properties": {
+    "map_version": {
+      "const": "0.1"
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)+$",
+      "maxLength": 128
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC RFC3339 timestamp; ordering MUST NOT rely on clocks."
+    },
+    "source": {
+      "$ref": "#/$defs/endpoint"
+    },
+    "target": {
+      "$ref": "#/$defs/endpoint"
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "participant_id": {
+      "$ref": "#/$defs/id"
+    },
+    "stream_id": {
+      "$ref": "#/$defs/id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Sender-assigned monotonically increasing sequence in a defined stream; no global ordering."
+    },
+    "correlation_id": {
+      "$ref": "#/$defs/id"
+    },
+    "causation_id": {
+      "$ref": "#/$defs/id"
+    },
+    "idempotency_key": {
+      "$ref": "#/$defs/id"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "trace_id": {
+      "$ref": "#/$defs/id"
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)+$"
+      },
+      "additionalProperties": true
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "endpoint": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "host",
+            "client",
+            "agent",
+            "service"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    }
+  }
+}

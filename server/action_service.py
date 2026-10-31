@@ -105,6 +105,22 @@ class ActionService:
             version = db.execute("SELECT version FROM action_schema WHERE singleton=1").fetchone()
             if version and version[0] not in (1, 2):
                 raise ValueError("unsupported action schema version")
+            if version and version[0] == 2:
+                jobs_sql = db.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='action_jobs'"
+                ).fetchone()
+                audit_sql = db.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='action_audit'"
+                ).fetchone()
+                jobs_columns = {row[1] for row in db.execute("PRAGMA table_info(action_jobs)")}
+                audit_columns = {row[1] for row in db.execute("PRAGMA table_info(action_audit)")}
+                if (not jobs_sql or not audit_sql
+                        or not {"session_token_hash", "claimed_by", "claim_token_hash"} <= jobs_columns
+                        or not {"event_id", "job_id", "event_type"} <= audit_columns
+                        or "claimed" not in jobs_sql[0] or "denied" not in jobs_sql[0]
+                        or "job.claimed" not in audit_sql[0] or "job.denied" not in audit_sql[0]
+                        or db.execute("PRAGMA foreign_key_check").fetchone() is not None):
+                    raise ValueError("unsupported or incomplete action schema version 2")
             db.execute("""CREATE TABLE IF NOT EXISTS action_jobs (
                 job_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
                 agent_id TEXT NOT NULL, delegation_id TEXT NOT NULL,

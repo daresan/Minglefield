@@ -34,8 +34,14 @@ class PrestartGate:
                 FROM action_jobs WHERE job_id=?""", (job_id,)).fetchone()
             if not row or row[9] != "claimed" or row[7] != worker_id or not row[8]:
                 return PrestartResult("rejected", "invalid_claim", job_id)
-            digest = hashlib.sha256(claim_token.encode("utf-8")).hexdigest()
-            if not hmac.compare_digest(digest, row[8]):
+            try:
+                digest = hashlib.sha256(claim_token.encode("utf-8")).hexdigest()
+            except UnicodeEncodeError:
+                return PrestartResult("rejected", "invalid_claim", job_id)
+            stored = row[8]
+            if (not isinstance(stored, str) or len(stored) != 64
+                    or any(c not in "0123456789abcdef" for c in stored)
+                    or not hmac.compare_digest(digest, stored)):
                 return PrestartResult("rejected", "invalid_claim", job_id)
             now = self.service.clock()
             if not isinstance(now, (int, float)) or not math.isfinite(now):

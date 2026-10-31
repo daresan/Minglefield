@@ -101,6 +101,14 @@ class ClaimWorker:
                     or agent.get("agent_id") != agent_id
                     or grant.get("delegation_id") != delegation_id):
                 return "invalid_policy"
+            if (type(grant.get("issuer_user_id")) is not str
+                    or not grant["issuer_user_id"]
+                    or len(grant["issuer_user_id"]) > 128):
+                return "invalid_policy"
+            concurrency = agent.get("policy", {}).get("max_concurrent_tasks") if type(agent.get("policy")) is dict else None
+            if concurrency is not None and (type(concurrency) is not int
+                    or not 0 <= concurrency <= MAX_INT):
+                return "invalid_policy"
             revision = agent.get("revision")
             if type(revision) is not int or not 0 <= revision <= MAX_INT:
                 return "invalid_policy"

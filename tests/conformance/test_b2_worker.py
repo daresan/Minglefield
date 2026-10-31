@@ -250,5 +250,50 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual(self.counts(), (1, 2, 100))
 
 
+    def test_non_object_request_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE action_jobs SET request_json='[]'")
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_missing_request_binding_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            del request["delegation_id"]
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_mismatched_request_binding_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            request["delegation_id"] = "grant.other"
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "request_binding_mismatch"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
 if __name__ == "__main__":
     unittest.main()

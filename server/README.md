@@ -11,3 +11,7 @@ Candidate license: AGPL 3.0; exact variant and dependency boundaries pending leg
 ## SQLite-backed v0.2 prototype
 
 [SQLite policy engine](SQLITE_POLICY_ENGINE.md) adds durable local state and transactional concurrency tests. Authentication and real runtime cancellation remain future work.
+
+## Identity and session prototype v0.3
+
+[Session security and authenticated gateway](SESSION_SECURITY.md) binds bearer sessions to user, agent and delegation and uses server time. Experimental, not production identity or dispatch.

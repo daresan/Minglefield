@@ -29,6 +29,6 @@ We welcome design feedback, technical discussion and help identifying the best p
 **License selection is pending.** Public visibility does not automatically grant permission to reuse, redistribute or modify the contents. We plan to adopt appropriate open-source licenses after review; until then, please avoid external code contributions.
 
 ## Funding
-Voluntary sponsorship and milestone-based crowdfunding are being prepared. **There is no active payment link yet.** See [FUNDING.md](FUNDING.md).
+**GitHub Sponsors is live:** [Support Minglefield's development](https://github.com/sponsors/daresan). Milestone-based crowdfunding is still in planning. See [FUNDING.md](FUNDING.md) for scope and status.
 
 Minglefield is an independent project. No affiliation with a game platform, AI vendor or other organization is implied.

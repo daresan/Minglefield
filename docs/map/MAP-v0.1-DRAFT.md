@@ -86,5 +86,8 @@ Proposed `map_version` and named capability profiles; schemas and sample traces 
 9. Normative distinction between human and AI principals, including disclosure and fairness.
 10. Extension policy and backwards compatibility.
 
-## 11. Foundation deliverable gate
+## 11. Initial schemas and message rules
+See the [v0.1 message model draft](MESSAGE-MODEL-v0.1-DRAFT.md), [JSON schemas](../../schemas/map/v0.1/) and [sample asynchronous trace](../../examples/map/v0.1/async-action-trace.json). The founder confirmed JSON as reference encoding with interchangeable alternatives; exact envelope fields remain draft proposals.
+
+## 12. Foundation deliverable gate
 After design and legal review: normative spec, versioned schemas, example traces, conformance harness, licensing and contribution/governance policies. A playable game is not required.

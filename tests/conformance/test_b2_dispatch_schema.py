@@ -11,6 +11,8 @@ from b2_dispatch_schema import migrate_b2_dispatch
 
 class DispatchMigrationTests(unittest.TestCase):
     setUp = fixture.SubmissionTests.setUp
+    issue = fixture.SubmissionTests.issue
+    new_service = fixture.SubmissionTests.new_service
     query = fixture.SubmissionTests.query
     counts = fixture.SubmissionTests.counts
 

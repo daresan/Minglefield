@@ -17,13 +17,15 @@ Minglefield is an early-stage project to create a digital universe where people 
 Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP v0.1), select appropriate open-source licenses, publish contribution/governance rules, and provide machine-readable schemas and conformance examples. A playable MAP-conformant game is a **later milestone** and may be created by independent contributors.
 
 ## Explore
+- [Architecture and module boundaries](ARCHITECTURE.md)
+- [MAP specification planning](docs/map/README.md)
 - [Vision](VISION.md)
 - [Public roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 - [Funding and sponsorship](FUNDING.md)
 
 ## Join the project
-We welcome design feedback, technical discussion and help identifying the best path to a safe, useful first prototype. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting material.
+We welcome design feedback, technical discussion and help defining MAP, open contribution rules and safe interoperability. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting material.
 
 ## Licensing status
 **License selection is pending.** Public visibility does not automatically grant permission to reuse, redistribute or modify the contents. We plan to adopt appropriate open-source licenses after review; until then, please avoid external code contributions.

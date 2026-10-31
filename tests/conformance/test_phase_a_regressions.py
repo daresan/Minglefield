@@ -1,7 +1,6 @@
 """Phase A fixes and executable P1 regression reproductions.
 
-The remaining expected failure asserts the desired security property. An unexpected success
-requires reviewing/removing the marker; it must not silently hide a later fix.
+Security properties are enforced as regular regression tests.
 """
 import copy
 import json
@@ -96,7 +95,6 @@ class PhaseARegressions(unittest.TestCase):
                 with self.subTest(engine=type(engine).__name__, operation_id=operation_id):
                     self.assertTrue(engine.authorize(**self.args, operation_id=operation_id).allowed)
 
-    @unittest.expectedFailure
     def test_known_p1_revocation_between_verify_and_policy_must_deny(self):
         original = self.sessions.verify
 
@@ -110,7 +108,15 @@ class PhaseARegressions(unittest.TestCase):
         with patch.object(self.sessions, "verify", side_effect=verify_then_revoke):
             result = ActionGateway(self.sessions, self.policy).authorize(**self.gateway_args(self.token))
         self.assertIsNone(original(self.token))
-        self.assertFalse(result.allowed, "P1: revoked session still authorizes and reserves")
+        self.assertFalse(result.allowed, "revoked session must not reserve")
+        self.assertEqual(result.reason, "invalid_session")
+        with sqlite3.connect(self.db) as db:
+            self.assertEqual(db.execute(
+                "SELECT spent_minor FROM grants WHERE delegation_id='grant.01'"
+            ).fetchone()[0], 0)
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM operations WHERE operation_id='op.binding'"
+            ).fetchone()[0], 0)
 
     def reserve_across_grants(self, engine):
         for index in range(6):

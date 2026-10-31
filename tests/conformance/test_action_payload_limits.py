@@ -11,8 +11,13 @@ from action_service import _canonical
 from test_action_submission import SubmissionTests
 
 
-class PayloadBoundaryTests(SubmissionTests):
-    """Use existing fixture helpers; inherited submission tests also run here."""
+class PayloadBoundaryTests(unittest.TestCase):
+    """Reuse B1 fixture setup without duplicating its twenty inherited tests."""
+    setUp = SubmissionTests.setUp
+    issue = SubmissionTests.issue
+    new_service = SubmissionTests.new_service
+    query = SubmissionTests.query
+    counts = SubmissionTests.counts
 
     def test_canonical_ascii_bytes_match_character_length(self):
         for payload in ({"x": "🌍"}, {"nested": ["é", "\\", "\n"]}):

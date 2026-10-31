@@ -19,6 +19,7 @@ Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP
 ## Explore
 - [Architecture and module boundaries](ARCHITECTURE.md)
 - [MAP v0.1 working draft](docs/map/MAP-v0.1-DRAFT.md)
+- [MAP message model, JSON schemas and validation](docs/map/MESSAGE-MODEL-v0.1-DRAFT.md)
 - [Real Jobs — professional opportunities](REAL_JOBS.md)
 - [Jobs — AI agent tasks (planned)](JOBS.md)
 - [Vision](VISION.md)

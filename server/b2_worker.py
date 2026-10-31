@@ -91,13 +91,23 @@ class ClaimWorker:
             if (request["user_id"], request["agent_id"], request["delegation_id"]) != (
                     user_id, agent_id, delegation_id):
                 return "request_binding_mismatch"
-            if grant["agent_id"] != agent_id or agent["agent_id"] != agent_id:
+            if (type(grant) is not dict or type(agent) is not dict
+                    or grant.get("agent_id") != agent_id
+                    or agent.get("agent_id") != agent_id
+                    or grant.get("delegation_id") != delegation_id):
                 return "invalid_policy"
-            if grant["status"] != "active" or grant["requester_user_id"] != user_id:
+            if grant.get("status") != "active" or grant.get("requester_user_id") != user_id:
                 return "grant_inactive"
             if rule is None or rule.scope != request["scope"]:
                 return "action_rule_changed"
-            if rule.scope not in grant["scopes"] or rule.scope not in agent["policy"]["allowed_scopes"]:
+            policy = agent.get("policy")
+            scopes = grant.get("scopes")
+            allowed = policy.get("allowed_scopes") if type(policy) is dict else None
+            if (type(scopes) is not list or type(allowed) is not list
+                    or any(type(scope) is not str or not scope for scope in scopes)
+                    or any(type(scope) is not str or not scope for scope in allowed)):
+                return "invalid_policy"
+            if rule.scope not in scopes or rule.scope not in allowed:
                 return "scope_denied"
             if grant.get("target_id") != request["target_id"]:
                 return "target_denied"

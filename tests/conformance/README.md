@@ -7,3 +7,5 @@ Shared-agent draft checks cover operator approval role, allowed/denied requester
 Run policy engine unit tests: `python -m unittest discover -s tests/conformance -p 'test_*.py' -v`. These tests exercise a runnable in-memory prototype; they do not prove production security.
 
 SQLite v0.2 tests: `test_sqlite_policy_engine.py` covers restart persistence, concurrent budget reservations, duplicate operations and deny rules. The same unittest discovery command runs both engine suites.
+
+Session v0.3 tests: `test_session_security.py` covers token verification, expiry, binding, durable revocation and policy gateway integration. Unittest discovery includes this module.

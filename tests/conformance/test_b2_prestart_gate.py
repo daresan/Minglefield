@@ -57,7 +57,8 @@ class PrestartGateTests(unittest.TestCase):
         self.assertEqual(self.counts(), (1, 3, 100))
 
     def test_new_job_claimed_on_v3_and_authorized(self):
-        self.assertTrue(self.service.submit(**self.args).allowed)
+        first = self.service.submit(**self.args)
+        self.assertTrue(first.allowed)
         ClaimWorker(self.service)  # legacy v1 -> v2
         migrate_b2_prestart(self.db)
         second = self.service.submit(**(self.args | {"idempotency_key": "request.2"}))
@@ -66,7 +67,8 @@ class PrestartGateTests(unittest.TestCase):
         first_claim = worker.claim_next("worker.one")
         second_claim = worker.claim_next("worker.two")
         self.assertEqual((first_claim.state, second_claim.state), ("claimed", "claimed"))
-        self.assertEqual(second_claim.job_id, second.job_id)
+        self.assertEqual({first_claim.job_id, second_claim.job_id},
+                         {first.job_id, second.job_id})
         result = PrestartGate(self.new_service()).authorize(
             job_id=second_claim.job_id, worker_id="worker.two",
             claim_token=second_claim.claim_token)

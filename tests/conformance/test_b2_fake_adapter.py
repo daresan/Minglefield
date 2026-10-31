@@ -4,7 +4,11 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 
 import test_action_submission as fixture
-from test_b2_dispatch_gate import DispatchGateTests
+from b2_worker import ClaimWorker
+from b2_prestart import PrestartGate
+from b2_prestart_schema import migrate_b2_prestart
+from b2_dispatch_schema import migrate_b2_dispatch
+from b2_dispatch import DispatchGate
 from b2_fake_adapter import DeterministicFakeAdapter, FakeOutcome, FakeOutcomeRecorder
 
 
@@ -15,8 +19,21 @@ class FakeOutcomeTests(unittest.TestCase):
     query = fixture.SubmissionTests.query
     execute = fixture.SubmissionTests.execute
     counts = fixture.SubmissionTests.counts
-    prepare = DispatchGateTests.prepare
-    dispatch = DispatchGateTests.dispatch
+    def prepare(self):
+        self.service.submit(**self.args)
+        claim = ClaimWorker(self.service).claim_next("worker.one")
+        migrate_b2_prestart(self.db)
+        ready = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual(ready.state, "ready")
+        migrate_b2_dispatch(self.db)
+        return claim
+
+    def dispatch(self, claim):
+        return DispatchGate(self.new_service(), adapters={
+            "game.feedback": ("fake.test", "1")}).commit_intent(
+                job_id=claim.job_id, worker_id="worker.one",
+                claim_token=claim.claim_token)
 
     def committed(self):
         claim = self.prepare()

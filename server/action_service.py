@@ -103,9 +103,9 @@ class ActionService:
             db.execute("""CREATE TABLE IF NOT EXISTS action_schema (
                 singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL)""")
             version = db.execute("SELECT version FROM action_schema WHERE singleton=1").fetchone()
-            if version and version[0] not in (1, 2, 3):
+            if version and version[0] not in (1, 2, 3, 4):
                 raise ValueError("unsupported action schema version")
-            if version and version[0] in (2, 3):
+            if version and version[0] in (2, 3, 4):
                 jobs_sql = db.execute(
                     "SELECT sql FROM sqlite_master WHERE type='table' AND name='action_jobs'"
                 ).fetchone()
@@ -119,10 +119,11 @@ class ActionService:
                         or not {"event_id", "job_id", "event_type"} <= audit_columns
                         or "claimed" not in jobs_sql[0] or "denied" not in jobs_sql[0]
                         or "job.claimed" not in audit_sql[0] or "job.denied" not in audit_sql[0]
-                        or (version[0] == 3 and
+                        or (version[0] >= 3 and
                             ("ready" not in jobs_sql[0] or "job.ready" not in audit_sql[0]))
+                        or (version[0] == 4 and (not {"effect_idempotency_key", "dispatch_fingerprint", "adapter_id", "adapter_version", "dispatched_at"} <= jobs_columns or "dispatch_committed" not in jobs_sql[0] or "outcome_unknown" not in jobs_sql[0] or "job.dispatch_committed" not in audit_sql[0] or "job.outcome_unknown" not in audit_sql[0]))
                         or db.execute("PRAGMA foreign_key_check").fetchone() is not None):
-                    raise ValueError("unsupported or incomplete action schema version 2/3")
+                    raise ValueError("unsupported or incomplete action schema version 2/3/4")
             db.execute("""CREATE TABLE IF NOT EXISTS action_jobs (
                 job_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
                 agent_id TEXT NOT NULL, delegation_id TEXT NOT NULL,

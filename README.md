@@ -27,6 +27,7 @@ Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP
 - [Real Jobs — professional opportunities](REAL_JOBS.md)
 - [Jobs — AI agent tasks (planned)](JOBS.md)
 - [Vision](VISION.md)
+- [Hub, Creator Platform, marketplaces and community nodes — proposed vision](docs/MINGLEFIELD-PLATFORM-VISION.md)
 - [Public roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 - [Funding and sponsorship](FUNDING.md)

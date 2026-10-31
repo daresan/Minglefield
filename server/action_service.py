@@ -195,7 +195,9 @@ class ActionService:
                 if row[0] != session[1]:
                     raise _Reject("agent_delegation_mismatch")
                 grant, agent = json.loads(row[1]), json.loads(row[4])
-                if grant["agent_id"] != row[0] or agent["agent_id"] != row[0]:
+                if type(grant) is not dict or type(agent) is not dict:
+                    raise _Reject("invalid_policy")
+                if grant.get("agent_id") != row[0] or agent.get("agent_id") != row[0]:
                     raise _Reject("invalid_policy")
                 if row[5]:
                     raise _Reject("agent_suspended")
@@ -203,7 +205,9 @@ class ActionService:
                     raise _Reject("grant_revoked")
                 if grant["status"] != "active" or grant["requester_user_id"] != session[0]:
                     raise _Reject("requester_or_grant_mismatch")
-                policy = agent.get("policy", {})
+                policy = agent.get("policy")
+                if type(policy) is not dict:
+                    raise _Reject("invalid_policy")
                 grant_scopes = grant.get("scopes")
                 allowed_scopes = policy.get("allowed_scopes")
                 if (type(grant_scopes) is not list or type(allowed_scopes) is not list

@@ -75,12 +75,12 @@ class DispatchMigrationTests(unittest.TestCase):
             db.close()
         self.assertEqual(self.query("SELECT state FROM action_jobs"), [("ready",)])
 
-    def test_repeated_v4_rejects_missing_dispatch_column(self):
+    def test_repeated_v4_rejects_missing_audit_table(self):
         self.ready_job()
         migrate_b2_dispatch(self.db)
         db = sqlite3.connect(self.db)
         try:
-            db.execute("ALTER TABLE action_jobs DROP COLUMN adapter_version")
+            db.execute("DROP TABLE action_audit")
             db.commit()
         finally:
             db.close()

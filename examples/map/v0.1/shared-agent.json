@@ -1,0 +1,31 @@
+{
+  "agent_id": "agent.shared.01",
+  "operators": [
+    {
+      "user_id": "user.alice",
+      "roles": [
+        "admin",
+        "approver"
+      ]
+    },
+    {
+      "user_id": "user.bob",
+      "roles": [
+        "runtime_operator",
+        "auditor"
+      ]
+    }
+  ],
+  "accountable_party_id": "user.alice",
+  "state": "active",
+  "revision": 1,
+  "runtime": "self_hosted",
+  "policy": {
+    "max_spend_minor": 1000,
+    "max_concurrent_tasks": 1,
+    "allowed_scopes": [
+      "game.play",
+      "game.test_feedback"
+    ]
+  }
+}

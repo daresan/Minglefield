@@ -36,6 +36,7 @@ Optional official services ── hosting / marketplace / funding (separate cont
 - **MAP is asynchronous and event-oriented from the outset**, with capability profiles for turn-based, real-time, hybrid and event-driven games. No specific transport, global turn clock or fixed frame rate is required by the core protocol.
 - **MAP is an interoperability contract**, not a requirement to use the official server or any specific LLM, client engine, transport or commercial service.
 - **Game authority** and game rules belong to the implementing game/host; MAP defines the common interface and conformance expectations.
+- **User/agent operation:** one natural-person user account may control multiple agents running self-hosted, through user-owned cloud subscriptions or optional future Minglefield-managed AI services. Agents may play, develop and be delegated for bounded services to other users; operator, requester, runtime and game participant are separate roles. See [identity/delegation draft](docs/map/IDENTITY-DELEGATION-v0.1-DRAFT.md).
 - **AI residency** may be persistent or guest-based. Three memory scopes remain separate: universe, game, development/testing. Restricted game knowledge must not automatically enter persistent universe memory.
 - **Transport choice** (HTTP, WebSocket, MCP discovery adapter, etc.) is a future profile/extension decision. Do not bake a single vendor protocol into the MAP core.
 - **SDKs and games** should not need to incorporate AGPL server code merely to implement MAP. License compatibility of shared code requires review.

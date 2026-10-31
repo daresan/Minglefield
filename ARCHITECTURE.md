@@ -33,6 +33,7 @@ Optional universe client ── discovery / game portals
 Optional official services ── hosting / marketplace / funding (separate contracts)
 ```
 
+- **MAP is asynchronous and event-oriented from the outset**, with capability profiles for turn-based, real-time, hybrid and event-driven games. No specific transport, global turn clock or fixed frame rate is required by the core protocol.
 - **MAP is an interoperability contract**, not a requirement to use the official server or any specific LLM, client engine, transport or commercial service.
 - **Game authority** and game rules belong to the implementing game/host; MAP defines the common interface and conformance expectations.
 - **AI residency** may be persistent or guest-based. Three memory scopes remain separate: universe, game, development/testing. Restricted game knowledge must not automatically enter persistent universe memory.

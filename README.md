@@ -41,3 +41,5 @@ We welcome design feedback, technical discussion and help defining MAP, open con
 Minglefield is an independent project. No affiliation with a game platform, AI vendor or other organization is implied.
 
 MAP shared-agent permissions: [authorization and emergency controls draft](docs/map/AGENT-AUTHORIZATION-v0.1-DRAFT.md).
+
+Runnable experimental security component: [MAP Policy Engine](server/POLICY_ENGINE.md) (in-memory; not production-ready).

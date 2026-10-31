@@ -1,7 +1,7 @@
 # MAP v0.4 — B2.2 pre-start authorization design
 
-Status: **B2.2 implemented and locally validated; security review remains open**. Branch: `wip/map-v04-phase-b1`.
-As of 2026-10-31: 115 tests OK (three known expected failures), nine focused pre-start tests OK, MAP v0.1 validator PASS and `git diff --check` clean, per maintainer's local Windows run.
+Status: **B2.2 implementation and regression gate complete for the current no-effects prototype; not production security certification**. Branch: `wip/map-v04-phase-b1`.
+As of 2026-10-31: 124 tests OK (three known expected failures), 17 focused pre-start tests and six migration tests OK, MAP v0.1 validator PASS and `git diff --check` clean, per maintainer's local Windows run.
 No changes to MAP v0.1 wire protocol, `main`, or external executors.
 
 ## Decision: no automatic retry of external effects
@@ -83,10 +83,14 @@ B1 service startup.
 3. Run full conformance locally; review security invariants before any
    executor integration.
 
-## Implementation and remaining review (2026-10-31)
+## Verified implementation status (2026-10-31)
 
-- `server/b2_prestart_schema.py`: opt-in transactional v2→v3 migration; no automatic upgrade.
-- `server/b2_prestart.py`: `PrestartGate.authorize(job_id=..., worker_id=..., claim_token=...)` verifies claim ownership and current authorization, writes `ready` or `denied` with audit atomically. No effects.
-- `tests/conformance/test_b2_prestart_schema.py` and `test_b2_prestart_gate.py`: migration preservation/rollback, valid and rejected claims, original session revocation, grant revocation, agent suspension, concurrency, audit-write rollback, restart and schema guard.
-- **Not yet fully covered:** fault injection on the job-state UPDATE itself; post-claim session/grant expiry; malformed stored claim digests and unusual token inputs; malformed policy data; negative tests for unknown job, incomplete claim and legacy null binding at gate; stronger structural checks on repeated v3 migration; compatibility of B2.1 claim worker with v3 for newly queued jobs (currently worker requires v2). These are follow-up hardening tasks, not proven security properties.
-- **Boundary:** `ready` is a durable authorization record, **not** execution permission that can be trusted indefinitely. A future executor must re-check policy at the actual execution boundary, define idempotency and crash reconciliation, and never automatically replay uncertain external effects.
+- `server/b2_prestart_schema.py`: explicit transactional v2→v3 migration; repeat invocation preserves populated v3 jobs, `ready` state, events and reservations.
+- `server/b2_prestart.py`: trusted claim fencing and current-policy reauthorization, atomic `ready`/`denied` plus audit; no effects. Malformed stored claim digests and unencodable tokens reject without mutation.
+- `server/b2_worker.py`: claim-only worker accepts v2/v3 and migrates legacy v1 to v2, without downgrading v3.
+- `tests/conformance/test_b2_prestart_gate.py`: 17 passing local tests covering claim ownership, original session revocation/expiry, grant revocation, agent suspension, malformed grant/request policy, concurrency, restart, audit and state-update rollback, invalid inputs and hashes, and v3 claim integration.
+- `tests/conformance/test_b2_prestart_schema.py`: six passing local tests covering migration preservation, rollback, repeat invocation, v1 rejection, v3 ready/audit and post-migration submission.
+- **Residual hardening / future review:** explicit tests for incomplete claim metadata and legacy null session binding at pre-start; grant expiry after claim; deeper structural validation when schema version already reads v3; security review of trusted caller boundary and malformed DB types. These are not claimed as fully tested.
+- **B2.3 prerequisite:** define trusted executor boundary, reauthorize immediately before external effect, explicit effect idempotency keys, durable outcome/unknown-outcome handling, no automatic replay or reassignment after ambiguous execution, operator reconciliation and audit semantics. Do not treat `ready` as an irrevocable execution capability.
+- The three known expected failures are inherited legacy authorization-path issues, **not** waived for production readiness.
+

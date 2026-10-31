@@ -45,3 +45,6 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Accessibility, VR and additional engines as feasible.
 
 **Progress reporting:** Only completed, tested work will be marked as shipped.
+
+- [x] Draft multi-operator agent, delegation, revocation and suspension schemas and illustrative authorization checks.
+- [ ] Define authenticated policy enforcement, multi-operator approvals, live revocation propagation and emergency-stop semantics.

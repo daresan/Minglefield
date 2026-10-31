@@ -1,0 +1,31 @@
+name: MAP conformance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'wip/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  map-conformance:
+    name: MAP conformance (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run unit and regression tests
+        run: python -B -m unittest discover -s tests/conformance -p "test_*.py" -v
+      - name: Validate MAP v0.1 schemas
+        run: python -B tests/conformance/validate_map_v01.py

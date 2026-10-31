@@ -1,0 +1,8 @@
+{
+  "suspension_id": "stop.01",
+  "agent_id": "agent.shared.01",
+  "actor_user_id": "user.alice",
+  "occurred_at": "2026-10-31T12:31:00Z",
+  "mode": "suspend",
+  "reason": "Operator emergency stop"
+}

@@ -31,6 +31,14 @@ Status: **code-based preliminary security review; not a production certification
 - Fake terminal transitions and audit inserts share one SQLite transaction; the read-only inspector does not mutate jobs.
 - Tests cover concurrent dispatch, revoked/expired sessions and grants, bad claims, injected audit failures, crash points and simulated timeout. Coverage does **not** establish behavior of a real external system.
 
+## SEC-07 follow-up — current hardening branch (2026-11-01)
+
+Status: **mitigated, not closed**. This is a follow-up to the original review at `ca8a4e1`, not a replacement of its historical evidence. Maintainer locally validated `0571d3a`: 23/23 worker tests, 186/186 conformance tests, MAP v0.1 validator PASS, `git diff --check` and `git status --short` clean. These results do not validate later documentation commits.
+
+The shared `ClaimWorker._check` path used by claim, prestart and dispatch now rejects non-object requests; invalid request version/parameters; missing or conflicting user/agent/delegation bindings; invalid grant/agent identity, status, revision, scope list and budget-limit types; invalid grant time types/order; revoked/suspended authorities; and invalid original sessions. Tests cover targeted persisted-record mutations, including delegation changes after claim and after ready.
+
+**Residual work before closure:** compare all security-relevant persisted grant, agent and request fields against their normative schemas; validate typed identity/target/action/scope fields and policy revisions as appropriate; verify nested request parameters against action-specific contracts if defined; establish fail-closed behavior at each transition for remaining malformed-but-type-compatible cases. A passing suite is not evidence of complete schema coverage. SEC-01 through SEC-06 and SEC-08/09 retain their separate status; no actual external effects authorized.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

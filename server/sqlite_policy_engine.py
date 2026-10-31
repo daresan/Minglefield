@@ -21,8 +21,8 @@ def _time(value):
 class SQLitePolicyEngine:
     def __init__(self, database, *, busy_timeout_ms=10000):
         self.database = str(Path(database))
+        self.busy_timeout_ms = busy_timeout_ms
         with self._tx() as db:
-            db.executescript_initial = None  # schema created without executescript implicit commit
             db.execute("""CREATE TABLE IF NOT EXISTS agents (
                 agent_id TEXT PRIMARY KEY, descriptor TEXT NOT NULL,
                 suspended INTEGER NOT NULL CHECK(suspended IN (0,1)))""")
@@ -35,14 +35,13 @@ class SQLitePolicyEngine:
                 delegation_id TEXT NOT NULL, operation_id TEXT NOT NULL,
                 fingerprint TEXT NOT NULL, PRIMARY KEY(delegation_id,operation_id),
                 FOREIGN KEY(delegation_id) REFERENCES grants(delegation_id))""")
-        self.busy_timeout_ms = busy_timeout_ms
 
     @contextmanager
     def _tx(self):
-        db = sqlite3.connect(self.database, timeout=10, isolation_level=None)
+        db = sqlite3.connect(self.database, timeout=self.busy_timeout_ms / 1000, isolation_level=None)
         try:
             db.execute("PRAGMA foreign_keys=ON")
-            db.execute("PRAGMA busy_timeout=10000")
+            db.execute(f"PRAGMA busy_timeout={int(self.busy_timeout_ms)}")
             db.execute("BEGIN IMMEDIATE")
             yield db
             db.commit()

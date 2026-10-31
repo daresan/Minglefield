@@ -87,6 +87,26 @@ class PrestartMigrationTests(unittest.TestCase):
         self.assertEqual(self.counts(), (2, 2, 200))
         self.assertEqual(self.query("PRAGMA foreign_key_check"), [])
 
+    def test_repeat_v3_migration_preserves_ready_job_and_audit(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        claim = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual(claim.state, "claimed")
+        migrate_b2_prestart(self.db)
+        from b2_prestart import PrestartGate
+        result = PrestartGate(self.new_service()).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual(result.state, "ready")
+        before_jobs = self.query("SELECT * FROM action_jobs")
+        before_events = self.query("SELECT * FROM action_audit ORDER BY event_id")
+        before_counts = self.counts()
+        migrate_b2_prestart(self.db)
+        self.assertEqual(self.query("SELECT version FROM action_schema"), [(3,)])
+        self.assertEqual(self.query("SELECT * FROM action_jobs"), before_jobs)
+        self.assertEqual(self.query("SELECT * FROM action_audit ORDER BY event_id"), before_events)
+        self.assertEqual(self.counts(), before_counts)
+        self.assertEqual(self.query("PRAGMA foreign_key_check"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -59,6 +59,20 @@ class B2MigrationTests(unittest.TestCase):
         self.assertEqual(self.query("SELECT state FROM action_jobs"), [("claimed",)])
         self.assertEqual(self.query("SELECT COUNT(*) FROM action_audit"), [(2,)])
 
+    def test_b1_submission_remains_usable_after_v2_migration(self):
+        first = self.service.submit(**self.args)
+        self.assertTrue(first.allowed)
+        migrate_b2(self.db)
+        restarted = self.new_service()
+        replay = restarted.submit(**self.args)
+        self.assertTrue(replay.allowed)
+        self.assertEqual(replay.job_id, first.job_id)
+        next_job = restarted.submit(**(self.args | {"idempotency_key": "request.2"}))
+        self.assertTrue(next_job.allowed)
+        self.assertNotEqual(next_job.job_id, first.job_id)
+        self.assertEqual(self.counts(), (2, 2, 200))
+        self.assertEqual(self.query("PRAGMA foreign_key_check"), [])
+
     def test_unsupported_version_fails_without_changes(self):
         db = sqlite3.connect(self.db)
         try:

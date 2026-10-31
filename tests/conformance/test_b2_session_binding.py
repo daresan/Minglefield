@@ -35,9 +35,13 @@ class SessionBindingTests(unittest.TestCase):
     def test_legacy_null_reference_is_preserved_on_replay_and_restart(self):
         first = self.service.submit(**self.args)
         self.assertTrue(first.allowed)
-        with sqlite3.connect(self.db) as db:
+        db = sqlite3.connect(self.db)
+        try:
             db.execute("UPDATE action_jobs SET session_token_hash=NULL WHERE job_id=?",
                        (first.job_id,))
+            db.commit()
+        finally:
+            db.close()
         self.new_service()
         replay = self.service.submit(**(self.args | {"token": self.issue()}))
         self.assertEqual(replay.job_id, first.job_id)

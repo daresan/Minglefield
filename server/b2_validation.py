@@ -87,7 +87,8 @@ def valid_agent(value):
                ("max_spend_minor", "max_concurrent_tasks") if key in policy):
             return False
         if ("allowed_scopes" in policy and
-                not _unique_strings(policy["allowed_scopes"],
-                                    lambda scope: type(scope) is str and bool(scope))):
+                not (type(policy["allowed_scopes"]) is list
+                     and all(type(scope) is str and bool(scope) for scope in policy["allowed_scopes"])
+                     and len(policy["allowed_scopes"]) == len(set(policy["allowed_scopes"])))):
             return False
     return True

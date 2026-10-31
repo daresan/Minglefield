@@ -158,6 +158,7 @@ class DispatchGateTests(unittest.TestCase):
             grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
             grant["delegation_id"] = "grant.other"
             db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
         result = self.dispatch(claim)
         self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
         self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])

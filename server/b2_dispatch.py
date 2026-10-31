@@ -5,6 +5,7 @@ import math
 import secrets
 import uuid
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from b2_worker import ClaimWorker
 
@@ -32,7 +33,7 @@ class DispatchGate:
                            for v in identity)):
                 raise ValueError("invalid adapter configuration")
             validated[action] = identity
-        self.adapters = validated.copy()
+        self.adapters = MappingProxyType(validated)
 
     def commit_intent(self, *, job_id, worker_id, claim_token):
         if (not isinstance(job_id, str) or not 1 <= len(job_id) <= 128

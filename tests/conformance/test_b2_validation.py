@@ -52,6 +52,26 @@ class PersistedValidationTests(unittest.TestCase):
         agent["operators"][0]["roles"].append("admin")
         self.assertFalse(valid_agent(agent))
 
+    def test_missing_required_fields_fail_closed(self):
+        for record, validator, required in (
+                (self.agent, valid_agent, "operators"),
+                (self.grant, valid_grant, "issuer_user_id"),
+                (self.request, valid_request, "parameters")):
+            with self.subTest(required=required):
+                damaged = copy.deepcopy(record)
+                del damaged[required]
+                self.assertFalse(validator(damaged))
+
+    def test_optional_policy_and_grant_fields(self):
+        agent = copy.deepcopy(self.agent)
+        agent.pop("policy")
+        self.assertTrue(valid_agent(agent))
+        grant = copy.deepcopy(self.grant)
+        grant.pop("target_id")
+        grant.pop("approval_ref")
+        grant.pop("max_spend_minor")
+        self.assertTrue(valid_grant(grant))
+
     def test_optional_empty_allowed_scopes(self):
         agent = copy.deepcopy(self.agent)
         agent["policy"]["allowed_scopes"] = []

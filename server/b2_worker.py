@@ -85,6 +85,8 @@ class ClaimWorker:
             return "agent_suspended"
         try:
             request = json.loads(raw)
+            if type(request) is not dict:
+                return "invalid_policy"
             grant = json.loads(row[1])
             agent = json.loads(row[3])
             rule = self.service.actions.get(request["action_type"])

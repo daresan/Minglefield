@@ -26,6 +26,28 @@ class PrestartGateTests(unittest.TestCase):
         migrate_b2_prestart(self.db)
         return claim
 
+
+    def test_corrupt_structural_records_after_claim_fail_closed(self):
+        for table, column, mutation in (
+                ("agents", "descriptor", lambda data: data.update({"operators": []})),
+                ("grants", "grant_json", lambda data: data.update({"issuer_user_id": "bad id"})),
+                ("action_jobs", "request_json", lambda data: data.update({"parameters": []}))):
+            with self.subTest(table=table):
+                self.setUp()
+                claim = self.claimed()
+                with closing(sqlite3.connect(self.db)) as db:
+                    raw = db.execute(f"SELECT {column} FROM {table}").fetchone()[0]
+                    data = json.loads(raw)
+                    mutation(data)
+                    db.execute(f"UPDATE {table} SET {column}=?", (json.dumps(data),))
+                    db.commit()
+                result = PrestartGate(self.service).authorize(
+                    job_id=claim.job_id, worker_id="worker.one",
+                    claim_token=claim.claim_token)
+                self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+                self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+                self.assertEqual(self.counts(), (1, 3, 100))
+
     def test_valid_claim_becomes_ready_once_without_effect(self):
         claim = self.claimed()
         gate = PrestartGate(self.new_service())

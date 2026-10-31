@@ -7,7 +7,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from policy_engine import Decision
 
 
@@ -86,8 +86,8 @@ class SQLitePolicyEngine:
             return Decision(True, "grant_added")
 
     def authorize(self, *, verified_requester, delegation_id, scope, target_id, at,
-                  cost_minor=0, operation_id=None, expected_agent_id=None):
-        with self._tx() as db:
+                  cost_minor=0, operation_id=None, expected_agent_id=None, _db=None):
+        with (self._tx() if _db is None else nullcontext(_db)) as db:
             row = db.execute("""SELECT g.grant_json,g.revoked,g.spent_minor,
                                        a.descriptor,a.suspended,g.agent_id
                                 FROM grants g JOIN agents a ON g.agent_id=a.agent_id

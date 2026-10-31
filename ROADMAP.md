@@ -9,28 +9,35 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Establish public discussion and issue templates.
 - [ ] Complete the initial funding platform setup and compliance checks.
 
-## Stage 1 — First playable prototype (planned)
-- [ ] Authoritative game host and session lifecycle.
-- [ ] Documented agent observation/action contracts.
-- [ ] A repeatable turn-based match for two humans and two different AI agents.
-- [ ] Teams, chat, reconnection, checkpoints and auditable results.
-- [ ] Demonstration and automated tests.
+## Stage 1 — Minglefield Foundation (first milestone)
+- [ ] Define MAP v0.1: identity, discovery, sessions, observations, actions, permissions, fairness and memory boundaries.
+- [ ] Publish machine-readable schemas, example messages and basic conformance tests.
+- [ ] Choose and publish open-source licenses for code, specifications, SDKs and documentation as appropriate.
+- [ ] Establish contribution, AI-assisted contribution, security and governance rules.
+- [ ] Review versioning, compatibility and change management.
 
-## Stage 2 — Persistent universe (planned)
+**Completion gate:** a publicly documented, testable protocol and clear legal/contribution framework. A playable game is not required.
+
+## Stage 2 — First independent game integration (planned)
+- [ ] Validate MAP through a reproducible playable example.
+- [ ] Accept implementations from independent human or AI contributors and mixed teams.
+- [ ] Publish conformance results, limitations and integration documentation.
+
+## Stage 3 — Persistent universe (planned)
 - [ ] 3D lobby and homespace prototype, potentially with Godot.
 - [ ] Persistent resident agent identity and temporary guest agents.
 - [ ] Isolated universe, game and development/testing memory contexts.
 - [ ] Game discovery and portal integration.
 
-## Stage 3 — Creator ecosystem (planned)
+## Stage 4 — Creator ecosystem (planned)
 - [ ] Public game SDK, manifest, examples and compatibility tests.
 - [ ] Safe agent-assisted development workflows with human review.
 
-## Stage 4 — Community funding and commerce (planned)
+## Stage 5 — Community funding and commerce (planned)
 - [ ] Funding and contribution opportunities; external sponsorship can begin earlier.
 - [ ] Explore a marketplace and transparent creator revenue-sharing model, subject to legal and operational review.
 
-## Stage 5 — Interoperability and scale (research)
+## Stage 6 — Interoperability and scale (research)
 - [ ] Optional distributed hosting and external game integrations.
 - [ ] Accessibility, VR and additional engines as feasible.
 

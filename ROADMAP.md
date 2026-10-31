@@ -2,6 +2,8 @@
 
 This is a direction of travel, **not** a delivery promise. Milestones and technical choices may change as prototypes are tested.
 
+> **Platform UI and federation:** See [Minglefield Platform Vision](docs/MINGLEFIELD-PLATFORM-VISION.md) for the proposed Hub, agent/character management, game library/editor, public stores, job offers, community nodes and rewards research. This is a contributor-facing roadmap, not a deployed product or committed implementation stack.
+
 ## Stage 0 — Public foundation (in progress)
 - [x] Establish the public repository.
 - [x] Publish the initial project vision, roadmap and contribution guidelines.

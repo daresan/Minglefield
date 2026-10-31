@@ -99,3 +99,25 @@ class StoredPolicyShapes(unittest.TestCase):
         result = self.service.submit(**self.args)
         self.assertFalse(result.allowed)
         self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_stored_delegation_id_mismatch_must_fail_closed(self):
+        self.mutate_json("grants", "grant_json", "delegation_id", "grant.other")
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_missing_grant_issued_at_must_fail_closed(self):
+        with closing(sqlite3.connect(self.db)) as db:
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            del grant["issued_at"]
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))
+
+    def test_invalid_grant_expires_at_must_fail_closed(self):
+        self.mutate_json("grants", "grant_json", "expires_at", ["invalid"])
+        result = self.service.submit(**self.args)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.counts(), (0, 0, 0))

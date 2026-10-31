@@ -10,6 +10,8 @@ from b2_worker import ClaimWorker
 
 class PrestartMigrationTests(unittest.TestCase):
     setUp = fixture.SubmissionTests.setUp
+    issue = fixture.SubmissionTests.issue
+    new_service = fixture.SubmissionTests.new_service
     query = fixture.SubmissionTests.query
     counts = fixture.SubmissionTests.counts
 

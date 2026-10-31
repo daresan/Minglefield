@@ -47,7 +47,7 @@ class PrestartGateTests(unittest.TestCase):
 
     def test_revoked_original_session_denies(self):
         claim = self.claimed()
-        self.sessions.revoke(self.token)
+        self.assertTrue(self.sessions.revoke(self.token, credential=self.credential, user_id='user.charlie'))
         result = PrestartGate(self.service).authorize(
             job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
         self.assertEqual(result.state, "denied")

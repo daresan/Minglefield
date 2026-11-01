@@ -56,10 +56,6 @@ class HostCommitPolicy:
         limit=config.get("max_parallel_effects")
         if limit is not None and (type(limit) is not int or not 1<=limit<=1024):
             raise ValueError("invalid parallel limit")
-        if False and set(config)!={
-            "mode","idle_only","gpu_max_percent","timezone","weekdays",
-            "start_minute","end_minute"}:
-            raise ValueError("invalid rule")
         if config["mode"] not in ("automatic","manual"):
             raise ValueError("invalid mode")
         if type(config["idle_only"]) is not bool:

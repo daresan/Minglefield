@@ -136,6 +136,36 @@ class HostCommitPolicy:
                 WHERE host_id=?""",(host_id,)).fetchone()
             if host!=(1,):
                 return HostDecision("denied","host_unavailable")
+            admission=db.execute("""SELECT binding FROM alpha_sec01_admissions
+                WHERE effect_key=?""",(effect_key,)).fetchone()
+            if admission is None or admission[0]!=binding:
+                return HostDecision("denied","admission_binding_missing")
+            try:
+                job,fingerprint,requester,agent,owner,executor,assigned_host,action=json.loads(binding)
+            except (ValueError,TypeError):
+                return HostDecision("denied","invalid_admission_binding")
+            if assigned_host!=host_id or action!="demo.echo":
+                return HostDecision("denied","admission_host_mismatch")
+            agent_row=db.execute("""SELECT a.user_id,a.disabled,u.disabled
+                FROM alpha_agents a JOIN alpha_users u ON u.user_id=a.user_id
+                WHERE a.agent_id=?""",(agent,)).fetchone()
+            if agent_row!=(owner,0,0):
+                return HostDecision("denied","agent_or_owner_revoked")
+            requester_row=db.execute("SELECT disabled FROM alpha_users WHERE user_id=?",
+                (requester,)).fetchone()
+            if requester_row!=(0,):
+                return HostDecision("denied","requester_revoked")
+            if requester!=owner and db.execute("""SELECT revoked FROM alpha_agent_grants
+                WHERE agent_id=? AND grantee_user_id=? AND action='demo.echo'""",
+                (agent,requester)).fetchone()!=(0,):
+                return HostDecision("denied","grant_revoked")
+            host_operator=db.execute("""SELECT operator_id FROM alpha_executor_hosts
+                WHERE host_id=?""",(host_id,)).fetchone()
+            if host_operator!=(executor,):
+                return HostDecision("denied","executor_host_mismatch")
+            if db.execute("""SELECT enabled FROM alpha_agent_host_assignments
+                WHERE agent_id=? AND host_id=?""",(agent,host_id)).fetchone()!=(1,):
+                return HostDecision("denied","host_assignment_revoked")
             rules=db.execute("""SELECT rule_id,config FROM sec01_host_rules
                 WHERE host_id=? AND enabled=1 ORDER BY priority,rule_id""",
                 (host_id,)).fetchall()

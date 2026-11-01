@@ -71,8 +71,8 @@ class AlphaAuthStore:
                        (digest(token),user_id,int(self.clock())+ttl))
         return token
 
-    def redeem(self, token, *, agent_id, session_ttl=900, password=None):
-        if (type(token) is not str or not token or not ident(agent_id)
+    def redeem(self, token, *, agent_id=None, session_ttl=900, password=None):
+        if (type(token) is not str or not token or (agent_id is not None and not ident(agent_id))
                 or type(session_ttl) is not int or not 1 <= session_ttl <= 3600
                 or (password is not None and not self._password_ok(password))):
             return None
@@ -83,14 +83,15 @@ class AlphaAuthStore:
             if not row or row[1] <= self.clock() or row[2] or row[3]:
                 return None
             user = row[0]
-            if db.execute("SELECT 1 FROM alpha_agents WHERE agent_id=?",
+            if agent_id is not None and db.execute("SELECT 1 FROM alpha_agents WHERE agent_id=?",
                           (agent_id,)).fetchone():
                 return None
             db.execute("UPDATE alpha_invites SET redeemed=1 WHERE invitation_hash=?",
                        (digest(token),))
             db.execute("INSERT INTO alpha_users(user_id) VALUES(?)", (user,))
-            db.execute("INSERT INTO alpha_agents(agent_id,user_id) VALUES(?,?)",
-                       (agent_id,user))
+            if agent_id is not None:
+                db.execute("INSERT INTO alpha_agents(agent_id,user_id) VALUES(?,?)",
+                           (agent_id,user))
             if password is not None:
                 salt = os.urandom(16)
                 db.execute("INSERT INTO alpha_passwords VALUES(?,?,?)",
@@ -167,12 +168,13 @@ class AlphaAuthStore:
                 or not 1 <= len(authorization[7:]) <= 256):
             return None
         with self._tx() as db:
-            row = db.execute("""SELECT s.user_id,a.agent_id FROM alpha_sessions s
+            row = db.execute("""SELECT s.user_id,COALESCE((SELECT a.agent_id FROM alpha_agents a
+                WHERE a.user_id=s.user_id AND a.disabled=0 ORDER BY a.agent_id LIMIT 1),'')
+                FROM alpha_sessions s
                 JOIN alpha_users u ON u.user_id=s.user_id
-                JOIN alpha_agents a ON a.user_id=s.user_id
                 WHERE s.token_hash=? AND s.revoked=0 AND s.expires_at>?
-                  AND u.disabled=0 AND a.disabled=0
-                ORDER BY a.agent_id LIMIT 1""",
+                  AND u.disabled=0
+                LIMIT 1""",
                 (digest(authorization[7:]),self.clock())).fetchone()
             return AlphaPrincipal(*row) if row else None
 
@@ -194,6 +196,70 @@ class AlphaAuthStore:
             db.execute("UPDATE alpha_sessions SET revoked=1 WHERE user_id=?",
                        (user_id,))
         return changed == 1
+
+    def _active_user(self, db, authorization):
+        if (type(authorization) is not str or not authorization.startswith("Bearer ")
+                or not 1 <= len(authorization[7:]) <= 256):
+            return None
+        row=db.execute("""SELECT s.user_id FROM alpha_sessions s
+            JOIN alpha_users u ON u.user_id=s.user_id
+            WHERE s.token_hash=? AND s.revoked=0 AND s.expires_at>?
+              AND u.disabled=0""",
+            (digest(authorization[7:]),self.clock())).fetchone()
+        return row[0] if row else None
+
+    def create_agent(self, authorization, agent_id):
+        """Add an agent for the authenticated user, not a new account."""
+        if not ident(agent_id):
+            return 400, {"error":"invalid_agent_id"}
+        with self._tx() as db:
+            user=self._active_user(db,authorization)
+            if user is None:
+                return 401, {"error":"unauthorized"}
+            if db.execute("SELECT 1 FROM alpha_agents WHERE agent_id=?",
+                          (agent_id,)).fetchone():
+                return 409, {"error":"agent_id_taken"}
+            db.execute("INSERT INTO alpha_agents(agent_id,user_id) VALUES(?,?)",
+                       (agent_id,user))
+            return 201, {"agent_id":agent_id,"owner":user,
+                         "allowed_actions":["demo.echo"]}
+
+    def submit_agent(self, authorization, payload):
+        """Explicitly choose an owned agent; check ownership in the job transaction."""
+        if (type(payload) is not dict or set(payload)!={"agent_id","action","idempotency_key"}
+                or not ident(payload.get("agent_id"))
+                or payload.get("action")!="demo.echo"
+                or not ident(payload.get("idempotency_key"))):
+            return 400, {"error":"invalid_simulated_action"}
+        with self._tx() as db:
+            user=self._active_user(db,authorization)
+            if user is None:
+                return 401, {"error":"unauthorized"}
+            agent=payload["agent_id"]
+            owned=db.execute("""SELECT 1 FROM alpha_agents
+                WHERE agent_id=? AND user_id=? AND disabled=0""",
+                (agent,user)).fetchone()
+            if not owned:
+                return 403, {"error":"agent_not_owned"}
+            row=db.execute("""SELECT job_id,agent_id,action FROM alpha_jobs
+                WHERE user_id=? AND idempotency_key=?""",
+                (user,payload["idempotency_key"])).fetchone()
+            if row:
+                if (row[1],row[2])!=(agent,payload["action"]):
+                    return 409, {"error":"idempotency_conflict"}
+                job_id=row[0]
+                status=200
+            else:
+                count=db.execute("SELECT count(*) FROM alpha_jobs WHERE user_id=?",
+                                 (user,)).fetchone()[0]
+                if count>=5:
+                    return 429, {"error":"simulation_quota_exceeded"}
+                job_id="sim."+secrets.token_hex(12)
+                db.execute("INSERT INTO alpha_jobs VALUES(?,?,?,?,?)",
+                           (job_id,user,agent,payload["idempotency_key"],payload["action"]))
+                status=201
+            return status, {"job_id":job_id,"user_id":user,"agent_id":agent,
+                            "action":"demo.echo","state":"simulated_no_effect"}
 
     def agents(self, principal):
         with self._tx() as db:

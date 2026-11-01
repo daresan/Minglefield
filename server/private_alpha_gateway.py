@@ -63,10 +63,13 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <label>Für Benutzer <input id="grantee" placeholder="user.friend"></label>
 <button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button>
 <label>Agent für Simulation <select id="selectedAgent"></select></label>
-<p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigabe gilt nur für demo.echo.</small></p>
+<p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
+<pre id="agentOutput" aria-live="polite">Noch keine Agenten geladen.</pre>
 </fieldset>
 <fieldset><legend>4. Simulieren</legend>
-<button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
+<label>Agent für Demo-Job <select id="jobAgentSelect"></select></label>
+<button id="create">Demo-Job erstellen</button><button id="refresh">Jobs aktualisieren</button>
+<pre id="demoJobsOutput" aria-live="polite">Noch keine Demo-Jobs geladen.</pre></fieldset>
 <fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und steuern (Simulation)</legend>
 <label>Host für Job <select id="jobHostSelect"></select></label>
 <label>Effekt für Job <select id="jobEffectSelect"></select></label>
@@ -134,11 +137,12 @@ werden derzeit abgelehnt.</small></p>
 <pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre>
 </fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
-<pre id="output" aria-live="polite">Einladung einlösen oder gültigen Session-Token eingeben.</pre>
+
 <script>
 let credential="";
 let expiresAt=0;
-const out=document.getElementById("output");
+const out=document.getElementById("agentOutput");
+const demoJobsOut=document.getElementById("demoJobsOutput");
 const statusLine=document.getElementById("sessionStatus");
 const alphaSections=[...document.querySelectorAll("body>fieldset")];
 const alphaNav=document.getElementById("alphaNav");
@@ -185,18 +189,25 @@ async function request(path,options={}){
   const response=await fetch(path,{...options,headers,cache:"no-store"});
   return {status:response.status,data:await response.json()};
 }
-const show=v=>out.textContent=JSON.stringify(v,null,2);
+const show=(v,area="agents")=>{
+  const target=area==="login"?statusLine:area==="jobs"?demoJobsOut:out;
+  target.textContent=JSON.stringify(v,null,2);
+};
 const agentSelect=document.getElementById("selectedAgent");
 function fillAgents(agents){
   const last=agentSelect.value;
-  agentSelect.replaceChildren();
+  const jobAgentSelect=document.getElementById("jobAgentSelect");
+  const lastJobAgent=jobAgentSelect.value;
+  agentSelect.replaceChildren();jobAgentSelect.replaceChildren();
   for(const agent of agents){
     const option=document.createElement("option");
     option.value=agent.agent_id;
     option.textContent=agent.agent_id+" ("+agent.relationship+", owner: "+agent.owner+")";
     agentSelect.append(option);
+    jobAgentSelect.append(option.cloneNode(true));
   }
   if(agents.some(a=>a.agent_id===last))agentSelect.value=last;
+  if(agents.some(a=>a.agent_id===lastJobAgent))jobAgentSelect.value=lastJobAgent;
 }
 const handleUnauthorized=(reply)=>{
   if(reply.status===401){credential="";expiresAt=0;updateStatus();
@@ -212,7 +223,8 @@ const refresh=async()=>{
   if(credential && agents.status===200)fillAgents(agents.data.agents);
   if(credential)await refreshHosts();
   if(credential)updateStatus();
-  show({agents,jobs});
+  out.textContent=agents.status===200?JSON.stringify({agents:agents.data.agents},null,2):JSON.stringify(agents,null,2);
+  demoJobsOut.textContent=JSON.stringify(jobs,null,2);
 };
 document.getElementById("redeem").onclick=async()=>{
   const secret=document.getElementById("invite").value;
@@ -224,7 +236,7 @@ document.getElementById("redeem").onclick=async()=>{
     credential=result.data.session_token;
     expiresAt=Date.now()+result.data.expires_in*1000;
     updateStatus();
-    show({status:201,message:"Session aktiviert. Connect zeigt Benutzer und Agent getrennt."});
+    show({status:201,message:"Session aktiviert."},"login");
   }
   else show(result);
 };
@@ -246,7 +258,7 @@ document.getElementById("login").onclick=async()=>{
       429:"Zu viele Login-/Registrierungsversuche. Bitte mindestens 60 Sekunden warten."
     };
     show({status:result.status,error:result.data.error||"login_failed",
-          message:explanations[result.status]||"Anmeldung fehlgeschlagen."});
+          message:explanations[result.status]||"Anmeldung fehlgeschlagen."},"login");
   }
 };
 document.getElementById("setPassword").onclick=async()=>{
@@ -282,11 +294,12 @@ document.getElementById("grant").onclick=()=>changeGrant(false);
 document.getElementById("revoke").onclick=()=>changeGrant(true);
 document.getElementById("create").onclick=async()=>{
   if(!credential){show({message:"Bitte zuerst anmelden."});return;}
-  if(!agentSelect.value){show({message:"Zuerst Agenten auswählen."});return;}
-  const result=await api("/api/jobs",{agent_id:agentSelect.value,
+  const selectedJobAgent=document.getElementById("jobAgentSelect");
+  if(!selectedJobAgent.value){show({message:"Zuerst Agenten auswählen."},"jobs");return;}
+  const result=await api("/api/jobs",{agent_id:selectedJobAgent.value,
     action:"demo.echo",idempotency_key:crypto.randomUUID()});
   handleUnauthorized(result);
-  show(result);
+  show(result,"jobs");
 };
 const hostOut=document.getElementById("hostOutput");
 const hostSelect=document.getElementById("hostSelect");
@@ -495,7 +508,7 @@ hostOut.onclick=e=>{
 document.getElementById("logout").onclick=async()=>{
   const result=credential?await request("/api/logout",{method:"POST"}):{status:401};
   credential="";expiresAt=0;updateStatus();
-  show(result);
+  show(result,"login");
 };
 </script></html>"""
 

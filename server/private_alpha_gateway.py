@@ -56,8 +56,14 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <fieldset><legend>4. Simulieren</legend>
 <button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
 <fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
-<p>Nur Hosts, für die dein angemeldeter Benutzer als Host-Administrator hinterlegt ist.
-Keine echten Effekte, keine GPU-Abfrage.</p>
+<p>Eigene Hosts werden deinem angemeldeten Minglefield-Benutzer zugeordnet.
+Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effekte.</p>
+<label>Eigene Host-ID <input id="claimHost" placeholder="host.local"></label>
+<label>Lokaler Bestätigungscode aus der Gateway-Konsole
+<input id="claimSecret" type="password" autocomplete="off"></label>
+<button id="claimHostButton">Diesen lokalen Host übernehmen</button>
+<p><small>Den Bestätigungscode zeigt das lokal mit --auth-db gestartete Gateway beim Start.
+Die Hostübernahme ist nur einmalig erforderlich.</small></p>
 <button id="hostRefresh">Hosts und Regeln laden</button>\n<label>Vorhandene Regel <select id="hostRuleSelect"></select></label>\n<button id="hostLoadRule">Regel bearbeiten</button>
 <label>Host <select id="hostSelect"></select></label>
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
@@ -269,7 +275,7 @@ function renderHost(){
     opt.textContent=rule.rule_id+" (Priorität "+rule.priority+")";select.append(opt);
   }
   hostOut.textContent=host?JSON.stringify(host,null,2):
-    "Keine administrierbaren Hosts vorhanden. Host-Admin-Rechte müssen lokal vergeben werden.";
+    "Noch kein eigener Host vorhanden. Oben Host-ID und lokalen Bestätigungscode eingeben und Host übernehmen.";
 }
 hostSelect.onchange=renderHost;
 document.getElementById("hostLoadRule").onclick=()=>{

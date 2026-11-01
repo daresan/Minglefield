@@ -69,6 +69,16 @@ The persisted B2 request is an **internal, server-generated authorization snapsh
 
 **Remaining review:** assess strict grammar for the internal action/scope fields separately from the wire format, and determine whether additional policy revision/fingerprint consistency checks are needed at each transition. The tests added after the 200/200 baseline require local verification. SEC-07 remains open until that review and maintainer acceptance. This section does not authorize external effects.
 
+## SEC-07 revision fencing and internal grammar decision — 2026-11-01
+
+**Maintainer-verified baseline:** after commits `2dc1080` and `1171f28`, the maintainer reported **210/210 conformance tests OK**, MAP v0.1 validator PASS, and clean `git diff --check` / `git status --short`. The two new tests exercise an agent descriptor revision change after claim and after ready, respectively, while leaving allowed scopes unchanged. Both deny with `policy_revision_changed`; the dispatch case additionally asserts no effect key, adapter identity or dispatch timestamp. Earlier claim-stage revision mutation coverage is also included.
+
+**Revision decision:** B2 jobs are bound to the agent descriptor revision stored at submission. The shared transactional authorization check compares that stored `policy_revision` against the current valid agent descriptor revision at claim, prestart and dispatch. A mismatch fails closed, even when scopes are unchanged; resubmission under the new revision is required. This is **pre-intent fencing only** and does not solve SEC-01 revocation after a committed dispatch intent. It also does not claim to detect unauthorized changes to policy content that preserve the revision; trusted policy writers must maintain revision semantics.
+
+**Internal action/scope grammar decision:** keep the internal persisted request's action and scope fields structurally constrained as documented (nonempty strings, action length bound) rather than automatically imposing the MAP wire envelope's action-name grammar on the B2 snapshot. Submission derives scope from a trusted configured `ActionRule`; each transactional transition requires an existing trusted action and an exact rule/snapshot scope match, followed by current grant and agent allowlist checks. This is an **intentional internal contract distinction**, not a relaxation of normative wire validation. A future public MAP ingress must validate its wire schema separately. Trusted action configuration should use stable, documented names; tightening its grammar would be a separate compatibility-reviewed change.
+
+**SEC-07 disposition:** the identified B2 persisted-record structural validation and revision-fencing work is **mitigated and maintainer-validated for the simulation-only scope**. The remaining action-specific parameter contract is a **mandatory future real-adapter boundary requirement**, not a generic MAP parameter schema. This review does not certify all malformed inputs, hostile database writes, or external effect safety. SEC-01 through SEC-06 and SEC-08/09 remain independent findings. No production or real-effect authorization follows from closing the B2-focused SEC-07 hardening work.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

@@ -35,6 +35,8 @@ class HostCommitPolicy:
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_commits(
                 effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 binding TEXT NOT NULL, rule_id TEXT NOT NULL)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
+                effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)""")
 
     def add_admin_fixture(self, host_id, admin_id):
         """Trusted LOCAL provisioning; never expose to a requester."""
@@ -49,7 +51,12 @@ class HostCommitPolicy:
 
     @staticmethod
     def _validate(config):
-        if type(config) is not dict or set(config)!={
+        if type(config) is not dict or not {"mode","idle_only","gpu_max_percent","timezone","weekdays","start_minute","end_minute"} <= set(config) or set(config)-{"mode","idle_only","gpu_max_percent","timezone","weekdays","start_minute","end_minute","max_parallel_effects"}: 
+            raise ValueError("invalid rule")
+        limit=config.get("max_parallel_effects")
+        if limit is not None and (type(limit) is not int or not 1<=limit<=1024):
+            raise ValueError("invalid parallel limit")
+        if False and set(config)!={
             "mode","idle_only","gpu_max_percent","timezone","weekdays",
             "start_minute","end_minute"}:
             raise ValueError("invalid rule")
@@ -122,7 +129,8 @@ class HostCommitPolicy:
     def decide(self, *, host_id, effect_key, binding, now,
                gpu_percent=None, running_effects=None):
         """Mock commit only. Telemetry and clock must be trusted by real host."""
-        if (not all(ident(x) for x in (host_id,effect_key,binding))
+        if (not ident(host_id) or not ident(effect_key)
+                or type(binding) is not str or not 1<=len(binding)<=4096
                 or type(now) is not int):
             return HostDecision("denied","invalid_intent")
         with self.authority.store._tx() as db:
@@ -179,6 +187,12 @@ class HostCommitPolicy:
                 if (local.weekday() not in config["weekdays"]
                         or not config["start_minute"]<=minute<config["end_minute"]):
                     continue
+                limit=config.get("max_parallel_effects")
+                if limit is not None:
+                    active=db.execute("""SELECT COUNT(*) FROM sec01_host_active_slots
+                        WHERE host_id=?""",(host_id,)).fetchone()[0]
+                    if active>=limit:
+                        return HostDecision("waiting","parallel_limit_reached")
                 if config["idle_only"]:
                     if type(running_effects) is not int or running_effects<0:
                         return HostDecision("waiting","telemetry_unavailable")
@@ -198,8 +212,27 @@ class HostCommitPolicy:
                     return HostDecision("waiting","manual_approval_required")
                 db.execute("INSERT INTO sec01_host_commits VALUES(?,?,?,?)",
                            (effect_key,host_id,binding,rule_id))
+                db.execute("INSERT INTO sec01_host_active_slots VALUES(?,?)",
+                           (effect_key,host_id))
                 return HostDecision("committed_mock","no_effect_performed")
             return HostDecision("waiting","outside_schedule")
+
+    def finish_mock(self, host_id, admin_id, effect_key):
+        """Trusted local completion simulation; no actual process is stopped."""
+        if not all(ident(x) for x in (host_id,admin_id,effect_key)):
+            return HostDecision("denied","invalid_completion")
+        with self.authority.store._tx() as db:
+            if not self._admin(db,host_id,admin_id):
+                return HostDecision("denied","not_host_admin")
+            count=db.execute("""DELETE FROM sec01_host_active_slots
+                WHERE host_id=? AND effect_key=?""",(host_id,effect_key)).rowcount
+            return HostDecision("finished_mock" if count else "denied",
+                                "slot_released" if count else "slot_missing")
+
+    def active_count(self, host_id):
+        with self.authority.store._tx() as db:
+            return db.execute("""SELECT COUNT(*) FROM sec01_host_active_slots
+                WHERE host_id=?""",(host_id,)).fetchone()[0]
 
     def commit_count(self):
         with self.authority.store._tx() as db:

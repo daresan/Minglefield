@@ -399,31 +399,6 @@ def handler_for(service):
             if not principal:
                 self.reply(401, {"error": "unauthorized"})
                 return
-            if path in ("/api/host/rules","/api/host/rules/delete"):
-                policy=getattr(service,"_host_policy",None)
-                if policy is None:
-                    self.reply(404, {"error":"host_policy_unavailable"})
-                    return
-                if type(body) is not dict:
-                    self.reply(400, {"error":"invalid_host_rule"})
-                    return
-                if path.endswith("/delete"):
-                    if set(body)!={"host_id","rule_id"}:
-                        self.reply(400, {"error":"invalid_host_rule"})
-                        return
-                    result=policy.delete_rule(body["host_id"],principal.user_id,
-                                              body["rule_id"])
-                else:
-                    if set(body)!={"host_id","rule_id","priority","enabled","config"}:
-                        self.reply(400, {"error":"invalid_host_rule"})
-                        return
-                    result=policy.upsert_rule(body["host_id"],principal.user_id,
-                        body["rule_id"],priority=body["priority"],
-                        enabled=body["enabled"],config=body["config"])
-                self.reply(200 if result.state in ("saved","deleted") else 403,
-                           {"state":result.state,"reason":result.reason,
-                            "simulation_only":True})
-                return
             if path == "/api/agents":
                 if hasattr(service, "available_agents"):
                     self.reply(200, {"agents": service.available_agents(
@@ -540,6 +515,31 @@ def handler_for(service):
                 body = json.loads(self.rfile.read(int(length)))
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
+                return
+            if path in ("/api/host/rules","/api/host/rules/delete"):
+                policy=getattr(service,"_host_policy",None)
+                if policy is None:
+                    self.reply(404, {"error":"host_policy_unavailable"})
+                    return
+                if type(body) is not dict:
+                    self.reply(400, {"error":"invalid_host_rule"})
+                    return
+                if path.endswith("/delete"):
+                    if set(body)!={"host_id","rule_id"}:
+                        self.reply(400, {"error":"invalid_host_rule"})
+                        return
+                    result=policy.delete_rule(body["host_id"],principal.user_id,
+                                              body["rule_id"])
+                else:
+                    if set(body)!={"host_id","rule_id","priority","enabled","config"}:
+                        self.reply(400, {"error":"invalid_host_rule"})
+                        return
+                    result=policy.upsert_rule(body["host_id"],principal.user_id,
+                        body["rule_id"],priority=body["priority"],
+                        enabled=body["enabled"],config=body["config"])
+                self.reply(200 if result.state in ("saved","deleted") else 403,
+                           {"state":result.state,"reason":result.reason,
+                            "simulation_only":True})
                 return
             if path == "/api/agents":
                 if not hasattr(service, "create_agent") or set(body) != {"agent_id"}:

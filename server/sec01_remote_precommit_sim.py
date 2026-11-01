@@ -9,6 +9,7 @@ The gap between an online recheck and a future remote game commit is NOT
 atomic. Therefore this component deliberately cannot trigger any effect.
 """
 import json
+import sqlite3
 from dataclasses import dataclass
 
 from private_alpha_auth import ident
@@ -99,6 +100,6 @@ def online_precommit_check(authority, proof, *, verifier_secret, issuer,
             if assigned!=(1,):
                 return RemoteCheck(False,"host_assignment_revoked")
             return RemoteCheck(True,"online_precheck_only_no_effect")
-    except (OSError, Exception) as exc:
+    except (OSError, sqlite3.Error):
         # Intentionally fail closed, never disclose DB error details.
         return RemoteCheck(False,"authority_unavailable")

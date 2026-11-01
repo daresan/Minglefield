@@ -116,6 +116,12 @@ The code-based boundary review is recorded in [SEC01_B2_INTEGRATION_CONTRACT.md]
 
 The maintainer selected **Variant 2** as the preferred *design direction*. See [SEC01_REMOTE_ADMISSION_ARCHITECTURE.md](SEC01_REMOTE_ADMISSION_ARCHITECTURE.md) for responsibility boundaries, revoke-first/admit-first transaction order, capability-to-admission race, partitions, game-side receipt enforcement and required adversarial tests. A remotely performed authorization *precheck* is explicitly insufficient; the service must own a serialized admission/idempotency decision and the game must enforce its receipt at its effect boundary. This preference is **not production approval**, does not solve admission-to-game execution atomicity by itself and does not change B2. Maintainer-confirmed executable baseline: **257/257** conformance tests, MAP validator PASS and clean working tree. SEC-01 remains Critical / OPEN.
 
+## SEC-01 mock game receipt and Private Alpha split (2026-11-01)
+
+A separate [Private Alpha local/Serve guide](../docs/PRIVATE_ALPHA_LOCAL_SERVE_GUIDE.md) defines the first **loopback-only** `private_alpha_gateway.py` and local web client. This gateway uses ephemeral test tokens, only `demo.echo` simulation and in-memory quotas. It is **not cleared for Tailscale Serve exposure** until proper invitation, identity, session expiry/revocation, access policy and origin/security controls have been implemented and reviewed. Tailscale Serve is the chosen private transport for later staging, not an authorization substitute.
+
+The isolated `sec01_mock_game_adapter.py` illustrates **game-owned durable receipt consumption** and mock-effect idempotency inside one SQLite transaction. A fixture can insert unverified receipts for tests: this is **not proof of real admission authenticity** and must never be remotely exposed. Nothing integrates this mock with B2 or runs ComfyUI. These commits are awaiting maintainer-local validation; last confirmed executable baseline remains **257/257** conformance tests. SEC-01 remains Critical / OPEN.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

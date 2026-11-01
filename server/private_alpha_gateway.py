@@ -107,7 +107,16 @@ document.getElementById("login").onclick=async()=>{
     expiresAt=Date.now()+result.data.expires_in*1000;
     updateStatus();
     await refresh();
-  } else show({status:result.status,error:"Anmeldung fehlgeschlagen."});
+  } else {
+    const explanations={
+      400:"Ungültige Anmeldedaten oder Anfrage.",
+      401:"Benutzer-ID oder Passwort nicht akzeptiert.",
+      403:"Lokale Origin-/Host-Prüfung fehlgeschlagen.",
+      429:"Zu viele Login-/Registrierungsversuche. Bitte mindestens 60 Sekunden warten."
+    };
+    show({status:result.status,error:result.data.error||"login_failed",
+          message:explanations[result.status]||"Anmeldung fehlgeschlagen."});
+  }
 };
 document.getElementById("setPassword").onclick=async()=>{
   if(!credential){show({message:"Für Alt-Konto zuerst gültigen Session-Token eingeben."});return;}

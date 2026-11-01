@@ -72,6 +72,19 @@ class PersistedValidationTests(unittest.TestCase):
         grant.pop("max_spend_minor")
         self.assertTrue(valid_grant(grant))
 
+    def test_grant_timestamps_require_valid_offset_date_time(self):
+        for invalid in ("not-a-date", "2026-11-01", "2026-11-01T12:00:00",
+                        "2026-02-30T12:00:00Z", "2026-11-01T12:00:00+99:00",
+                        123, None):
+            with self.subTest(invalid=invalid):
+                grant = copy.deepcopy(self.grant)
+                grant["issued_at"] = invalid
+                self.assertFalse(valid_grant(grant))
+        grant = copy.deepcopy(self.grant)
+        grant["issued_at"] = "2026-11-01T12:00:00+01:00"
+        grant["expires_at"] = "2026-11-01T12:01:00Z"
+        self.assertTrue(valid_grant(grant))
+
     def test_optional_empty_allowed_scopes(self):
         agent = copy.deepcopy(self.agent)
         agent["policy"]["allowed_scopes"] = []

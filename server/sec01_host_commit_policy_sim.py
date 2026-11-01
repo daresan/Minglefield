@@ -190,6 +190,75 @@ class HostCommitPolicy:
                 (host_id,job_id))
             return HostDecision("waiting",reason)
 
+    def reserve_waiting_host_job_mock(self, host_id, owner_id, job_id, *, now):
+        """Atomic local slot accounting only; NOT final authorization."""
+        if (not all(ident(v) for v in (host_id,owner_id,job_id))
+                or type(now) is not int):
+            return HostDecision("denied","invalid_reservation")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            row=db.execute("""SELECT effect_id,state FROM sec01_host_jobs
+                WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()
+            if row is None or row[1]!="waiting":
+                return HostDecision("denied","job_not_waiting")
+            effect_id=row[0]
+            if db.execute("""SELECT active FROM alpha_executor_hosts
+                WHERE host_id=?""",(host_id,)).fetchone()!=(1,):
+                return HostDecision("waiting","host_unavailable")
+            if db.execute("""SELECT enabled FROM sec01_host_effect_definitions
+                WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()!=(1,):
+                return HostDecision("waiting","effect_unavailable")
+            rules=db.execute("""SELECT config FROM sec01_host_rules
+                WHERE host_id=? AND enabled=1 ORDER BY priority,rule_id""",
+                (host_id,)).fetchall()
+            if not rules:
+                return HostDecision("waiting","no_enabled_rule")
+            for (encoded,) in rules:
+                config=json.loads(encoded)
+                local=datetime.fromtimestamp(now,timezone.utc).astimezone(
+                    ZoneInfo(config["timezone"]))
+                minute=local.hour*60+local.minute
+                if (local.weekday() not in config["weekdays"]
+                        or not config["start_minute"]<=minute<config["end_minute"]):
+                    continue
+                if config["mode"]!="automatic":
+                    return HostDecision("waiting","manual_approval_required")
+                if config["idle_only"] or config["gpu_max_percent"] is not None:
+                    return HostDecision("waiting","trusted_telemetry_required")
+                limit=config.get("max_parallel_effects")
+                active=db.execute("""SELECT COUNT(*) FROM sec01_host_active_slots
+                    WHERE host_id=?""",(host_id,)).fetchone()[0]
+                if limit is not None and active>=limit:
+                    return HostDecision("waiting","parallel_limit_reached")
+                db.execute("""INSERT INTO sec01_host_active_slots(effect_key,host_id)
+                    VALUES(?,?)""",(job_id,host_id))
+                db.execute("""UPDATE sec01_host_jobs SET state='reserved'
+                    WHERE host_id=? AND job_id=? AND state='waiting'""",
+                    (host_id,job_id))
+                return HostDecision("reserved_mock","slot_held_no_authorization_or_execution")
+            return HostDecision("waiting","outside_schedule")
+
+    def release_reserved_host_job_mock(self, host_id, owner_id, job_id):
+        """Owner resolution of a mock reservation, without any effect."""
+        if not all(ident(v) for v in (host_id,owner_id,job_id)):
+            return HostDecision("denied","invalid_release")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            row=db.execute("""SELECT state FROM sec01_host_jobs
+                WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()
+            if row!=("reserved",):
+                return HostDecision("denied","job_not_reserved")
+            db.execute("""UPDATE sec01_host_jobs SET state='cancelled'
+                WHERE host_id=? AND job_id=? AND state='reserved'""",
+                (host_id,job_id))
+            db.execute("""DELETE FROM sec01_host_active_slots
+                WHERE host_id=? AND effect_key=?""",(host_id,job_id))
+            return HostDecision("cancelled_mock","reserved_mock_slot_released")
+
     def add_admin_fixture(self, host_id, admin_id):
         """Trusted LOCAL provisioning; never expose to a requester."""
         if not ident(host_id) or not ident(admin_id):

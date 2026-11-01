@@ -120,6 +120,25 @@ class HostCommitPolicy:
             return [dict(job_id=job,effect_id=effect,state=state,created_at=created)
                     for job,effect,state,created in rows]
 
+    def cancel_queued_host_job(self, host_id, owner_id, job_id):
+        """Atomic owner cancellation. A queued intent never reserves a slot."""
+        if not all(ident(v) for v in (host_id,owner_id,job_id)):
+            return HostDecision("denied","invalid_job")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            updated=db.execute("""UPDATE sec01_host_jobs SET state='cancelled'
+                WHERE host_id=? AND job_id=? AND state='queued'""",
+                (host_id,job_id)).rowcount
+            if updated:
+                return HostDecision("cancelled_mock","queued_intent_cancelled")
+            row=db.execute("""SELECT state FROM sec01_host_jobs
+                WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()
+            if row==("cancelled",):
+                return HostDecision("cancelled_mock","already_cancelled")
+            return HostDecision("denied","job_not_cancellable")
+
     def add_admin_fixture(self, host_id, admin_id):
         """Trusted LOCAL provisioning; never expose to a requester."""
         if not ident(host_id) or not ident(admin_id):

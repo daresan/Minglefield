@@ -39,6 +39,14 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Document versioning, reproducibility, model/data provenance and licensing considerations where relevant, while allowing independently developed runtimes and inference backends.
 - [ ] Preserve game/team isolation and MAP authorization boundaries: integrating game logic or a model never implicitly grants agent identity, delegation, private memory access or external-effect authority.
 
+## Near-term vertical slice — local ComfyUI execution and versioned projects (approved direction)
+- [x] Document Git-backed repository/package architecture and boundaries in [Repository & Package Architecture v0.1 draft](docs/REPOSITORY-PACKAGE-ARCHITECTURE-v0.1-DRAFT.md).
+- [x] Document the safe, incremental local ComfyUI executor plan in [Local ComfyUI Executor v0.1 draft](docs/COMFYUI-LOCAL-EXECUTOR-v0.1-DRAFT.md).
+- [ ] Read-only local workflow discovery and automatic input/parameter form generation for supported ComfyUI API-format JSON workflows.
+- [ ] Explicitly opted-in, human-approved, loopback-only ComfyUI execution with authenticated job submission, status, audit and bounded outputs; do not reuse simulation-only effect execution as a bypass.
+- [ ] Local Git project import/create, manifest and dependency validation, versioned asset output and reviewable changes.
+- [ ] First reproducible human + agent game-asset creation workflow; no remote hosting or autonomous external effects before independent security gates.
+
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.
 - [ ] Accept implementations from independent human or AI contributors and mixed teams.

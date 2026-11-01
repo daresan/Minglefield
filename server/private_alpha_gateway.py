@@ -81,6 +81,15 @@ Keine echten Effekte, keine GPU-Abfrage.</p>
 <p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
 Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
 werden derzeit abgelehnt.</small></p>
+<fieldset><legend>Eigene Effekte (nur Definition und Startsimulation)</legend>
+<label>Effekt-ID <input id="effectId" placeholder="effect.example"></label>
+<label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
+<label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
+<button id="effectSave">Effektdefinition speichern</button>
+<button id="effectManual">Manuellen Start simulieren</button>
+<p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
+beziehungsweise eine unverbindliche Startabsicht zurückgegeben.</small></p>
+</fieldset>
 <pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre>
 </fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
@@ -269,6 +278,26 @@ document.getElementById("hostLoadRule").onclick=()=>{
   if(rule)loadRule(rule);
 };
 document.getElementById("hostRefresh").onclick=refreshHosts;
+document.getElementById("claimHostButton").onclick=async()=>{
+  const secret=hv("claimSecret");
+  document.getElementById("claimSecret").value="";
+  const result=await api("/api/host/claim",
+    {host_id:hv("claimHost"),bootstrap_secret:secret});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+document.getElementById("effectSave").onclick=async()=>{
+  const result=await api("/api/host/effects",
+    {host_id:hostSelect.value,effect_id:hv("effectId"),
+     description:hv("effectDescription"),enabled:hm("effectEnabled")});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+document.getElementById("effectManual").onclick=async()=>{
+  const result=await api("/api/host/effects/manual",
+    {host_id:hostSelect.value,effect_id:hv("effectId")});
+  hostOut.textContent=JSON.stringify(result,null,2);
+};
 document.getElementById("hostSave").onclick=async()=>{
   const result=await api("/api/host/rules",{host_id:hostSelect.value,
     rule_id:hv("hostRuleId"),priority:Number(hv("hostPriority")),
@@ -358,7 +387,7 @@ class AlphaSimulation:
             return 201, dict(record)
 
 
-def handler_for(service):
+def handler_for(service, *, local_bootstrap_secret=None):
     # In-memory abuse throttle for the LOCAL browser onboarding prototype.
     attempts = {}
     throttle = Lock()
@@ -418,7 +447,7 @@ def handler_for(service):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete"):
+            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -516,6 +545,49 @@ def handler_for(service):
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
                 return
+            if path in ("/api/host/claim","/api/host/effects",
+                        "/api/host/effects/manual"):
+                policy=getattr(service,"_host_policy",None)
+                if policy is None or type(body) is not dict:
+                    self.reply(404,{"error":"host_management_unavailable"})
+                    return
+                if path=="/api/host/claim":
+                    if set(body)!={"host_id","bootstrap_secret"}:
+                        self.reply(400,{"error":"invalid_host_claim"})
+                        return
+                    # Loopback-only plus exact local Host/Origin AND console secret.
+                    host_header=self.headers.get("Host","")
+                    allowed=("127.0.0.1:"+str(self.server.server_port),
+                             "localhost:"+str(self.server.server_port))
+                    origin=self.headers.get("Origin")
+                    if (self.client_address[0] not in ("127.0.0.1","::1")
+                            or host_header not in allowed
+                            or (origin is not None and origin not in
+                                tuple("http://"+h for h in allowed))):
+                        self.reply(403,{"error":"local_origin_required"})
+                        return
+                    supplied=body["bootstrap_secret"]
+                    if (local_bootstrap_secret is None or type(supplied) is not str
+                            or not hmac.compare_digest(supplied,local_bootstrap_secret)):
+                        self.reply(403,{"error":"local_bootstrap_required"})
+                        return
+                    result=policy.claim_local_host(body["host_id"],principal.user_id)
+                elif path=="/api/host/effects":
+                    if set(body)!={"host_id","effect_id","description","enabled"}:
+                        self.reply(400,{"error":"invalid_effect_definition"})
+                        return
+                    result=policy.define_effect(body["host_id"],principal.user_id,
+                        body["effect_id"],body["description"],body["enabled"])
+                else:
+                    if set(body)!={"host_id","effect_id"}:
+                        self.reply(400,{"error":"invalid_manual_intent"})
+                        return
+                    result=policy.manual_start_mock(body["host_id"],principal.user_id,
+                        body["effect_id"])
+                self.reply(200 if result.state in ("claimed","saved","requested_mock")
+                           else 403,{"state":result.state,"reason":result.reason,
+                                    "simulation_only":True})
+                return
             if path in ("/api/host/rules","/api/host/rules/delete"):
                 policy=getattr(service,"_host_policy",None)
                 if policy is None:
@@ -581,12 +653,15 @@ def run_local():
     else:
         token = secrets.token_urlsafe(36)
         service = AlphaSimulation({token: TestPrincipal("demo.local", "agent.demo")})
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(service))
+    bootstrap=secrets.token_urlsafe(32) if args.auth_db else None
+    server = ThreadingHTTPServer(("127.0.0.1", args.port),
+                                 handler_for(service,local_bootstrap_secret=bootstrap))
     print("LOCAL-ONLY simulation, no real effects. DO NOT EXPOSE VIA SERVE YET.")
     if token:
         print("Local test token (do not share):", token, flush=True)
     else:
         print("Auth v4 SQLite mode: create invitations with private_alpha_admin.py.", flush=True)
+        print("LOCAL host claim bootstrap code (do not share):",bootstrap,flush=True)
     print("URL: http://127.0.0.1:" + str(args.port), flush=True)
     try:
         server.serve_forever()

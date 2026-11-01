@@ -124,10 +124,12 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 Effekt importiert, nicht als Runtime. Exportiere ihn in ComfyUI im API-Format.</p>
 <fieldset><legend>Workflow-Datei auswählen (lokale Vorschau)</legend>
 <label>ComfyUI API-JSON <input type="file" id="comfyWorkflowFile" accept=".json,application/json"></label>
-<button id="comfyWorkflowInspect">Datei prüfen</button>
+<label>ComfyUI-Runtime <select id="comfyImportRuntime"></select></label>
+<button id="comfyWorkflowInspect">Parameter prüfen</button>
+<div id="comfyBindings" style="display:grid;gap:6px;max-height:340px;overflow:auto"></div>
+<button id="comfyWorkflowSave" disabled>Ausgewählte Parameter und Workflow als Effekt speichern</button>
 <pre id="comfyWorkflowOutput" aria-live="polite">Noch keine Datei ausgewählt.</pre>
-<p><small>Diese Vorschau lädt nichts auf den Server und speichert noch keinen Workflow.
-Der persistente Import mit Metadatenprüfung und Parameterauswahl folgt separat.</small></p>
+<p><small>Die Prüfung verwendet /object_info der ausgewählten Runtime. Der Import speichert den Workflow als deaktivierten Effekt, ohne ihn auszuführen.</small></p>
 </fieldset>
 <label>Host-Zuordnung <select id="effectHostSelect"></select></label>
 <fieldset><legend>Effektdefinitionen (keine Jobeinreichung)</legend>
@@ -623,6 +625,7 @@ function renderHost(){
   }
   if(host?.effects.some(e=>e.effect_id===previousEffect))effects.value=previousEffect;
   document.getElementById("effectHostSelect").value=hostSelect.value;
+  refreshComfyImportRuntimes();
   if(effects.value)loadSelectedEffect();
   else {
     document.getElementById("effectId").value="";
@@ -660,23 +663,61 @@ document.getElementById("hostRuleSelect").onchange=()=>{
   const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));
   if(rule)loadRule(rule);
 };
+let inspectedComfy=null;
+async function refreshComfyImportRuntimes(){
+  const host=hv("effectHostSelect");
+  const select=document.getElementById("comfyImportRuntime");
+  select.replaceChildren();
+  if(!host)return;
+  const response=await request("/api/host/runtimes?host_id="+encodeURIComponent(host));
+  if(response.status!==200)return;
+  for(const runtime of response.data.runtimes.filter(r=>r.type==="comfyui"&&r.enabled)){
+    const option=document.createElement("option");option.value=runtime.id;
+    option.textContent=runtime.id+" · "+runtime.endpoint;select.append(option);
+  }
+}
 document.getElementById("comfyWorkflowInspect").onclick=async()=>{
   const output=document.getElementById("comfyWorkflowOutput");
+  const bindings=document.getElementById("comfyBindings");
+  bindings.replaceChildren();inspectedComfy=null;
+  document.getElementById("comfyWorkflowSave").disabled=true;
   const file=document.getElementById("comfyWorkflowFile").files[0];
-  if(!file){output.textContent="Bitte zuerst eine API-JSON-Datei auswählen.";return;}
-  if(file.size>1024*1024){output.textContent="Datei über 1 MiB: Vorschau abgebrochen.";return;}
+  const host=hv("effectHostSelect"),runtime=hv("comfyImportRuntime");
+  if(!file||!host||!runtime){output.textContent="Host, Runtime und API-JSON-Datei auswählen.";return;}
+  if(file.size>1024*1024){output.textContent="Datei über 1 MiB.";return;}
   try{
     const workflow=JSON.parse(await file.text());
-    if(!workflow||typeof workflow!=="object"||Array.isArray(workflow))
-      throw Error("JSON-Objekt erwartet");
-    const nodes=Object.entries(workflow);
-    if(!nodes.length||!nodes.every(([id,node])=>/^\\d+$/.test(id)&&node&&
-       typeof node.class_type==="string"&&node.inputs&&typeof node.inputs==="object"))
-      throw Error("Kein ComfyUI API-Prompt-Format erkannt (numerische Node-IDs, class_type, inputs)");
-    output.textContent="API-JSON erkannt: "+nodes.length+
-      " Nodes. Datei: "+file.name+
-      ". Noch nicht gespeichert; keine Parameterfreigabe ohne /object_info-Metadaten.";
-  }catch(error){output.textContent="Datei nicht akzeptiert: "+error.message;}
+    const result=await request("/api/host/comfy/inspect",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({host_id:host,runtime_id:runtime,workflow})});
+    if(result.status!==200){output.textContent=JSON.stringify(result.data,null,2);return;}
+    inspectedComfy={host,runtime,workflow};
+    const verified=result.data.candidates.filter(c=>c.verified);
+    for(const c of verified){
+      const label=document.createElement("label");
+      const check=document.createElement("input");check.type="checkbox";check.value=c.binding;
+      label.append(check,document.createTextNode(" "+c.binding+" · "+c.class_type+
+        " · "+c.type+" · "+JSON.stringify(c.default)));
+      bindings.append(label);
+    }
+    output.textContent="API-JSON: "+result.data.node_count+" Nodes, "+
+      verified.length+" geprüfte Parameter. "+result.data.warnings.length+
+      " Hinweise. Parameter auswählen und Effekt-ID vergeben.";
+    document.getElementById("comfyWorkflowSave").disabled=false;
+  }catch(error){output.textContent="Importprüfung fehlgeschlagen: "+error.message;}
+};
+document.getElementById("comfyWorkflowSave").onclick=async()=>{
+  const output=document.getElementById("comfyWorkflowOutput");
+  if(!inspectedComfy)return;
+  const effect_id=hv("effectId"),description=hv("effectDescription");
+  if(!effect_id){output.textContent="Bitte zuerst eine Effekt-ID eingeben.";return;}
+  const bindings=[...document.querySelectorAll("#comfyBindings input:checked")].map(x=>x.value);
+  const result=await request("/api/host/comfy/import",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:inspectedComfy.host,runtime_id:inspectedComfy.runtime,
+      effect_id,description,workflow:inspectedComfy.workflow,bindings})});
+  output.textContent=JSON.stringify(result.data,null,2);
+  if(result.status===200)await refreshHosts();
 };
 function setRuntimeLamp(state,message){
   const colors={online:"#36ce83",offline:"#f16e72",unknown:"#8792a4"};
@@ -707,6 +748,7 @@ async function refreshRuntimes(){
   const response=await request("/api/host/runtimes?host_id="+encodeURIComponent(hostSelect.value));
   if(response.status!==200){output.textContent=JSON.stringify(response,null,2);return;}
   runtimeCache=response.data.runtimes;
+  await refreshComfyImportRuntimes();
   const old=select.value;select.replaceChildren();
   for(const runtime of runtimeCache){
     const option=document.createElement("option");option.value=runtime.id;
@@ -747,7 +789,7 @@ document.getElementById("runtimeDelete").onclick=async()=>{
 };
 hostSelect.onchange=()=>{renderHost();refreshRuntimes();};
 document.getElementById("effectHostSelect").onchange=()=>{
-  hostSelect.value=hv("effectHostSelect");renderHost();
+  hostSelect.value=hv("effectHostSelect");renderHost();refreshComfyImportRuntimes();
 };
 document.getElementById("hostOpenEffect").onclick=()=>{
   document.getElementById("effectHostSelect").value=hostSelect.value;
@@ -1051,7 +1093,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/runtimes", "/api/host/runtimes/delete"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -1141,7 +1183,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 self.reply(415, {"error": "json_required"})
                 return
             length = self.headers.get("Content-Length", "")
-            if not length.isdecimal() or int(length) > MAX_BODY:
+            if not length.isdecimal() or int(length) > (2 * 1024 * 1024 + 65536 if path in ("/api/host/comfy/inspect","/api/host/comfy/import") else MAX_BODY):
                 self.reply(413, {"error": "invalid_body_length"})
                 return
             try:
@@ -1156,6 +1198,48 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 status, result = delete_resource(service, self.headers.get("Authorization"),
                     DELETE_ROUTES[path][0], body)
                 self.reply(status, result)
+                return
+            if path in ("/api/host/comfy/inspect", "/api/host/comfy/import"):
+                policy=getattr(service,"_host_policy",None)
+                required={"host_id","runtime_id","workflow"}
+                if path.endswith("/import"):
+                    required |= {"effect_id","description","bindings"}
+                if policy is None or type(body) is not dict or set(body)!=required:
+                    self.reply(400,{"error":"invalid_comfy_request"})
+                    return
+                host_id,runtime_id=body["host_id"],body["runtime_id"]
+                if type(host_id) is not str or type(runtime_id) is not str:
+                    self.reply(400,{"error":"invalid_runtime_identity"})
+                    return
+                runtimes=policy.list_runtimes(host_id,principal.user_id)
+                runtime=next((r for r in runtimes if r["id"]==runtime_id
+                              and r["type"]=="comfyui" and r["enabled"]),None)
+                if runtime is None:
+                    self.reply(403,{"error":"runtime_unavailable"})
+                    return
+                from urllib.request import build_opener, HTTPHandler, Request, HTTPRedirectHandler
+                from comfy_workflow_inspection import inspect_api_workflow, WorkflowError
+                class NoRedirect(HTTPRedirectHandler):
+                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                        return None
+                try:
+                    opener=build_opener(HTTPHandler(),NoRedirect())
+                    with opener.open(Request(runtime["endpoint"]+"/object_info",
+                                            headers={"Accept":"application/json"}),timeout=5) as response:
+                        metadata=json.loads(response.read(4*1024*1024+1))
+                    if type(metadata) is not dict:
+                        raise ValueError("invalid_object_info")
+                    inspected=inspect_api_workflow(json.dumps(body["workflow"]),metadata)
+                    if path.endswith("/inspect"):
+                        self.reply(200,inspected)
+                    else:
+                        result=policy.import_comfy_workflow(host_id,principal.user_id,
+                            runtime_id,body["effect_id"],body["description"],
+                            body["workflow"],metadata,body["bindings"])
+                        self.reply(200 if result.state=="saved" else 400,
+                                   {"state":result.state,"reason":result.reason})
+                except (OSError, ValueError, TypeError, WorkflowError) as exc:
+                    self.reply(400,{"error":"comfy_inspection_failed","detail":str(exc)[:160]})
                 return
             if path in ("/api/host/runtimes", "/api/host/runtimes/delete"):
                 policy=getattr(service,"_host_policy",None)

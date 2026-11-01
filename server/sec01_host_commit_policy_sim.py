@@ -75,7 +75,7 @@ class HostCommitPolicy:
                 or type(enabled) is not bool):
             return HostDecision("denied","invalid_effect_definition")
         with self.authority.store._tx() as db:
-            if not self._admin(db,host_id,owner_id):
+            if db.execute("""SELECT 1 FROM sec01_host_owners\n                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
                 return HostDecision("denied","not_host_owner")
             db.execute("""INSERT INTO sec01_host_effect_definitions VALUES(?,?,?,?)
                 ON CONFLICT(host_id,effect_id) DO UPDATE SET
@@ -86,7 +86,7 @@ class HostCommitPolicy:
     def manual_start_mock(self, host_id, owner_id, effect_id):
         """Explicit manual request recorded only as intent; NEVER executes."""
         with self.authority.store._tx() as db:
-            if not self._admin(db,host_id,owner_id):
+            if db.execute("""SELECT 1 FROM sec01_host_owners\n                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
                 return HostDecision("denied","not_host_owner")
             row=db.execute("""SELECT enabled FROM sec01_host_effect_definitions
                 WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()

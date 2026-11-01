@@ -120,6 +120,23 @@ class IntegratedAdmissionTests(unittest.TestCase):
         self.assertEqual(self.admit(effect_key="effect.later").reason,
                          "requester_not_delegated")
 
+    def test_agent_deactivation_blocks_issued_grant(self):
+        self.grant()
+        with self.store._tx() as db:
+            db.execute("UPDATE alpha_agents SET disabled=1 WHERE agent_id=?",
+                       ("agent.images",))
+        self.assertEqual(self.admit().reason,"agent_owner_or_state_mismatch")
+        self.assertEqual(self.service.admission_count(),0)
+
+    def test_historical_admission_not_new_execution_after_revoke(self):
+        self.grant()
+        self.assertEqual(self.admit().reason,"admitted_once_no_effect")
+        self.grant(True)
+        self.assertEqual(self.admit().reason,"already_admitted_no_new_effect")
+        self.assertEqual(self.admit(effect_key="effect.new").reason,
+                         "requester_not_delegated")
+        self.assertEqual(self.service.admission_count(),1)
+
     def test_no_host_placement_from_requester_grant_alone(self):
         self.grant()
         self.service.assign_agent("agent.images","host.cloud",enabled=False)

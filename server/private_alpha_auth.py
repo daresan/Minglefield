@@ -47,6 +47,17 @@ class AlphaAuthStore:
                 UNIQUE(user_id,idempotency_key));""")
             db.execute("""CREATE TABLE IF NOT EXISTS alpha_passwords(
                 user_id TEXT PRIMARY KEY, salt BLOB NOT NULL, password_hash BLOB NOT NULL)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_agent_grants(
+                agent_id TEXT NOT NULL, grantee_user_id TEXT NOT NULL,
+                action TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(agent_id,grantee_user_id,action))""")
+
+    def _grant_schema(self):
+        with self._tx() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_agent_grants(
+                agent_id TEXT NOT NULL, grantee_user_id TEXT NOT NULL,
+                action TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(agent_id,grantee_user_id,action))""")
 
     @staticmethod
     def _password_ok(password):
@@ -224,6 +235,52 @@ class AlphaAuthStore:
             return 201, {"agent_id":agent_id,"owner":user,
                          "allowed_actions":["demo.echo"]}
 
+    def grant_agent(self, authorization, *, agent_id, grantee_user_id, revoke=False):
+        """Owner-only demo.echo delegation. Grant revocation is immediate on next job."""
+        if (not ident(agent_id) or not ident(grantee_user_id)
+                or type(revoke) is not bool):
+            return 400, {"error":"invalid_grant"}
+        with self._tx() as db:
+            owner=self._active_user(db,authorization)
+            if owner is None:
+                return 401, {"error":"unauthorized"}
+            agent=db.execute("""SELECT 1 FROM alpha_agents
+                WHERE agent_id=? AND user_id=? AND disabled=0""",
+                (agent_id,owner)).fetchone()
+            target=db.execute("""SELECT 1 FROM alpha_users
+                WHERE user_id=? AND disabled=0""",(grantee_user_id,)).fetchone()
+            if not agent or not target or owner==grantee_user_id:
+                return 403, {"error":"grant_not_permitted"}
+            if revoke:
+                db.execute("""UPDATE alpha_agent_grants SET revoked=1
+                    WHERE agent_id=? AND grantee_user_id=? AND action='demo.echo'""",
+                    (agent_id,grantee_user_id))
+            else:
+                db.execute("""INSERT INTO alpha_agent_grants
+                    (agent_id,grantee_user_id,action,revoked) VALUES (?,?,'demo.echo',0)
+                    ON CONFLICT(agent_id,grantee_user_id,action)
+                    DO UPDATE SET revoked=0""",(agent_id,grantee_user_id))
+            return 200, {"agent_id":agent_id,"grantee_user_id":grantee_user_id,
+                         "action":"demo.echo","revoked":revoke}
+
+    def available_agents(self, authorization):
+        with self._tx() as db:
+            user=self._active_user(db,authorization)
+            if user is None:
+                return None
+            rows=db.execute("""SELECT a.agent_id,a.user_id,
+                CASE WHEN a.user_id=? THEN 'owned' ELSE 'delegated' END
+                FROM alpha_agents a
+                JOIN alpha_users owner ON owner.user_id=a.user_id AND owner.disabled=0
+                WHERE a.disabled=0 AND
+                 (a.user_id=? OR EXISTS(
+                   SELECT 1 FROM alpha_agent_grants g
+                   WHERE g.agent_id=a.agent_id AND g.grantee_user_id=?
+                   AND g.action='demo.echo' AND g.revoked=0))
+                ORDER BY a.agent_id""",(user,user,user)).fetchall()
+            return [{"agent_id":agent,"owner":owner,"relationship":relationship,
+                     "allowed_actions":["demo.echo"]} for agent,owner,relationship in rows]
+
     def submit_agent(self, authorization, payload):
         """Explicitly choose an owned agent; check ownership in the job transaction."""
         if (type(payload) is not dict or set(payload)!={"agent_id","action","idempotency_key"}
@@ -236,11 +293,16 @@ class AlphaAuthStore:
             if user is None:
                 return 401, {"error":"unauthorized"}
             agent=payload["agent_id"]
-            owned=db.execute("""SELECT 1 FROM alpha_agents
-                WHERE agent_id=? AND user_id=? AND disabled=0""",
-                (agent,user)).fetchone()
-            if not owned:
-                return 403, {"error":"agent_not_owned"}
+            authorized=db.execute("""SELECT 1 FROM alpha_agents a
+                JOIN alpha_users owner ON owner.user_id=a.user_id AND owner.disabled=0
+                WHERE a.agent_id=? AND a.disabled=0
+                  AND (a.user_id=? OR EXISTS(
+                   SELECT 1 FROM alpha_agent_grants g
+                   WHERE g.agent_id=a.agent_id AND g.grantee_user_id=?
+                     AND g.action='demo.echo' AND g.revoked=0))""",
+                (agent,user,user)).fetchone()
+            if not authorized:
+                return 403, {"error":"agent_not_authorized"}
             row=db.execute("""SELECT job_id,agent_id,action FROM alpha_jobs
                 WHERE user_id=? AND idempotency_key=?""",
                 (user,payload["idempotency_key"])).fetchone()

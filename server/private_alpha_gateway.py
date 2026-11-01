@@ -71,7 +71,7 @@ const refresh=async()=>{
   const jobs=await request("/api/jobs");
   handleUnauthorized(agents);
   handleUnauthorized(jobs);
-  updateStatus();
+  if(credential)updateStatus();
   show({agents,jobs});
 };
 document.getElementById("redeem").onclick=async()=>{

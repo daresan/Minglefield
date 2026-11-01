@@ -76,6 +76,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <label>Bestehenden Job auswählen <select id="hostJobSelect"></select></label>
 <label>Job-ID <input id="hostJobId" placeholder="hostjob.…"></label>
 <button id="hostJobCancel">Eingereihten Job abbrechen</button>
+<button id="hostJobRetry">Abgebrochenen Job erneut einreihen</button>
 <button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button>
 <button id="hostJobReserve">Slot reservieren (Mock)</button>
 <button id="hostJobRelease">Reservierung aufheben (Mock)</button>
@@ -434,6 +435,12 @@ document.getElementById("hostJobCancel").onclick=async()=>{
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
+document.getElementById("hostJobRetry").onclick=async()=>{
+  const result=await api("/api/host/jobs/retry",
+    {host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
 document.getElementById("hostJobSelect").onchange=()=>{
   document.getElementById("hostJobId").value=hv("hostJobSelect");
 };
@@ -724,6 +731,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 return
             if path in ("/api/host/claim","/api/host/effects",
                         "/api/host/effects/manual","/api/host/jobs/cancel",
+                        "/api/host/jobs/retry",
                         "/api/host/jobs/evaluate", "/api/host/jobs/reserve",
                         "/api/host/jobs/release"):
                 policy=getattr(service,"_host_policy",None)
@@ -754,6 +762,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         body["host_id"],principal.user_id,body["job_id"],
                         now=int(time.time()))
                     self.reply(200 if result.state=="waiting" else 403,
+                        {"state":result.state,"reason":result.reason,
+                         "simulation_only":True})
+                    return
+                if path=="/api/host/jobs/retry":
+                    if set(body)!={"host_id","job_id"}:
+                        self.reply(400,{"error":"invalid_job_retry"})
+                        return
+                    result=policy.retry_cancelled_host_job(
+                        body["host_id"],principal.user_id,body["job_id"])
+                    self.reply(200 if result.state=="queued_mock" else 403,
                         {"state":result.state,"reason":result.reason,
                          "simulation_only":True})
                     return

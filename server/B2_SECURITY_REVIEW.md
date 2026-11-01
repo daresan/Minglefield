@@ -79,6 +79,23 @@ The persisted B2 request is an **internal, server-generated authorization snapsh
 
 **SEC-07 disposition:** the identified B2 persisted-record structural validation and revision-fencing work is **mitigated and maintainer-validated for the simulation-only scope**. The remaining action-specific parameter contract is a **mandatory future real-adapter boundary requirement**, not a generic MAP parameter schema. This review does not certify all malformed inputs, hostile database writes, or external effect safety. SEC-01 through SEC-06 and SEC-08/09 remain independent findings. No production or real-effect authorization follows from closing the B2-focused SEC-07 hardening work.
 
+## SEC-01 post-intent revocation boundary — design review (2026-11-01)
+
+**Finding:** `DispatchGate.commit_intent` reauthorizes and commits an immutable dispatch intent inside a database writer transaction. `FakeSimulationCoordinator.run_once` subsequently reads the effect key and invokes its deterministic fake adapter **outside** that transaction. No authorization or revocation check at the adapter's effect boundary is present. A revocation after `dispatch_committed` therefore cannot be assumed to prevent invocation. This is an architectural limitation, not a claim that the current simulation performs real effects.
+
+**Required contract for any future real adapter:**
+
+1. Define a trusted, authenticated executor and per-effect authority binding: job, agent, grant, original session, action, target, immutable request fingerprint, adapter identity/version, and effect idempotency key.
+2. Before accepting a real effect, the *effect-owning system* must enforce a fresh authorization/fencing decision or a verifiable short-lived capability with explicit revocation semantics. A local check immediately before an outbound call does **not** close the check-to-use race.
+3. Specify a monotonic grant/agent authorization epoch or equivalent revocation fence and its atomic comparison at the effect-owning boundary. Identify exactly which revocations are immediate, bounded-delay, or impossible to enforce for already accepted effects.
+4. If the external system cannot enforce fencing, **do not claim strict revocation**; prohibit high-risk effects and document residual exposure for any explicitly accepted lower-risk adapter.
+5. Preserve the existing durable intent and no-automatic-replay rules. A revoked or uncertain committed intent must not be silently retried or marked successful. Evidence-based reconciliation is separately required by SEC-02/03.
+6. Test revocation of the original session, grant, and agent after intent commit, including concurrency at the effect boundary, revoked capability/epoch, adapter refusal, and crash/unknown-outcome cases. Tests must distinguish *no new invocation* from *an effect already accepted*.
+
+**Simulation boundary:** The fake coordinator is not an effect-owning authorization service. Adding a second SQLite check to it could improve simulation coverage but would not prove downstream fencing. No real adapter, public endpoint, external effect, schema migration, or background replay is authorized by this review.
+
+**Disposition:** SEC-01 remains **Critical / open**. The next implementation step should be a simulation-only adversarial regression demonstrating the current post-intent limitation, followed by an independent adapter-fencing RFC before production design approval.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

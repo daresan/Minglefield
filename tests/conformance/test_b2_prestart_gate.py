@@ -48,6 +48,20 @@ class PrestartGateTests(unittest.TestCase):
                 self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
                 self.assertEqual(self.counts(), (1, 3, 100))
 
+    def test_agent_revision_change_after_claim_denies_prestart(self):
+        claim = self.claimed()
+        with closing(sqlite3.connect(self.db)) as db:
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["revision"] += 1
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason),
+                         ("denied", "policy_revision_changed"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 3, 100))
+
     def test_valid_claim_becomes_ready_once_without_effect(self):
         claim = self.claimed()
         gate = PrestartGate(self.new_service())

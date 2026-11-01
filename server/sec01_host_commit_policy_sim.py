@@ -129,7 +129,7 @@ class HostCommitPolicy:
                 WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
                 return HostDecision("denied","not_host_owner")
             updated=db.execute("""UPDATE sec01_host_jobs SET state='cancelled'
-                WHERE host_id=? AND job_id=? AND state='queued'""",
+                WHERE host_id=? AND job_id=? AND state IN ('queued','waiting')""",
                 (host_id,job_id)).rowcount
             if updated:
                 return HostDecision("cancelled_mock","queued_intent_cancelled")

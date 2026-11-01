@@ -13,6 +13,18 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from private_alpha_auth import ident
 
+def _window_matches(config, local):
+    """Weekdays denote the day a window starts, including overnight windows."""
+    start, end = config["start_minute"], config["end_minute"]
+    minute = local.hour * 60 + local.minute
+    weekday = local.weekday()
+    if start < end:
+        return weekday in config["weekdays"] and start <= minute < end
+    if start > end:
+        return ((weekday in config["weekdays"] and minute >= start)
+                or ((weekday - 1) % 7 in config["weekdays"] and minute < end))
+    return False
+
 @dataclass(frozen=True)
 class HostDecision:
     state: str
@@ -213,8 +225,7 @@ class HostCommitPolicy:
                     local=datetime.fromtimestamp(now,timezone.utc).astimezone(
                         ZoneInfo(config["timezone"]))
                     minute=local.hour*60+local.minute
-                    if (local.weekday() not in config["weekdays"]
-                            or not config["start_minute"]<=minute<config["end_minute"]):
+                    if not _window_matches(config, local):
                         continue
                     if config["mode"]=="manual":
                         reason="manual_approval_required"
@@ -262,8 +273,7 @@ class HostCommitPolicy:
                 local=datetime.fromtimestamp(now,timezone.utc).astimezone(
                     ZoneInfo(config["timezone"]))
                 minute=local.hour*60+local.minute
-                if (local.weekday() not in config["weekdays"]
-                        or not config["start_minute"]<=minute<config["end_minute"]):
+                if not _window_matches(config, local):
                     continue
                 if config["mode"]!="automatic":
                     return HostDecision("waiting","manual_approval_required")
@@ -336,8 +346,8 @@ class HostCommitPolicy:
             val=config[key]
             if type(val) is not int or not 0<=val<=1440:
                 raise ValueError("invalid time window")
-        if config["start_minute"]>=config["end_minute"]:
-            raise ValueError("time windows cannot cross midnight")
+        if config["start_minute"]==config["end_minute"]:
+            raise ValueError("empty time window")
         try:
             ZoneInfo(config["timezone"])
         except (TypeError,ZoneInfoNotFoundError,ValueError):
@@ -455,8 +465,7 @@ class HostCommitPolicy:
                 local=datetime.fromtimestamp(now,timezone.utc).astimezone(
                     ZoneInfo(config["timezone"]))
                 minute=local.hour*60+local.minute
-                if (local.weekday() not in config["weekdays"]
-                        or not config["start_minute"]<=minute<config["end_minute"]):
+                if not _window_matches(config, local):
                     continue
                 limit=config.get("max_parallel_effects")
                 if limit is not None:

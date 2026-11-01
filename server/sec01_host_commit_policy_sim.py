@@ -139,6 +139,57 @@ class HostCommitPolicy:
                 return HostDecision("cancelled_mock","already_cancelled")
             return HostDecision("denied","job_not_cancellable")
 
+    def evaluate_queued_host_job(self, host_id, owner_id, job_id, *, now):
+        """Schedule preflight only: no reservation, approval or execution."""
+        if (not all(ident(v) for v in (host_id,owner_id,job_id))
+                or type(now) is not int):
+            return HostDecision("denied","invalid_evaluation")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            row=db.execute("""SELECT effect_id,state FROM sec01_host_jobs
+                WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()
+            if row is None:
+                return HostDecision("denied","job_missing")
+            effect_id,state=row
+            if state not in ("queued","waiting"):
+                return HostDecision("denied","job_not_evaluable")
+            host=db.execute("""SELECT active FROM alpha_executor_hosts
+                WHERE host_id=?""",(host_id,)).fetchone()
+            effect=db.execute("""SELECT enabled FROM sec01_host_effect_definitions
+                WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()
+            reason="host_unavailable" if host!=(1,) else (
+                "effect_unavailable" if effect!=(1,) else "no_enabled_rule")
+            if host==(1,) and effect==(1,):
+                rules=db.execute("""SELECT config FROM sec01_host_rules
+                    WHERE host_id=? AND enabled=1 ORDER BY priority,rule_id""",
+                    (host_id,)).fetchall()
+                reason="outside_schedule" if rules else "no_enabled_rule"
+                for (encoded,) in rules:
+                    config=json.loads(encoded)
+                    local=datetime.fromtimestamp(now,timezone.utc).astimezone(
+                        ZoneInfo(config["timezone"]))
+                    minute=local.hour*60+local.minute
+                    if (local.weekday() not in config["weekdays"]
+                            or not config["start_minute"]<=minute<config["end_minute"]):
+                        continue
+                    if config["mode"]=="manual":
+                        reason="manual_approval_required"
+                    elif config["idle_only"] or config["gpu_max_percent"] is not None:
+                        reason="trusted_telemetry_required"
+                    else:
+                        limit=config.get("max_parallel_effects")
+                        active=db.execute("""SELECT COUNT(*) FROM sec01_host_active_slots
+                            WHERE host_id=?""",(host_id,)).fetchone()[0]
+                        reason=("parallel_limit_reached" if limit is not None
+                                and active>=limit else "awaiting_final_authorization")
+                    break
+            db.execute("""UPDATE sec01_host_jobs SET state='waiting'
+                WHERE host_id=? AND job_id=? AND state IN ('queued','waiting')""",
+                (host_id,job_id))
+            return HostDecision("waiting",reason)
+
     def add_admin_fixture(self, host_id, admin_id):
         """Trusted LOCAL provisioning; never expose to a requester."""
         if not ident(host_id) or not ident(admin_id):

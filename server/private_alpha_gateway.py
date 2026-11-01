@@ -879,6 +879,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(403 if jobs is None else 200,
                         {"error":"not_host_owner"} if jobs is None else
                         {"jobs":jobs,"simulation_only":True})
+            elif path == "/api/host/runtimes":
+                policy=getattr(service,"_host_policy",None)
+                host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_ids)!=1:
+                    self.reply(400, {"error":"invalid_runtime_query"})
+                else:
+                    runtimes=policy.list_runtimes(host_ids[0],principal.user_id)
+                    self.reply(403 if runtimes is None else 200,
+                        {"error":"not_host_owner"} if runtimes is None else
+                        {"runtimes":runtimes})
             elif path == "/api/hosts":
                 if not hasattr(service,"_host_policy"):
                     self.reply(200, {"hosts":[],"simulation_only":True})
@@ -890,7 +900,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/runtimes", "/api/host/runtimes/delete"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -995,6 +1005,24 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 status, result = delete_resource(service, self.headers.get("Authorization"),
                     DELETE_ROUTES[path][0], body)
                 self.reply(status, result)
+                return
+            if path in ("/api/host/runtimes", "/api/host/runtimes/delete"):
+                policy=getattr(service,"_host_policy",None)
+                if policy is None or type(body) is not dict:
+                    self.reply(404, {"error":"host_management_unavailable"})
+                    return
+                if path == "/api/host/runtimes":
+                    if set(body)!={"host_id","runtime"}:
+                        self.reply(400, {"error":"invalid_runtime_request"})
+                        return
+                    result=policy.upsert_runtime(body["host_id"],principal.user_id,body["runtime"])
+                else:
+                    if set(body)!={"host_id","runtime_id"}:
+                        self.reply(400, {"error":"invalid_runtime_request"})
+                        return
+                    result=policy.delete_runtime(body["host_id"],principal.user_id,body["runtime_id"])
+                self.reply(200 if result.state in ("saved","deleted") else 403,
+                           {"state":result.state,"reason":result.reason})
                 return
             if path in ("/api/host/claim","/api/host/effects",
                         "/api/host/effects/manual","/api/host/jobs/cancel",

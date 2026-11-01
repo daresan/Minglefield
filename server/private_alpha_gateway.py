@@ -29,7 +29,7 @@ fieldset{margin:1rem 0}button{cursor:pointer}</style>
 <p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
 <fieldset><legend>1. Einladung einlösen (nur Auth-v2-Test)</legend>
 <label>Einladungscode <input id="invite" type="password" autocomplete="off"></label>
-<label>Gewünschte Agenten-ID <input id="agent" placeholder="agent.alice"></label>
+<p>Das Benutzerkonto ist unabhängig von deinen eigenen oder beauftragten Agenten.</p>
 <label>Passwort für spätere Anmeldung (mind. 12 Zeichen) <input id="signupPassword" type="password" autocomplete="new-password"></label>
 <button id="redeem">Einladung einlösen</button>
 <p><small>Der Betreiber erstellt Einladungscodes weiterhin lokal per PowerShell.
@@ -44,7 +44,16 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="connect">Connect</button><button id="logout">Logout</button>
 <label>Passwort für bestehendes Alt-Konto setzen <input id="legacyPassword" type="password" autocomplete="new-password"></label>
 <button id="setPassword">Passwort setzen</button></fieldset>
-<fieldset><legend>3. Simulieren</legend>
+<fieldset><legend>3. Agenten verwalten oder beauftragen</legend>
+<label>Neuen eigenen Agenten anlegen <input id="newAgent" placeholder="agent.example"></label>
+<button id="addAgent">Agent anlegen</button>
+<label>Eigenen Agenten freigeben <input id="grantAgent" placeholder="agent.example"></label>
+<label>Für Benutzer <input id="grantee" placeholder="user.friend"></label>
+<button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button>
+<label>Agent für Simulation <select id="selectedAgent"></select></label>
+<p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigabe gilt nur für demo.echo.</small></p>
+</fieldset>
+<fieldset><legend>4. Simulieren</legend>
 <button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
 <pre id="output" aria-live="polite">Einladung einlösen oder gültigen Session-Token eingeben.</pre>
@@ -68,6 +77,18 @@ async function request(path,options={}){
   return {status:response.status,data:await response.json()};
 }
 const show=v=>out.textContent=JSON.stringify(v,null,2);
+const agentSelect=document.getElementById("selectedAgent");
+function fillAgents(agents){
+  const last=agentSelect.value;
+  agentSelect.replaceChildren();
+  for(const agent of agents){
+    const option=document.createElement("option");
+    option.value=agent.agent_id;
+    option.textContent=agent.agent_id+" ("+agent.relationship+", owner: "+agent.owner+")";
+    agentSelect.append(option);
+  }
+  if(agents.some(a=>a.agent_id===last))agentSelect.value=last;
+}
 const handleUnauthorized=(reply)=>{
   if(reply.status===401){credential="";expiresAt=0;updateStatus();
     statusLine.textContent="Session ungültig, widerrufen oder abgelaufen. Erneut anmelden.";}
@@ -79,16 +100,16 @@ const refresh=async()=>{
   const jobs=await request("/api/jobs");
   handleUnauthorized(agents);
   handleUnauthorized(jobs);
+  if(credential && agents.status===200)fillAgents(agents.data.agents);
   if(credential)updateStatus();
   show({agents,jobs});
 };
 document.getElementById("redeem").onclick=async()=>{
   const secret=document.getElementById("invite").value;
-  const agent_id=document.getElementById("agent").value;
   document.getElementById("invite").value="";
   const password=document.getElementById("signupPassword").value;
   document.getElementById("signupPassword").value="";
-  const result=await api("/api/redeem",{invitation:secret,agent_id,password});
+  const result=await api("/api/redeem",{invitation:secret,password});
   if(result.status===201){
     credential=result.data.session_token;
     expiresAt=Date.now()+result.data.expires_in*1000;
@@ -132,9 +153,28 @@ document.getElementById("connect").onclick=async()=>{
   await refresh();
 };
 document.getElementById("refresh").onclick=refresh;
+document.getElementById("addAgent").onclick=async()=>{
+  if(!credential){show({message:"Zuerst mit Benutzer-ID anmelden."});return;}
+  const agent_id=document.getElementById("newAgent").value;
+  const result=await api("/api/agents",{agent_id});
+  if(result.status===201){
+    document.getElementById("newAgent").value="";
+    await refresh();agentSelect.value=agent_id;
+  } else show(result);
+};
+async function changeGrant(revoke){
+  if(!credential){show({message:"Zuerst anmelden."});return;}
+  const result=await api("/api/grants",{agent_id:document.getElementById("grantAgent").value,
+    grantee_user_id:document.getElementById("grantee").value,revoke});
+  show(result);
+}
+document.getElementById("grant").onclick=()=>changeGrant(false);
+document.getElementById("revoke").onclick=()=>changeGrant(true);
 document.getElementById("create").onclick=async()=>{
   if(!credential){show({message:"Bitte zuerst anmelden."});return;}
-  const result=await api("/api/jobs",{action:"demo.echo",idempotency_key:crypto.randomUUID()});
+  if(!agentSelect.value){show({message:"Zuerst Agenten auswählen."});return;}
+  const result=await api("/api/jobs",{agent_id:agentSelect.value,
+    action:"demo.echo",idempotency_key:crypto.randomUUID()});
   handleUnauthorized(result);
   show(result);
 };
@@ -249,7 +289,11 @@ def handler_for(service):
                 self.reply(401, {"error": "unauthorized"})
                 return
             if path == "/api/agents":
-                self.reply(200, {"agents": service.agents(principal)})
+                if hasattr(service, "available_agents"):
+                    self.reply(200, {"agents": service.available_agents(
+                        self.headers.get("Authorization"))})
+                else:
+                    self.reply(200, {"agents": service.agents(principal)})
             elif path == "/api/jobs":
                 self.reply(200, {"jobs": service.jobs(principal)})
             else:
@@ -257,7 +301,7 @@ def handler_for(service):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/logout", "/api/redeem", "/api/login", "/api/password/set"):
+            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -300,10 +344,11 @@ def handler_for(service):
                     return
                 if path == "/api/redeem":
                     if not hasattr(service, "redeem") or set(data) not in (
-                            {"invitation", "agent_id"}, {"invitation", "agent_id", "password"}):
+                            {"invitation", "agent_id"}, {"invitation", "agent_id", "password"},
+                            {"invitation"}, {"invitation", "password"}):
                         self.reply(400, {"error": "invalid_registration"})
                         return
-                    session = service.redeem(data["invitation"], agent_id=data["agent_id"],
+                    session = service.redeem(data["invitation"], agent_id=data.get("agent_id"),
                                              password=data.get("password"))
                     if session is None:
                         self.reply(400, {"error": "invitation_invalid_or_used"})
@@ -354,7 +399,25 @@ def handler_for(service):
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
                 return
-            status, result = service.submit(principal, body)
+            if path == "/api/agents":
+                if not hasattr(service, "create_agent") or set(body) != {"agent_id"}:
+                    self.reply(400, {"error":"invalid_agent_request"})
+                    return
+                status,result=service.create_agent(self.headers.get("Authorization"),
+                                                  body["agent_id"])
+            elif path == "/api/grants":
+                if not hasattr(service, "grant_agent") or set(body) != {
+                        "agent_id","grantee_user_id","revoke"}:
+                    self.reply(400, {"error":"invalid_grant_request"})
+                    return
+                status,result=service.grant_agent(
+                    self.headers.get("Authorization"),
+                    agent_id=body["agent_id"],grantee_user_id=body["grantee_user_id"],
+                    revoke=body["revoke"])
+            elif hasattr(service,"submit_agent") and "agent_id" in body:
+                status,result=service.submit_agent(self.headers.get("Authorization"),body)
+            else:
+                status, result = service.submit(principal, body)
             self.reply(status, result)
     return Handler
 

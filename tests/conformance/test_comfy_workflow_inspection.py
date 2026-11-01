@@ -1,7 +1,11 @@
 """Read-only workflow importer conformance smoke tests."""
 import json
+import sys
 import unittest
-from server.comfy_workflow_inspection import WorkflowError, inspect_api_workflow
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
+from comfy_workflow_inspection import WorkflowError, inspect_api_workflow
 
 
 class ComfyWorkflowInspectionTests(unittest.TestCase):

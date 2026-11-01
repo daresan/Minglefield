@@ -123,6 +123,28 @@ class AlphaAuthStore:
                        (principal.user_id,digest(authorization[7:])))
             return True
 
+    def operator_reset_password(self, user_id, password):
+        """LOCAL ADMIN ONLY; never expose through HTTP or to untrusted clients.
+
+        Requires operator's filesystem access to the private SQLite database.
+        Reset revokes all existing sessions, preserving owned agents and jobs.
+        """
+        if not ident(user_id) or not self._password_ok(password):
+            return False
+        salt = os.urandom(16)
+        with self._tx() as db:
+            active = db.execute("""SELECT 1 FROM alpha_users
+                WHERE user_id=? AND disabled=0""",(user_id,)).fetchone()
+            if not active:
+                return False
+            db.execute("""INSERT INTO alpha_passwords VALUES(?,?,?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                salt=excluded.salt,password_hash=excluded.password_hash""",
+                (user_id,salt,self._derive(password,salt)))
+            db.execute("UPDATE alpha_sessions SET revoked=1 WHERE user_id=?",
+                       (user_id,))
+        return True
+
     def login(self, user_id, password, *, session_ttl=900):
         """Issue a fresh session with a stored password verifier."""
         if (not ident(user_id) or not self._password_ok(password)

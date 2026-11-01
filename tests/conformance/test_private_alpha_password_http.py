@@ -56,6 +56,33 @@ class PasswordHTTPTests(unittest.TestCase):
         self.assertEqual(self.request("/api/agents",token=result["session_token"])[1]["agents"][0]["agent_id"],
                          "agent.v4")
 
+    def test_redeem_logout_then_login_same_password(self):
+        invitation=self.store.invite("user.daniel")
+        password="test-login-passphrase-123"
+        status,registration=self.request("/api/redeem",
+            {"invitation":invitation,"agent_id":"agent.daniel","password":password})
+        self.assertEqual(status,201)
+        old=registration["session_token"]
+        self.assertEqual(self.request("/api/agents",token=old)[0],200)
+        # Logout is POST with no body; use a direct connection to simulate UI.
+        conn=http.client.HTTPConnection("127.0.0.1",self.server.server_port,timeout=3)
+        try:
+            conn.request("POST","/api/logout",headers={"Authorization":"Bearer "+old})
+            response=conn.getresponse()
+            self.assertEqual(response.status,200)
+            response.read()
+        finally:
+            conn.close()
+        self.assertEqual(self.request("/api/agents",token=old)[0],401)
+        status,logged_in=self.request("/api/login",
+            {"user_id":"user.daniel","password":password})
+        self.assertEqual(status,200,logged_in)
+        fresh=logged_in["session_token"]
+        self.assertNotEqual(fresh,old)
+        status,agents=self.request("/api/agents",token=fresh)
+        self.assertEqual(status,200)
+        self.assertEqual(agents["agents"][0]["agent_id"],"agent.daniel")
+
     def test_wrong_password_and_missing_account_denied(self):
         invite=self.store.invite("user.v4")
         self.assertEqual(self.request("/api/redeem",

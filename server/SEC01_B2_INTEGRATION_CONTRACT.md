@@ -102,6 +102,14 @@ The isolated `sec01_capability_validation.py` validator checks exact envelope sh
 
 These new tests require maintainer-local validation; the last confirmed full-suite baseline remains **235/235** until reported otherwise. No B2 state, wire schema or real-effect path is changed by these tests.
 
+## G.2 Original-session composite validation and propagation gap
+
+The isolated `sec01_bound_capability_validation.py` composes structural capability checks with the issuer-side HMAC original-session reference verification. A positive result remains `bound_shape_not_authenticated_or_admitted`: **neither authentication nor effect admission**. Its reads are not atomic with each other or with adapter acceptance.
+
+The regression `test_original_session_revocation_after_validation_denies` deliberately documents an unresolved security boundary: revoking the actual original B2 session makes renewed composite validation fail, **but** a previously captured authority snapshot can still be accepted in the independent simulated fence because its session epoch was not invalidated. By contrast, explicit `SQLiteAuthorityFence.invalidate("session", ...)` causes atomic acceptance to reject the stale snapshot. This is a demonstration of the missing propagation/linearization guarantee, **not a permitted real effect path**.
+
+Before any real adapter: authoritative session/grant/agent/principal revocations must be serialized with the effect-owning admission decision, or the adapter must explicitly decline strict revocation claims. A local bridge doing a fresh read is insufficient. The current implementation must remain simulation-only. New tests require maintainer-local verification; last confirmed baseline **252/252**.
+
 ## H. Decision and non-goals
 
 **Decision:** keep `server/sec01_fencing_sqlite.py` and `server/sec01_fencing_sim.py` isolated; do **not** change `action_jobs` schema v4, B2 coordinator, dispatch path, or public MAP wire contracts on this design step.

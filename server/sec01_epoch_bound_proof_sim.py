@@ -8,9 +8,8 @@ import hashlib
 import hmac
 import json
 import sqlite3
-from dataclasses import dataclass
 
-from private_alpha_auth import digest, ident
+from private_alpha_auth import digest
 from sec01_remote_precommit_sim import LocalProofIssuer, online_precommit_check
 
 TRACKED = {
@@ -38,8 +37,6 @@ class EpochBoundProofs:
             for table,columns in TRACKED.items():
                 # AFTER triggers execute in the same SQLite transaction as
                 # revoke, regrant, disable and host placement changes.
-                expr="json_array("+",".join("NEW."+col for col in columns)+")"
-                oldexpr="json_array("+",".join("OLD."+col for col in columns)+")"
                 for op,alias in (("INSERT","NEW"),("UPDATE","NEW"),
                                  ("DELETE","OLD")):
                     trigger="sec01_epoch_"+table+"_"+op.lower()
@@ -135,7 +132,6 @@ class EpochBoundProofs:
                                    (k,)).fetchone()
                     if (row[0] if row else 0)!=generation:
                         return False,"authority_epoch_changed"
-                result=online_precommit_check if False else None
             # This is a precheck, not a commit. The gap remains unsafe for effects.
             checked=online_precommit_check(self.authority,payload["proof"],
                 verifier_secret=self.issuer.secret,issuer=self.issuer.issuer,

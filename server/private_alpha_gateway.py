@@ -67,6 +67,20 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 </fieldset>
 <fieldset><legend>4. Simulieren</legend>
 <button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
+<fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und steuern (Simulation)</legend>
+<label>Host für Job <select id="jobHostSelect"></select></label>
+<label>Effekt für Job <select id="jobEffectSelect"></select></label>
+<button id="effectManual">Job in Warteschlange einreihen</button>
+
+<button id="hostJobsRefresh">Host-Jobs laden</button>
+<label>Bestehenden Job auswählen <select id="hostJobSelect"></select></label>
+<label>Job-ID <input id="hostJobId" placeholder="hostjob.…"></label>
+<button id="hostJobCancel">Eingereihten Job abbrechen</button>
+<button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button>
+<button id="hostJobReserve">Slot reservieren (Mock)</button>
+<button id="hostJobRelease">Reservierung aufheben (Mock)</button>
+<pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
+<pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre></fieldset>
 <fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
 <p>Eigene Hosts werden deinem angemeldeten Minglefield-Benutzer zugeordnet.
 Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effekte.</p>
@@ -99,21 +113,13 @@ Die Hostübernahme ist nur einmalig erforderlich.</small></p>
 <p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
 Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
 werden derzeit abgelehnt.</small></p>
-<fieldset><legend>Eigene Effekte (nur Definition und Startsimulation)</legend>
+<fieldset><legend>Effektdefinitionen (keine Jobeinreichung)</legend>
 <label>Bestehenden Effekt auswählen <select id="effectSelect"></select></label>
 <label>Effekt-ID <input id="effectId" placeholder="effect.example"></label>
 <label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
 <label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
 <button id="effectSave">Effektdefinition speichern</button>
-<button id="effectManual">Job in Warteschlange einreihen</button>
-<button id="hostJobsRefresh">Host-Jobs laden</button>
-<label>Bestehenden Job auswählen <select id="hostJobSelect"></select></label>
-<label>Job-ID <input id="hostJobId" placeholder="hostjob.…"></label>
-<button id="hostJobCancel">Eingereihten Job abbrechen</button>
-<button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button>
-<button id="hostJobReserve">Slot reservieren (Mock)</button>
-<button id="hostJobRelease">Reservierung aufheben (Mock)</button>
-<pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
+
 <p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
 beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></p>
 </fieldset>
@@ -131,9 +137,9 @@ const alphaNav=document.getElementById("alphaNav");
 const alphaPanels={
   login:alphaSections.slice(0,3),
   agents:[alphaSections[3]],
-  jobs:[alphaSections[4]],
-  hosts:[alphaSections[5]],
-  effects:[alphaSections[5]]
+  jobs:[alphaSections[4],document.getElementById("hostJobPanel")],
+  hosts:[alphaSections[6]],
+  effects:[alphaSections[6]]
 };
 let alphaTab="login";
 for(const [key,label] of [["login","Anmeldung"],["hosts","Hosts"],
@@ -153,7 +159,7 @@ function renderAlphaTabs(){
     section.classList.add("alphaPanel");
     section.hidden=!(alphaPanels[alphaTab]||[]).includes(section);
   }
-  const hostFieldset=alphaSections[5];
+  const hostFieldset=alphaSections[6];
   const effectFieldset=hostFieldset?.querySelector("fieldset");
   if(effectFieldset){
     effectFieldset.hidden=alphaTab==="hosts";
@@ -327,12 +333,16 @@ async function refreshHosts(){
   const previous=hostSelect.value;
   hostCache=result.data.hosts;
   hostSelect.replaceChildren();
+  const jobHost=document.getElementById("jobHostSelect");jobHost.replaceChildren();
   for(const host of hostCache){
     const opt=document.createElement("option");
     opt.value=host.host_id;opt.textContent=host.host_id;hostSelect.append(opt);
+    const copy=opt.cloneNode(true);jobHost.append(copy);
   }
   if(hostCache.some(h=>h.host_id===previous))hostSelect.value=previous;
   renderHost();
+  jobHost.value=hostSelect.value;
+  renderJobEffects();
 }
 function renderHost(){
   const host=hostCache.find(h=>h.host_id===hostSelect.value);
@@ -355,6 +365,20 @@ function renderHost(){
   hostOut.textContent=host?JSON.stringify(host,null,2):
     "Noch kein eigener Host vorhanden. Oben Host-ID und lokalen Bestätigungscode eingeben und Host übernehmen.";
 }
+function renderJobEffects(){
+  const host=hostCache.find(h=>h.host_id===hv("jobHostSelect"));
+  const select=document.getElementById("jobEffectSelect");
+  const previous=select.value;select.replaceChildren();
+  for(const effect of host?.effects||[]){
+    if(!effect.enabled)continue;
+    const opt=document.createElement("option");opt.value=effect.effect_id;
+    opt.textContent=effect.effect_id;select.append(opt);
+  }
+  if([...select.options].some(o=>o.value===previous))select.value=previous;
+}
+document.getElementById("jobHostSelect").onchange=()=>{
+  hostSelect.value=hv("jobHostSelect");renderHost();renderJobEffects();
+};
 function loadSelectedEffect(){
   const host=hostCache.find(h=>h.host_id===hostSelect.value);
   const effect=host?.effects.find(e=>e.effect_id===document.getElementById("effectSelect").value);
@@ -389,20 +413,20 @@ for(const [id,path] of [
   ["hostJobRelease","/api/host/jobs/release"]]){
   document.getElementById(id).onclick=async()=>{
     const result=await api(path,{host_id:hostSelect.value,job_id:hv("hostJobId")});
-    hostOut.textContent=JSON.stringify(result,null,2);
+    document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
     if(result.status===200)document.getElementById("hostJobsRefresh").click();
   };
 }
 document.getElementById("hostJobEvaluate").onclick=async()=>{
   const result=await api("/api/host/jobs/evaluate",
     {host_id:hostSelect.value,job_id:hv("hostJobId")});
-  hostOut.textContent=JSON.stringify(result,null,2);
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
 document.getElementById("hostJobCancel").onclick=async()=>{
   const result=await api("/api/host/jobs/cancel",
     {host_id:hostSelect.value,job_id:hv("hostJobId")});
-  hostOut.textContent=JSON.stringify(result,null,2);
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
 document.getElementById("hostJobSelect").onchange=()=>{
@@ -427,13 +451,13 @@ document.getElementById("effectSave").onclick=async()=>{
   const result=await api("/api/host/effects",
     {host_id:hostSelect.value,effect_id:hv("effectId"),
      description:hv("effectDescription"),enabled:hm("effectEnabled")});
-  hostOut.textContent=JSON.stringify(result,null,2);
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)await refreshHosts();
 };
 document.getElementById("effectManual").onclick=async()=>{
   const result=await api("/api/host/effects/manual",
     {host_id:hostSelect.value,effect_id:hv("effectId")});
-  hostOut.textContent=JSON.stringify(result,null,2);
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
 document.getElementById("hostSave").onclick=async()=>{
@@ -712,7 +736,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     else:
                         result=policy.release_reserved_host_job_mock(
                             body["host_id"],principal.user_id,body["job_id"])
-                    self.reply(200 if result.state in ("reserved_mock","cancelled_mock")
+                    self.reply(200 if result.state in ("reserved_mock","waiting_mock")
                                else 409 if result.state=="waiting" else 403,
                         {"state":result.state,"reason":result.reason,
                          "simulation_only":True})

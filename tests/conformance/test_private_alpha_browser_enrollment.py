@@ -66,7 +66,7 @@ class BrowserEnrollmentTests(unittest.TestCase):
             {"invitation":"wrong","agent_id":"agent.x"})[0],429)
         status,body=self.request("/")
         self.assertEqual(status,200)
-        self.assertIn(b"Einladung einloesen" if False else b"Session-Token",body)
+        self.assertIn(b"Session-Token",body)
         self.assertNotIn(b"Session bearer (local test only",body)
 
 if __name__=="__main__":

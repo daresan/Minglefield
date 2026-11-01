@@ -33,6 +33,19 @@ class PersistedValidationTests(unittest.TestCase):
                 self.assertFalse(valid_request(record))
         self.assertFalse(valid_request(self.request | {"unexpected": 1}))
 
+    def test_request_action_scope_and_binding_field_shapes(self):
+        for key, value in (
+                ("action_type", ""), ("action_type", "x" * 129),
+                ("action_type", 42), ("scope", ""), ("scope", []),
+                ("user_id", "bad id"), ("agent_id", "bad id"),
+                ("delegation_id", "bad id"), ("target_id", "bad id")):
+            with self.subTest(key=key, value=value):
+                self.assertFalse(valid_request(self.request | {key: value}))
+        # Shape validity is not action authorization: trusted ActionRule
+        # and persisted identity bindings are checked by ClaimWorker._check.
+        self.assertTrue(valid_request(
+            self.request | {"action_type": "unknown.action", "scope": "unknown.scope"}))
+
     def test_invalid_grant_shape(self):
         for key, value in (("issuer_user_id", "bad id"), ("scopes", ["game.test_feedback"] * 2),
                            ("max_spend_minor", True), ("target_id", [])):

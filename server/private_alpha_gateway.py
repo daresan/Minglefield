@@ -30,12 +30,20 @@ fieldset{margin:1rem 0}button{cursor:pointer}</style>
 <fieldset><legend>1. Einladung einlösen (nur Auth-v2-Test)</legend>
 <label>Einladungscode <input id="invite" type="password" autocomplete="off"></label>
 <label>Gewünschte Agenten-ID <input id="agent" placeholder="agent.alice"></label>
+<label>Passwort für spätere Anmeldung (mind. 12 Zeichen) <input id="signupPassword" type="password" autocomplete="new-password"></label>
 <button id="redeem">Einladung einlösen</button>
 <p><small>Der Betreiber erstellt Einladungscodes weiterhin lokal per PowerShell.
 Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small></p></fieldset>
-<fieldset><legend>2. Anmelden</legend>
+<fieldset><legend>2. Wieder anmelden ohne neue Einladung</legend>
+<label>Benutzer-ID <input id="loginUser" autocomplete="username" placeholder="user.alice"></label>
+<label>Passwort <input id="loginPassword" type="password" autocomplete="current-password"></label>
+<button id="login">Anmelden</button>
+</fieldset>
+<fieldset><legend>2b. Vorhandener Session-Token / Alt-Konto</legend>
 <label>Session-Token (kein Einladungscode) <input id="token" type="password" autocomplete="off"></label>
-<button id="connect">Connect</button><button id="logout">Logout</button></fieldset>
+<button id="connect">Connect</button><button id="logout">Logout</button>
+<label>Passwort für bestehendes Alt-Konto setzen <input id="legacyPassword" type="password" autocomplete="new-password"></label>
+<button id="setPassword">Passwort setzen</button></fieldset>
 <fieldset><legend>3. Simulieren</legend>
 <button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
@@ -78,7 +86,9 @@ document.getElementById("redeem").onclick=async()=>{
   const secret=document.getElementById("invite").value;
   const agent_id=document.getElementById("agent").value;
   document.getElementById("invite").value="";
-  const result=await api("/api/redeem",{invitation:secret,agent_id});
+  const password=document.getElementById("signupPassword").value;
+  document.getElementById("signupPassword").value="";
+  const result=await api("/api/redeem",{invitation:secret,agent_id,password});
   if(result.status===201){
     credential=result.data.session_token;
     expiresAt=Date.now()+result.data.expires_in*1000;
@@ -86,6 +96,25 @@ document.getElementById("redeem").onclick=async()=>{
     show({status:201,message:"Session aktiviert. Connect zeigt Benutzer und Agent getrennt."});
   }
   else show(result);
+};
+document.getElementById("login").onclick=async()=>{
+  const user_id=document.getElementById("loginUser").value;
+  const password=document.getElementById("loginPassword").value;
+  document.getElementById("loginPassword").value="";
+  const result=await api("/api/login",{user_id,password});
+  if(result.status===200){
+    credential=result.data.session_token;
+    expiresAt=Date.now()+result.data.expires_in*1000;
+    updateStatus();
+    await refresh();
+  } else show({status:result.status,error:"Anmeldung fehlgeschlagen."});
+};
+document.getElementById("setPassword").onclick=async()=>{
+  if(!credential){show({message:"Für Alt-Konto zuerst gültigen Session-Token eingeben."});return;}
+  const password=document.getElementById("legacyPassword").value;
+  document.getElementById("legacyPassword").value="";
+  const result=await api("/api/password/set",{password});
+  show(result);
 };
 document.getElementById("connect").onclick=async()=>{
   const supplied=document.getElementById("token").value;
@@ -219,21 +248,21 @@ def handler_for(service):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/logout", "/api/redeem"):
+            if path not in ("/api/jobs", "/api/logout", "/api/redeem", "/api/login", "/api/password/set"):
                 self.reply(404, {"error": "not_found"})
                 return
-            if path == "/api/redeem":
-                # Deliberately loopback-only. Not a remote enrollment API.
-                if not hasattr(service, "redeem") or self.client_address[0] not in ("127.0.0.1", "::1"):
+            if path in ("/api/redeem", "/api/login", "/api/password/set"):
+                # Local test only: no reverse-proxy trust or remote registration.
+                if self.client_address[0] not in ("127.0.0.1", "::1"):
                     self.reply(404, {"error": "unavailable"})
                     return
                 origin = self.headers.get("Origin")
                 host = self.headers.get("Host", "")
-                if (host not in ("127.0.0.1:" + str(self.server.server_port),
-                                 "localhost:" + str(self.server.server_port))
-                        or (origin is not None and origin not in (
-                            "http://127.0.0.1:" + str(self.server.server_port),
-                            "http://localhost:" + str(self.server.server_port)))):
+                allowed = ("127.0.0.1:" + str(self.server.server_port),
+                           "localhost:" + str(self.server.server_port))
+                if (host not in allowed
+                        or (origin is not None and origin not in
+                            tuple("http://" + name for name in allowed))):
                     self.reply(403, {"error": "local_origin_required"})
                     return
                 with throttle:
@@ -257,14 +286,40 @@ def handler_for(service):
                 except (UnicodeDecodeError, ValueError):
                     self.reply(400, {"error": "invalid_json"})
                     return
-                if type(data) is not dict or set(data) != {"invitation", "agent_id"}:
-                    self.reply(400, {"error": "invalid_registration"})
+                if type(data) is not dict:
+                    self.reply(400, {"error": "invalid_request"})
                     return
-                session = service.redeem(data["invitation"], agent_id=data["agent_id"])
-                if session is None:
-                    self.reply(400, {"error": "invitation_invalid_or_used"})
+                if path == "/api/redeem":
+                    if not hasattr(service, "redeem") or set(data) not in (
+                            {"invitation", "agent_id"}, {"invitation", "agent_id", "password"}):
+                        self.reply(400, {"error": "invalid_registration"})
+                        return
+                    session = service.redeem(data["invitation"], agent_id=data["agent_id"],
+                                             password=data.get("password"))
+                    if session is None:
+                        self.reply(400, {"error": "invitation_invalid_or_used"})
+                        return
+                    self.reply(201, {"session_token": session, "expires_in": 900})
                     return
-                self.reply(201, {"session_token": session, "expires_in": 900})
+                if path == "/api/login":
+                    if not hasattr(service, "login") or set(data) != {"user_id", "password"}:
+                        self.reply(400, {"error": "invalid_login"})
+                        return
+                    session = service.login(data["user_id"], data["password"])
+                    if session is None:
+                        self.reply(401, {"error": "invalid_credentials"})
+                        return
+                    self.reply(200, {"session_token": session, "expires_in": 900})
+                    return
+                if (not hasattr(service, "set_password_authenticated")
+                        or set(data) != {"password"}):
+                    self.reply(400, {"error": "invalid_password_change"})
+                    return
+                if not service.set_password_authenticated(
+                        self.headers.get("Authorization"), data["password"]):
+                    self.reply(403, {"error": "invalid_session_or_password"})
+                    return
+                self.reply(200, {"status": "password_set"})
                 return
             principal = service.principal(self.headers.get("Authorization"))
             if not principal:
@@ -314,7 +369,7 @@ def run_local():
     if token:
         print("Local test token (do not share):", token, flush=True)
     else:
-        print("Auth v1 SQLite mode: provision users using private_alpha_admin.py.", flush=True)
+        print("Auth v4 SQLite mode: create invitations with private_alpha_admin.py.", flush=True)
     print("URL: http://127.0.0.1:" + str(args.port), flush=True)
     try:
         server.serve_forever()

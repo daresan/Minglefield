@@ -50,5 +50,36 @@ class HostRuntimeConfigTests(unittest.TestCase):
             prepare_comfy_effect(workflow, None, ["1.steps"])
 
 
+    def test_sqlite_persistence_and_owner_authorization(self):
+        import os
+        import sys
+        import tempfile
+        from pathlib import Path
+        server_dir = str(Path(__file__).resolve().parents[2] / "server")
+        if server_dir not in sys.path:
+            sys.path.insert(0, server_dir)
+        from private_alpha_auth import AlphaAuthStore
+        from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+        from sec01_host_commit_policy_sim import HostCommitPolicy
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = AlphaAuthStore(os.path.join(directory, "alpha.db"))
+            policy = HostCommitPolicy(IntegratedAlphaAdmission(store))
+            with store._tx() as db:
+                db.execute("INSERT INTO sec01_host_owners(host_id,owner_id) VALUES(?,?)",
+                           ("host.example", "alice"))
+            runtime = {"id": "comfy-main", "type": "comfyui",
+                       "endpoint": "http://127.0.0.1:8188", "enabled": True}
+            self.assertEqual(policy.upsert_runtime("host.example", "bob", runtime).state, "denied")
+            self.assertEqual(policy.upsert_runtime("host.example", "alice", runtime).state, "saved")
+            self.assertIsNone(policy.list_runtimes("host.example", "bob"))
+            reopened = HostCommitPolicy(IntegratedAlphaAdmission(AlphaAuthStore(
+                os.path.join(directory, "alpha.db"))))
+            self.assertEqual(reopened.list_runtimes("host.example", "alice"), [runtime])
+            self.assertEqual(reopened.delete_runtime("host.example", "bob", "comfy-main").state, "denied")
+            self.assertEqual(reopened.delete_runtime("host.example", "alice", "comfy-main").state, "deleted")
+            self.assertEqual(reopened.list_runtimes("host.example", "alice"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

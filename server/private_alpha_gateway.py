@@ -86,7 +86,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="addAgent">Agent anlegen</button>
 <label>Eigenen Agenten freigeben <select id="grantAgent" aria-label="Eigenen Agenten für Freigabe auswählen"></select></label>
 <label>Für Benutzer <select id="grantee" aria-label="Empfänger der Agentenfreigabe"></select></label><p><small>Nur aktive, bereits registrierte Alpha-Benutzer stehen zur Auswahl.</small></p>
-<button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button><p id="grantStatus" role="status" aria-live="polite"></p>
+<button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button><p id="grantStatus" role="status" aria-live="polite"></p><div id="grantList" role="status">Freigaben werden nach Agentenauswahl geladen.</div>
 <label>Agent für Simulation <select id="selectedAgent"></select></label><button id="agentDelete" type="button">Agent löschen</button>
 <p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
 <div id="agentDetails" role="status">Agent auswählen.</div>
@@ -242,6 +242,20 @@ function fillSelect(id,items,selected){
   if(items.some(item=>item.value===previous))select.value=previous;
   return select;
 }
+async function refreshAgentGrants(){
+  const agentId=document.getElementById("grantAgent").value;
+  const list=document.getElementById("grantList");
+  list.replaceChildren();
+  if(!agentId){list.textContent="Keinen eigenen Agenten ausgewählt.";return;}
+  const result=await request("/api/agent-grants?agent_id="+encodeURIComponent(agentId));
+  if(result.status!==200){list.textContent="Freigaben konnten nicht geladen werden.";return;}
+  const users=result.data.grantees;
+  if(!users.length){list.textContent="Noch keine aktiven Freigaben für diesen Agenten.";return;}
+  const heading=document.createElement("strong");
+  heading.textContent="Aktive Freigaben (demo.echo): ";
+  list.append(heading);
+  list.append(document.createTextNode(users.join(", ")));
+}
 async function refreshGrantUsers(){
   const result=await request("/api/grantable-users");
   if(result.status===200){
@@ -389,6 +403,7 @@ const refresh=async()=>{
     fillSelect("grantAgent",cachedAgents.filter(a=>a.relationship==="owned")
       .map(a=>({value:a.agent_id,label:a.agent_id})));
     await refreshGrantUsers();
+    await refreshAgentGrants();
   }
   if(credential && jobs.status===200){cachedDemoJobs=jobs.data.jobs;renderDemoJobs();}
   if(credential)await refreshHosts();
@@ -453,6 +468,7 @@ document.getElementById("addAgent").onclick=async()=>{
     document.getElementById("newAgent").value="";
     await refresh();agentSelect.value=agent_id;
     document.getElementById("grantAgent").value=agent_id;
+    await refreshAgentGrants();
   } else show(result);
 };
 async function changeGrant(revoke){
@@ -478,6 +494,7 @@ async function changeGrant(revoke){
       messages[result.data?.error]||"Freigabe fehlgeschlagen ("+result.status+").";
   }
 }
+document.getElementById("grantAgent").onchange=refreshAgentGrants;
 document.getElementById("grant").onclick=()=>changeGrant(false);
 document.getElementById("revoke").onclick=()=>changeGrant(true);
 document.getElementById("create").onclick=async()=>{
@@ -836,6 +853,14 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         self.headers.get("Authorization"))})
                 else:
                     self.reply(200, {"agents": service.agents(principal)})
+            elif path == "/api/agent-grants":
+                agent_ids=parse_qs(urlsplit(self.path).query).get("agent_id",[])
+                if len(agent_ids)!=1 or not hasattr(service,"owned_agent_grants"):
+                    self.reply(400,{"error":"invalid_agent_grants_query"})
+                else:
+                    status,result=service.owned_agent_grants(
+                        self.headers.get("Authorization"),agent_ids[0])
+                    self.reply(status,result)
             elif path == "/api/grantable-users":
                 if hasattr(service, "grantable_users"):
                     users=service.grantable_users(self.headers.get("Authorization"))

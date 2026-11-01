@@ -10,6 +10,8 @@ import hmac
 import json
 from pathlib import Path
 import secrets
+import time
+from threading import Lock
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
@@ -17,38 +19,60 @@ from urllib.parse import urlsplit
 MAX_BODY = 4096
 MAX_JOBS_PER_USER = 5
 
-PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
+PAGE = """<!doctype html><html lang="de"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Minglefield — Local Alpha</title>
-<style>body{font:16px system-ui;margin:2rem auto;max-width:45rem;padding:0 1rem}
-input,button{font:inherit;padding:.5rem;margin:.3rem}pre{white-space:pre-wrap}
-button{cursor:pointer}small{color:#555}</style>
-<h1>Minglefield — Local Alpha</h1>
-<p>Simulation only. No external effects or public accounts.</p>
-<label>Session-Token (not invitation code) <input id="token" type="password" autocomplete="off"></label>
-<button id="connect">Connect</button><button id="create">Simulate action</button>
-<pre id="output" aria-live="polite">Enter your session token, not the invitation code.</pre>
-<small>Redeem invitation via the separate local PowerShell admin command first; enter only the resulting session bearer here. It stays in this tab's memory.</small>
+<title>Minglefield — Private Alpha (lokal)</title>
+<style>body{font:16px system-ui;margin:2rem auto;max-width:42rem;padding:0 1rem}
+input,button{font:inherit;padding:.5rem;margin:.3rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+fieldset{margin:1rem 0}button{cursor:pointer}</style>
+<h1>Minglefield Private Alpha</h1>
+<p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
+<fieldset><legend>1. Einladung einlösen (nur Auth-v2-Test)</legend>
+<label>Einladungscode <input id="invite" type="password" autocomplete="off"></label>
+<label>Gewünschte Agenten-ID <input id="agent" placeholder="agent.alice"></label>
+<button id="redeem">Einladung einlösen</button>
+<p><small>Der Betreiber erstellt Einladungscodes weiterhin lokal per PowerShell.
+Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small></p></fieldset>
+<fieldset><legend>2. Anmelden</legend>
+<label>Session-Token (kein Einladungscode) <input id="token" type="password" autocomplete="off"></label>
+<button id="connect">Connect</button><button id="logout">Logout</button></fieldset>
+<fieldset><legend>3. Simulieren</legend>
+<button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
+<pre id="output" aria-live="polite">Einladung einlösen oder gültigen Session-Token eingeben.</pre>
 <script>
 let credential="";
 const out=document.getElementById("output");
 async function request(path,options={}){
-  const headers={"Authorization":"Bearer "+credential,...(options.headers||{})};
+  const headers={...(options.headers||{})};
+  if(credential)headers.Authorization="Bearer "+credential;
   const response=await fetch(path,{...options,headers,cache:"no-store"});
   return {status:response.status,data:await response.json()};
 }
-document.getElementById("connect").onclick=async()=>{
-  credential=document.getElementById("token").value;
-  document.getElementById("token").value="";
-  const [agents,jobs]=await Promise.all([request("/api/agents"),request("/api/jobs")]);
-  out.textContent=JSON.stringify({agents,jobs},null,2);
+const show=v=>out.textContent=JSON.stringify(v,null,2);
+const api=async(path,body)=>request(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+const refresh=async()=>show({agents:await request("/api/agents"),jobs:await request("/api/jobs")});
+document.getElementById("redeem").onclick=async()=>{
+  const secret=document.getElementById("invite").value;
+  const agent_id=document.getElementById("agent").value;
+  document.getElementById("invite").value="";
+  const result=await api("/api/redeem",{invitation:secret,agent_id});
+  if(result.status===201){credential=result.data.session_token;show({status:201,message:"Session erstellt und in diesem Tab aktiv. Bitte Connect klicken."});}
+  else show(result);
 };
+document.getElementById("connect").onclick=async()=>{
+  const supplied=document.getElementById("token").value;
+  if(supplied)credential=supplied;
+  document.getElementById("token").value="";
+  await refresh();
+};
+document.getElementById("refresh").onclick=refresh;
 document.getElementById("create").onclick=async()=>{
-  const id=crypto.randomUUID();
-  const result=await request("/api/jobs",{method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({action:"demo.echo",idempotency_key:id})});
-  out.textContent=JSON.stringify(result,null,2);
+  show(await api("/api/jobs",{action:"demo.echo",idempotency_key:crypto.randomUUID()}));
+};
+document.getElementById("logout").onclick=async()=>{
+  const result=credential?await request("/api/logout",{method:"POST"}):{status:401};
+  credential="";
+  show(result);
 };
 </script></html>"""
 
@@ -115,6 +139,9 @@ class AlphaSimulation:
 
 
 def handler_for(service):
+    # In-memory abuse throttle for the LOCAL browser onboarding prototype.
+    attempts = {}
+    throttle = Lock()
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             # Never log Authorization or request bodies.
@@ -161,8 +188,52 @@ def handler_for(service):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/logout"):
+            if path not in ("/api/jobs", "/api/logout", "/api/redeem"):
                 self.reply(404, {"error": "not_found"})
+                return
+            if path == "/api/redeem":
+                # Deliberately loopback-only. Not a remote enrollment API.
+                if not hasattr(service, "redeem") or self.client_address[0] not in ("127.0.0.1", "::1"):
+                    self.reply(404, {"error": "unavailable"})
+                    return
+                origin = self.headers.get("Origin")
+                host = self.headers.get("Host", "")
+                if (host not in ("127.0.0.1:" + str(self.server.server_port),
+                                 "localhost:" + str(self.server.server_port))
+                        or (origin is not None and origin not in (
+                            "http://127.0.0.1:" + str(self.server.server_port),
+                            "http://localhost:" + str(self.server.server_port)))):
+                    self.reply(403, {"error": "local_origin_required"})
+                    return
+                with throttle:
+                    now = time.monotonic()
+                    recent = [t for t in attempts.get("local", []) if now - t < 60]
+                    if len(recent) >= 5:
+                        attempts["local"] = recent
+                        self.reply(429, {"error": "try_again_later"})
+                        return
+                    recent.append(now)
+                    attempts["local"] = recent
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "json_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length.isdecimal() or int(raw_length) > MAX_BODY:
+                    self.reply(413, {"error": "invalid_body_length"})
+                    return
+                try:
+                    data = json.loads(self.rfile.read(int(raw_length)))
+                except (UnicodeDecodeError, ValueError):
+                    self.reply(400, {"error": "invalid_json"})
+                    return
+                if type(data) is not dict or set(data) != {"invitation", "agent_id"}:
+                    self.reply(400, {"error": "invalid_registration"})
+                    return
+                session = service.redeem(data["invitation"], agent_id=data["agent_id"])
+                if session is None:
+                    self.reply(400, {"error": "invitation_invalid_or_used"})
+                    return
+                self.reply(201, {"session_token": session, "expires_in": 900})
                 return
             principal = service.principal(self.headers.get("Authorization"))
             if not principal:

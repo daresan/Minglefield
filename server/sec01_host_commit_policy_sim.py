@@ -28,6 +28,11 @@ class HostCommitPolicy:
                 host_id TEXT NOT NULL, effect_id TEXT NOT NULL,
                 description TEXT NOT NULL, enabled INTEGER NOT NULL,
                 PRIMARY KEY(host_id,effect_id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_jobs(
+                job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                effect_id TEXT NOT NULL, requested_by TEXT NOT NULL,
+                state TEXT NOT NULL, created_at TEXT NOT NULL,
+                UNIQUE(host_id,job_id))""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_admins(
                 host_id TEXT NOT NULL, admin_id TEXT NOT NULL,
                 PRIMARY KEY(host_id,admin_id))""")
@@ -84,15 +89,36 @@ class HostCommitPolicy:
             return HostDecision("saved","effect_metadata_only")
 
     def manual_start_mock(self, host_id, owner_id, effect_id):
-        """Explicit manual request recorded only as intent; NEVER executes."""
+        """Persist a manual intent, not a commit or executable reservation."""
+        import secrets
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners\n                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
                 return HostDecision("denied","not_host_owner")
             row=db.execute("""SELECT enabled FROM sec01_host_effect_definitions
                 WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()
             if row!=(1,):
                 return HostDecision("denied","effect_unavailable")
-            return HostDecision("requested_mock","manual_intent_only_no_execution")
+            job_id="hostjob."+secrets.token_hex(12)
+            db.execute("""INSERT INTO sec01_host_jobs
+                (job_id,host_id,effect_id,requested_by,state,created_at)
+                VALUES(?,?,?,?,?,?)""",
+                (job_id,host_id,effect_id,owner_id,"queued",
+                 datetime.now(timezone.utc).isoformat()))
+            return HostDecision("queued_mock",job_id)
+
+    def list_host_jobs(self, host_id, owner_id):
+        """Owner-scoped, read-only persisted manual intents."""
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+                return None
+            rows=db.execute("""SELECT job_id,effect_id,state,created_at
+                FROM sec01_host_jobs WHERE host_id=?
+                ORDER BY created_at DESC,job_id DESC LIMIT 200""",
+                (host_id,)).fetchall()
+            return [dict(job_id=job,effect_id=effect,state=state,created_at=created)
+                    for job,effect,state,created in rows]
 
     def add_admin_fixture(self, host_id, admin_id):
         """Trusted LOCAL provisioning; never expose to a requester."""

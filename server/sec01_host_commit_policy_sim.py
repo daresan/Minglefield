@@ -135,6 +135,16 @@ class HostCommitPolicy:
             raise ValueError("invalid timezone")
 
     def _admin(self, db, host_id, admin_id):
+        """Host owner or explicitly provisioned legacy host admin.
+
+        This is Minglefield host policy authority, not OS administrator status.
+        """
+        if not ident(host_id) or not ident(admin_id):
+            return False
+        owner=db.execute("""SELECT 1 FROM sec01_host_owners
+            WHERE host_id=? AND owner_id=?""",(host_id,admin_id)).fetchone()
+        if owner is not None:
+            return True
         return db.execute("""SELECT 1 FROM sec01_host_admins
             WHERE host_id=? AND admin_id=?""",(host_id,admin_id)).fetchone() is not None
 

@@ -263,6 +263,17 @@ class AlphaAuthStore:
             return 200, {"agent_id":agent_id,"grantee_user_id":grantee_user_id,
                          "action":"demo.echo","revoked":revoke}
 
+    def grantable_users(self, authorization):
+        """Local-alpha directory: active user IDs only, no secrets or sessions."""
+        with self._tx() as db:
+            user=self._active_user(db,authorization)
+            if user is None:
+                return None
+            rows=db.execute("""SELECT user_id FROM alpha_users
+                WHERE disabled=0 AND user_id<>? ORDER BY user_id LIMIT 200""",
+                (user,)).fetchall()
+            return [{"user_id":row[0]} for row in rows]
+
     def available_agents(self, authorization):
         with self._tx() as db:
             user=self._active_user(db,authorization)

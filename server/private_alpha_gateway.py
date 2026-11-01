@@ -692,7 +692,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release"):
+            if path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -792,7 +792,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 return
             if path in ("/api/host/claim","/api/host/effects",
                         "/api/host/effects/manual","/api/host/jobs/cancel",
-                        "/api/host/jobs/retry",
+                        "/api/host/jobs/retry", "/api/host/jobs/delete",
                         "/api/host/jobs/evaluate", "/api/host/jobs/reserve",
                         "/api/host/jobs/release"):
                 policy=getattr(service,"_host_policy",None)
@@ -823,6 +823,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         body["host_id"],principal.user_id,body["job_id"],
                         now=int(time.time()))
                     self.reply(200 if result.state=="waiting" else 403,
+                        {"state":result.state,"reason":result.reason,
+                         "simulation_only":True})
+                    return
+                if path=="/api/host/jobs/delete":
+                    if set(body)!={"host_id","job_id"}:
+                        self.reply(400,{"error":"invalid_job_delete"})
+                        return
+                    result=policy.delete_alpha_host_job(
+                        body["host_id"],principal.user_id,body["job_id"])
+                    self.reply(200 if result.state=="deleted_alpha" else 403,
                         {"state":result.state,"reason":result.reason,
                          "simulation_only":True})
                     return
@@ -907,6 +917,17 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 self.reply(200 if result.state in ("saved","deleted") else 403,
                            {"state":result.state,"reason":result.reason,
                             "simulation_only":True})
+                return
+            if path == "/api/jobs/delete":
+                if type(body) is not dict or set(body)!={"job_id"}:
+                    self.reply(400,{"error":"invalid_job_delete"})
+                    return
+                delete=getattr(service,"delete_alpha_job",None)
+                if delete is None:
+                    self.reply(404,{"error":"unavailable"})
+                    return
+                status,result=delete(principal,body["job_id"])
+                self.reply(status,result)
                 return
             if path == "/api/agents":
                 if not hasattr(service, "create_agent") or set(body) != {"agent_id"}:

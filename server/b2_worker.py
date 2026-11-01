@@ -42,11 +42,11 @@ class ClaimWorker:
             if version not in ((2,), (3,), (4,)):
                 raise ValueError("worker requires schema v2, v3 or v4")
             job = db.execute("""SELECT job_id,user_id,agent_id,delegation_id,request_json,
-                session_token_hash,cost_minor FROM action_jobs WHERE state='queued'
+                session_token_hash,cost_minor,policy_revision FROM action_jobs WHERE state='queued'
                 ORDER BY created_at,job_id LIMIT 1""").fetchone()
             if not job:
                 return Claim("empty", "no_queued_jobs")
-            job_id, user_id, agent_id, delegation_id, request_json, session_hash, cost = job
+            job_id, user_id, agent_id, delegation_id, request_json, session_hash, cost, policy_revision = job
             reason = self._check(db, now, job)
             if reason:
                 db.execute("UPDATE action_jobs SET state='denied' WHERE job_id=? AND state='queued'",
@@ -63,7 +63,7 @@ class ClaimWorker:
             return Claim("claimed", "claimed", job_id, token)
 
     def _check(self, db, now, job):
-        job_id, user_id, agent_id, delegation_id, raw, session_hash, cost = job
+        job_id, user_id, agent_id, delegation_id, raw, session_hash, cost, policy_revision = job
         if not session_hash:
             return "missing_original_session"
         session = db.execute("""SELECT s.user_id,s.agent_id,s.delegation_id,
@@ -100,6 +100,9 @@ class ClaimWorker:
                     or grant.get("delegation_id") != delegation_id):
                 return "invalid_policy"
             # The descriptor must agree with the authoritative suspension flag.
+            if (type(policy_revision) is not int or policy_revision < 0
+                    or agent["revision"] != policy_revision):
+                return "policy_revision_changed"
             if agent["state"] != "active":
                 return "invalid_policy"
             if grant.get("status") != "active" or grant.get("requester_user_id") != user_id:

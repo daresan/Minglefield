@@ -51,6 +51,15 @@ small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left
 #agentDetails,#allJobDetails,#selectedJobDetails,#agentJobList{font-size:16px;color:var(--text)}
 #hostJobsOutput{max-height:20rem;overflow:auto}
 @media(max-width:700px){body{padding:18px 12px 40px}fieldset{padding:18px 14px}fieldset>label{flex-basis:100%}#alphaNav button{flex:1 1 40%}}
+.form-group{width:100%;flex-basis:100%;padding:18px 20px;background:#10192b;border:1px solid var(--line);border-radius:14px;min-width:0}
+.form-group h3{font-size:18px;margin:0 0 14px}.form-group h4{font-size:15px;color:var(--muted);margin:20px 0 10px}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;align-items:end}
+.field-grid>label{display:flex;flex-direction:column;gap:7px;color:var(--muted);font-size:15px;font-weight:600;min-width:0}
+.field-grid>label:has(input[type=checkbox]){flex-direction:row;align-items:center}
+.action-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px}
+.form-group p{color:var(--muted)}.form-group pre{width:100%}
+#grantStatus{flex-basis:100%;font-size:15px;color:var(--muted)}
+@media(max-width:700px){.field-grid{grid-template-columns:minmax(0,1fr)}.form-group{padding:14px}}
 </style>
 <h1>Minglefield Private Alpha</h1>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
@@ -77,7 +86,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="addAgent">Agent anlegen</button>
 <label>Eigenen Agenten freigeben <select id="grantAgent" aria-label="Eigenen Agenten für Freigabe auswählen"></select></label>
 <label>Für Benutzer <select id="grantee" aria-label="Empfänger der Agentenfreigabe"></select></label><p><small>Nur aktive, bereits registrierte Alpha-Benutzer stehen zur Auswahl.</small></p>
-<button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button>
+<button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button><p id="grantStatus" role="status" aria-live="polite"></p>
 <label>Agent für Simulation <select id="selectedAgent"></select></label><button id="agentDelete" type="button">Agent löschen</button>
 <p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
 <div id="agentDetails" role="status">Agent auswählen.</div>
@@ -128,40 +137,40 @@ beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></
 <fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
 <p>Eigene Hosts werden deinem angemeldeten Minglefield-Benutzer zugeordnet.
 Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effekte.</p>
-<label>Eigene Host-ID <input id="claimHost" placeholder="host.local"></label>
+<div class="form-group"><h3>Host übernehmen</h3><div class="field-grid"><label>Eigene Host-ID <input id="claimHost" placeholder="host.local"></label>
 <label>Lokaler Bestätigungscode aus der Gateway-Konsole
 <input id="claimSecret" type="password" autocomplete="off"></label>
-<button id="claimHostButton">Diesen lokalen Host übernehmen</button>
+</div><div class="action-row"><button id="claimHostButton">Diesen lokalen Host übernehmen</button></div>
 <p><small>Den Bestätigungscode zeigt das lokal mit --auth-db gestartete Gateway beim Start.
-Die Hostübernahme ist nur einmalig erforderlich.</small></p>
-<button id="hostDelete">Host löschen</button>
+Die Hostübernahme ist nur einmalig erforderlich.</small></p></div>
+<div class="form-group"><h3>Hosts und Regeln auswählen</h3><div class="action-row"><button id="hostDelete">Host löschen</button>
 <button id="hostRefresh">Hosts und Regeln laden</button>\n<label>Vorhandene Regel <select id="hostRuleSelect"></select></label>\n<button id="hostLoadRule">Regel bearbeiten</button>
-<label>Host <select id="hostSelect"></select></label>
+</div><div class="field-grid"><label>Host <select id="hostSelect"></select></label></div></div><div class="form-group"><h3>Regel bearbeiten</h3><div class="field-grid">
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
 <label>Priorität <input id="hostPriority" type="number" value="10" min="0"></label>
 <label><input id="hostEnabled" type="checkbox" checked> Regel aktiv</label>
 <label>Freigabe <select id="hostMode"><option value="automatic">Automatisch</option>
 <option value="manual">Manuell</option></select></label>
 <label><input id="hostIdle" type="checkbox"> Nur wenn kein anderer Effekt läuft</label>
-<label>GPU-Auslastung unter % (leer = ohne Grenze)
+</div><h4>Ressourcenbedingungen</h4><div class="field-grid"><label>GPU-Auslastung unter % (leer = ohne Grenze)
 <input id="hostGpu" type="number" min="0" max="100"></label>
 <label>Maximal parallele Effekte (leer = ohne Grenze)
 <input id="hostParallel" type="number" min="1" max="1024"></label>
-<label>Zeitzone <input id="hostTimezone" value="Europe/Berlin"></label>
+</div><h4>Zeitplan</h4><div class="field-grid"><label>Zeitzone <input id="hostTimezone" value="Europe/Berlin"></label>
 <label>Wochentage (0=Mo bis 6=So, komma-getrennt)
 <input id="hostDays" value="0,1,2,3,4,5,6"></label>
 <label>Beginn <input id="hostStart" type="time" value="00:00"></label>
 <label>Ende <input id="hostEnd" type="time" value="23:59"></label>
-<button id="hostSave">Regel speichern</button>
+</div><div class="action-row"><button id="hostSave">Regel speichern</button>
 <button id="hostRuleDelete">Regel löschen</button>
 <button id="hostToggle">Regel aktivieren/deaktivieren</button>
-<p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
+</div><p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
 Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
-werden derzeit abgelehnt.</small></p>
-<label>Effekte auf diesem Host <select id="hostEffectShortcut"></select></label>
-<button id="hostOpenEffect">Effekt im Effekte-Tab öffnen</button>
+sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
+</div><div class="form-group"><h3>Effekte auf diesem Host</h3><div class="field-grid"><label>Effekte auf diesem Host <select id="hostEffectShortcut"></select></label>
+</div><div class="action-row"><button id="hostOpenEffect">Effekt im Effekte-Tab öffnen</button>
 
-<pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre>
+</div><pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre></div>
 </fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
 
@@ -237,7 +246,8 @@ async function refreshGrantUsers(){
   const result=await request("/api/grantable-users");
   if(result.status===200){
     fillSelect("grantee",result.data.users.map(user=>({value:user.user_id,label:user.user_id})));
-  }
+    if(!result.data.users.length)document.getElementById("grantStatus").textContent="Keine anderen aktiven Benutzer verfügbar.";
+  }else document.getElementById("grantStatus").textContent="Benutzerliste konnte nicht geladen werden ("+result.status+").";
 }
 const agentSelect=document.getElementById("selectedAgent");
 let cachedAgents=[],cachedDemoJobs=[],cachedHostJobs=[];
@@ -447,10 +457,16 @@ document.getElementById("addAgent").onclick=async()=>{
 };
 async function changeGrant(revoke){
   if(!credential){show({message:"Zuerst anmelden."});return;}
-  const result=await api("/api/grants",{agent_id:document.getElementById("grantAgent").value,
-    grantee_user_id:document.getElementById("grantee").value,revoke});
+  const agentId=document.getElementById("grantAgent").value;
+  const userId=document.getElementById("grantee").value;
+  const message=document.getElementById("grantStatus");
+  if(!agentId||!userId){message.textContent="Bitte Agent und Empfänger auswählen.";return;}
+  if(!cachedAgents.some(a=>a.agent_id===agentId&&a.relationship==="owned")){
+    message.textContent="Der Agent gehört nicht zu deinem Konto.";return;
+  }
+  const result=await api("/api/grants",{agent_id:agentId,grantee_user_id:userId,revoke});
   if(result.status===200){
-    document.getElementById("agentDetails").textContent=revoke
+    message.textContent=revoke
       ?"Freigabe für "+document.getElementById("grantee").value+" widerrufen."
       :"Agent für "+document.getElementById("grantee").value+" freigegeben.";
     await refresh();
@@ -458,7 +474,7 @@ async function changeGrant(revoke){
     const messages={grant_not_permitted:"Freigabe nicht möglich: Bitte eigenen Agenten und aktiven anderen Benutzer auswählen.",
       invalid_grant:"Bitte einen Agenten und einen Empfänger auswählen.",
       unauthorized:"Session abgelaufen. Bitte erneut anmelden."};
-    document.getElementById("agentDetails").textContent=
+    message.textContent=
       messages[result.data?.error]||"Freigabe fehlgeschlagen ("+result.status+").";
   }
 }

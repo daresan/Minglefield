@@ -2,11 +2,20 @@
 
 Status: proposed, 2026-11-01. **Not implemented**. Current Private Alpha gateway is simulation-only and must not be treated as a production execution gateway. SEC-01 remains open.
 
+## Binding product decision: upload once, register persistently in existing Alpha UI (2026-11-01)
+- **No separate workflow browser or standalone ComfyUI interface.** Extend the existing Alpha **Effects** tab for workflow import/registration and parameter editing; use the existing Jobs tab for execution/status, or a contextual submit action that invokes the exact same existing job path.
+- Upload a ComfyUI JSON file from the browser to an authenticated Minglefield user-scoped private data directory, **outside the Git checkout**. Use a configured application data root (Windows user application data by default), not a path inside the repository with only a .gitignore. Use immutable opaque storage IDs, safe filenames, file-size limits, ownership checks and atomic writes.
+- **On each new upload**, parse and validate the workflow, query available ComfyUI node metadata when reachable, derive supported editable inputs and parameters, and persist the validated workflow definition **and derived form schema** in the existing Minglefield resource/effect storage. A workflow upload creates/updates a registered effect; it does not create a second workflow registry or scheduler. Preserve a content hash, version, ownership, host binding and validation warnings. Failed imports must not leave a partially registered effect.
+- Subsequent UI visits load the stored schema and generate the form without requiring a reupload or reanalysis. Allow explicit reanalysis on version change or when installed ComfyUI custom-node metadata changes; do not silently change the semantics of existing registered workflows.
+- Each execution references the stored registered effect/workflow version plus validated overrides. Dispatch through the existing Minglefield action/job/host/effect lifecycle and its audit/authorization gates.
+- The ComfyUI API is expected on the same configured local interface used by the user's installation but may be **offline**. Upload and basic JSON analysis must work offline; metadata-dependent controls must be marked unresolved until ComfyUI is reachable. Never pretend unknown node schemas are validated.
+- Remote-trigger-capable by architecture, but remote execution is disabled until SEC-01 safety gates pass. User-private workflow data must never become accessible merely because another user can see an effect ID.
+
 ## Goal / acceptance demo
 On the Windows host running Minglefield and ComfyUI:
-1. User selects an existing local ComfyUI workflow JSON from an explicitly configured directory (or uploads a JSON through the browser; the browser cannot arbitrarily browse server paths).
-2. Minglefield parses and validates it without executing it.
-3. UI generates controls for supported exposed inputs: text, integer, float, boolean, enum, seeds, image/file inputs, with defaults, ranges and labels.
+1. User uploads a ComfyUI workflow JSON in the existing Alpha Effects tab; the authenticated server stores it in the owner's private Minglefield application data directory outside Git.
+2. On upload, Minglefield parses/validates the file and persistently registers the workflow and its derived parameter schema as an existing host-bound effect.
+3. On subsequent visits the existing Effects UI regenerates controls from the stored schema for supported exposed inputs: text, integer, float, boolean, enum, seeds, image/file inputs, with defaults, ranges and labels.
 4. User edits parameters and submits a local job with authenticated authorization and explicit consent.
 5. Local executor submits a patched **API-format** prompt to a loopback ComfyUI endpoint (normally 127.0.0.1:8188), monitors progress/history, and reports output references, errors and logs.
 6. Generated outputs can later be registered as versioned Minglefield assets and committed to a game repository after review.
@@ -16,7 +25,7 @@ ComfyUI has multiple JSON representations: UI graph/export JSON and executable A
 
 API prompt nodes are keyed by node ID and have class_type and inputs. Inputs may be literals or links [node_id, output_index]. Obtain node metadata via ComfyUI /object_info when available to discover input types, widgets, ranges, enums and required/optional parameters. Do not infer a universal schema from raw JSON alone. Present node title/type and stable node ID in an advanced panel; use allowlisted widget/input types for v0.1. Exclude linked inputs from naive text editing; expose them only through explicit graph-aware controls. Unknown/custom node types remain read-only with an actionable warning until supported.
 
-The selected workflow file is read from an admin-configured allowed root; resolve real paths and reject traversal, symlinks escaping root, oversized files and non-JSON. Never let a browser-provided arbitrary filesystem path be read by the server. For uploaded image assets, validate content, size, and target input-node type; store in a controlled staging directory. Do not concatenate paths or shell commands.
+The uploaded workflow is stored in a per-user application data root outside Git. Never trust a browser-supplied filesystem path; use opaque storage IDs, authenticated ownership checks, bounded upload sizes, safe file handling and atomic registration. For uploaded image assets, validate content, size, and target input-node type; store in a controlled staging directory. Do not concatenate paths or shell commands.
 
 ## Mandatory reuse of existing Minglefield execution architecture
 **Do not create a parallel executor, queue, scheduler, job registry, authorization subsystem or independent ComfyUI job API.** Reuse and extend the existing MAP action submission, durable job/queue, host/effect registration, dispatch adapter contracts, status, audit and cancellation mechanisms. First inspect the actual B1/B2 implementation and conformance tests on the current branch; document the precise integration points and missing capabilities before writing runtime code. The Alpha UI is currently a simulation-only façade, not authorization to bypass existing security gates.
@@ -35,7 +44,7 @@ Validate ComfyUI base URL against an explicit local allowlist; prevent SSRF or u
 - No raw arbitrary filesystem path or unrestricted ComfyUI URL in job requests. Any necessary new fields must be schema-versioned and tested for backward compatibility.
 
 ## Incremental delivery
-- P0: read-only workflow discovery, parser, metadata matching, generated form and fixture tests.
+- P0: authenticated upload in existing Effects tab, private out-of-repo storage, one-time import analysis, persistent registered effect/schema, generated form and fixture tests.
 - P1: integrate one trusted workflow into existing Minglefield host/effect adapter dispatch and job lifecycle; explicit local-owner opt-in, status, cancellation and mocked ComfyUI tests.
 - P2: file/image uploads, richer custom-node controls, persistent queue, progress WebSocket and asset catalog integration.
 - P3: approved agent-triggered jobs and repository publication with independent authorization, audit and review.

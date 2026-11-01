@@ -22,10 +22,22 @@ MAX_JOBS_PER_USER = 5
 PAGE = """<!doctype html><html lang="de"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Minglefield — Local Alpha / Private Alpha (lokal)</title>
-<style>body{font:16px system-ui;margin:2rem auto;max-width:42rem;padding:0 1rem}
+<style>body{font:16px system-ui;margin:2rem auto;max-width:74rem;padding:0 1rem}
 input,button{font:inherit;padding:.5rem;margin:.3rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}
-fieldset{margin:1rem 0}button{cursor:pointer}</style>
+fieldset{margin:1rem 0;border:1px solid #8885;border-radius:12px;padding:1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:end}
+fieldset>legend{font-weight:700;padding:0 .5rem}
+fieldset>label{display:flex;flex-direction:column;gap:.25rem;min-width:13rem;flex:1 1 13rem}
+fieldset>label:has(input[type=checkbox]){flex-direction:row;align-items:center}
+fieldset>p,fieldset>pre,fieldset>fieldset{flex-basis:100%}
+input,select{max-width:100%;box-sizing:border-box}
+button{cursor:pointer;border-radius:7px;border:1px solid #8886}
+#alphaNav{display:flex;flex-wrap:wrap;gap:.4rem;margin:1rem 0}
+#alphaNav button[aria-current=page]{font-weight:800;outline:2px solid currentColor}
+#alphaNav button:disabled{opacity:.4;cursor:not-allowed}
+.alphaPanel[hidden]{display:none!important}
+#hostJobsOutput{max-height:20rem;overflow:auto}</style>
 <h1>Minglefield Private Alpha</h1>
+<nav id="alphaNav" aria-label="Bereiche"></nav>
 <p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
 <fieldset><legend>1. Einladung einlösen (nur Auth-v2-Test)</legend>
 <label>Einladungscode <input id="invite" type="password" autocomplete="off"></label>
@@ -88,12 +100,14 @@ Die Hostübernahme ist nur einmalig erforderlich.</small></p>
 Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
 werden derzeit abgelehnt.</small></p>
 <fieldset><legend>Eigene Effekte (nur Definition und Startsimulation)</legend>
+<label>Bestehenden Effekt auswählen <select id="effectSelect"></select></label>
 <label>Effekt-ID <input id="effectId" placeholder="effect.example"></label>
 <label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
 <label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
 <button id="effectSave">Effektdefinition speichern</button>
 <button id="effectManual">Job in Warteschlange einreihen</button>
 <button id="hostJobsRefresh">Host-Jobs laden</button>
+<label>Bestehenden Job auswählen <select id="hostJobSelect"></select></label>
 <label>Job-ID <input id="hostJobId" placeholder="hostjob.…"></label>
 <button id="hostJobCancel">Eingereihten Job abbrechen</button>
 <button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button>
@@ -112,7 +126,54 @@ let credential="";
 let expiresAt=0;
 const out=document.getElementById("output");
 const statusLine=document.getElementById("sessionStatus");
+const alphaSections=[...document.querySelectorAll("body>fieldset")];
+const alphaNav=document.getElementById("alphaNav");
+const alphaPanels={
+  login:alphaSections.slice(0,3),
+  agents:[alphaSections[3]],
+  jobs:[alphaSections[4]],
+  hosts:[alphaSections[5]],
+  effects:[alphaSections[5]]
+};
+let alphaTab="login";
+for(const [key,label] of [["login","Anmeldung"],["hosts","Hosts"],
+                           ["effects","Effekte"],["jobs","Jobs"],["agents","Agenten"]]){
+  const button=document.createElement("button");
+  button.textContent=label;button.type="button";button.dataset.tab=key;
+  button.onclick=()=>{alphaTab=key;renderAlphaTabs();};
+  alphaNav.append(button);
+}
+function renderAlphaTabs(){
+  if(!credential)alphaTab="login";
+  for(const button of alphaNav.querySelectorAll("button")){
+    button.disabled=!credential&&button.dataset.tab!=="login";
+    button.setAttribute("aria-current",button.dataset.tab===alphaTab?"page":"false");
+  }
+  for(const section of alphaSections){
+    section.classList.add("alphaPanel");
+    section.hidden=!(alphaPanels[alphaTab]||[]).includes(section);
+  }
+  const hostFieldset=alphaSections[5];
+  const effectFieldset=hostFieldset?.querySelector("fieldset");
+  if(effectFieldset){
+    effectFieldset.hidden=alphaTab==="hosts";
+    for(const element of hostFieldset.children){
+      if(element===effectFieldset||element.tagName==="LEGEND")continue;
+      if(element.id==="hostOutput")element.hidden=alphaTab==="effects";
+      else element.hidden=alphaTab==="effects";
+    }
+    if(alphaTab==="effects"){
+      for(const id of ["hostSelect","hostRefresh"]){
+        const element=document.getElementById(id);
+        if(element?.parentElement?.tagName==="LABEL")element.parentElement.hidden=false;
+        else if(element)element.hidden=false;
+      }
+    }
+  }
+}
+renderAlphaTabs();
 const updateStatus=()=>{
+  renderAlphaTabs();
   if(!credential){statusLine.textContent="Keine aktive Session.";return;}
   if(!expiresAt){statusLine.textContent="Session-Token im Tab aktiv (Ablaufzeit nicht bekannt).";return;}
   const seconds=Math.max(0,Math.ceil((expiresAt-Date.now())/1000));
@@ -281,9 +342,33 @@ function renderHost(){
     const opt=document.createElement("option");opt.value=rule.rule_id;
     opt.textContent=rule.rule_id+" (Priorität "+rule.priority+")";select.append(opt);
   }
+  const effects=document.getElementById("effectSelect");
+  const previousEffect=effects.value;
+  effects.replaceChildren();
+  if(host)for(const effect of host.effects){
+    const opt=document.createElement("option");opt.value=effect.effect_id;
+    opt.textContent=effect.effect_id+(effect.enabled?"":" (deaktiviert)");
+    effects.append(opt);
+  }
+  if(host?.effects.some(e=>e.effect_id===previousEffect))effects.value=previousEffect;
+  if(effects.value)loadSelectedEffect();
   hostOut.textContent=host?JSON.stringify(host,null,2):
     "Noch kein eigener Host vorhanden. Oben Host-ID und lokalen Bestätigungscode eingeben und Host übernehmen.";
 }
+function loadSelectedEffect(){
+  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const effect=host?.effects.find(e=>e.effect_id===document.getElementById("effectSelect").value);
+  if(!effect)return;
+  document.getElementById("effectId").value=effect.effect_id;
+  document.getElementById("effectDescription").value=effect.description;
+  document.getElementById("effectEnabled").checked=effect.enabled;
+}
+document.getElementById("effectSelect").onchange=loadSelectedEffect;
+document.getElementById("hostRuleSelect").onchange=()=>{
+  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));
+  if(rule)loadRule(rule);
+};
 hostSelect.onchange=renderHost;
 document.getElementById("hostLoadRule").onclick=()=>{
   const host=hostCache.find(h=>h.host_id===hostSelect.value);
@@ -320,9 +405,23 @@ document.getElementById("hostJobCancel").onclick=async()=>{
   hostOut.textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
+document.getElementById("hostJobSelect").onchange=()=>{
+  document.getElementById("hostJobId").value=hv("hostJobSelect");
+};
 document.getElementById("hostJobsRefresh").onclick=async()=>{
   const result=await request("/api/host/jobs?host_id="+encodeURIComponent(hostSelect.value));
   document.getElementById("hostJobsOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200){
+    const select=document.getElementById("hostJobSelect");
+    const old=select.value;select.replaceChildren();
+    for(const job of result.data.jobs){
+      const opt=document.createElement("option");opt.value=job.job_id;
+      opt.textContent=job.effect_id+" · "+job.state+" · "+job.job_id;
+      select.append(opt);
+    }
+    if(result.data.jobs.some(j=>j.job_id===old))select.value=old;
+    if(select.value)document.getElementById("hostJobId").value=select.value;
+  }
 };
 document.getElementById("effectSave").onclick=async()=>{
   const result=await api("/api/host/effects",

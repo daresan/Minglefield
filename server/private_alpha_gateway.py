@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import hmac
 import json
+from pathlib import Path
 import secrets
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -159,12 +160,21 @@ def handler_for(service):
                 self.reply(404, {"error": "not_found"})
 
         def do_POST(self):
-            if urlsplit(self.path).path != "/api/jobs":
+            path = urlsplit(self.path).path
+            if path not in ("/api/jobs", "/api/logout"):
                 self.reply(404, {"error": "not_found"})
                 return
             principal = service.principal(self.headers.get("Authorization"))
             if not principal:
                 self.reply(401, {"error": "unauthorized"})
+                return
+            if path == "/api/logout":
+                revoke = getattr(service, "revoke_session", None)
+                if revoke is None:
+                    self.reply(404, {"error": "unavailable"})
+                else:
+                    revoke(self.headers.get("Authorization"))
+                    self.reply(200, {"status": "session_revoked"})
                 return
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self.reply(415, {"error": "json_required"})
@@ -186,14 +196,23 @@ def handler_for(service):
 def run_local():
     parser = argparse.ArgumentParser(description="LOCAL simulation only; NEVER publish as-is")
     parser.add_argument("--port", type=int, default=8767)
+    parser.add_argument("--auth-db", help="local-only SQLite test identity store")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port must be 1024..65535")
-    token = secrets.token_urlsafe(36)
-    service = AlphaSimulation({token: TestPrincipal("demo.local", "agent.demo")})
+    if args.auth_db:
+        from private_alpha_auth import AlphaAuthStore
+        service = AlphaAuthStore(args.auth_db)
+        token = None
+    else:
+        token = secrets.token_urlsafe(36)
+        service = AlphaSimulation({token: TestPrincipal("demo.local", "agent.demo")})
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(service))
     print("LOCAL-ONLY simulation, no real effects. DO NOT EXPOSE VIA SERVE YET.")
-    print("Local test token (do not share):", token, flush=True)
+    if token:
+        print("Local test token (do not share):", token, flush=True)
+    else:
+        print("Auth v1 SQLite mode: provision users using private_alpha_admin.py.", flush=True)
     print("URL: http://127.0.0.1:" + str(args.port), flush=True)
     try:
         server.serve_forever()

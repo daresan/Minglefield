@@ -62,6 +62,10 @@ No real testers' secrets or media in the public repo. README currently says lice
 
 Security review and maintainer approval per fixed media action are mandatory before any real-media alpha gate.
 
+## Auth v1: vollständige Windows-Schrittfolge
+
+**Wichtig für neue Testende:** Die ausführliche deutschsprachige [Auth-v1-Anleitung mit ZWEI PowerShell-Fenstern](PRIVATE_ALPHA_AUTH_V1_WALKTHROUGH_DE.md) ist die maßgebliche Anleitung für Einladungen, Redeeming und Session-Login. Der Einladungscode gehört **nicht** ins Webclient-Feld; er wird im zweiten Terminal bei `Invitation secret:` eingegeben (unsichtbare Eingabe). Erst der anschließend ausgegebene `Session bearer` gehört auf die Webseite. Fenster A hält den laufenden Gateway; Fenster B dient der Administration; `$alphaDb` muss in beiden Terminals identisch gesetzt werden. Fehlersuche für HTTP 401, 15-Minuten-Sessionablauf, bereits eingelöste Einladungen und den alten Demo-Modus findet sich dort.
+
 ## Auth v1 local-only persistence (new, validation pending)
 
 The optional SQLite `private_alpha_auth.py` store now supports operator-created, one-time expiring invitations, local-only redemption, server-generated 15-minute session bearer tokens, logout/revocation, user disablement, a single per-user demo agent and persistent **simulated** job records. It is an isolated prototype, **not** OAuth, real agent onboarding, or a production identity provider. No external effects are allowed.
@@ -92,5 +96,5 @@ git diff --check
 git status --short
 ```
 
-Expected full count: **278** (previous maintainer-confirmed 268 + 7 auth store + 3 HTTP auth integration), pending Windows validation. SEC-01 and real media execution remain independently gated.
+**Maintainer-confirmed Windows baseline: 278/278 conformance tests**, MAP v0.1 validator PASS and clean working tree. Subsequent UI/documentation adjustments require renewed local verification. SEC-01 and real media execution remain independently gated.
 

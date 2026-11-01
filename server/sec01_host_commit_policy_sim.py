@@ -125,9 +125,12 @@ class HostCommitPolicy:
         if not all(ident(v) for v in (host_id,owner_id,job_id)):
             return HostDecision("denied","invalid_job")
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners
-                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
-                return HostDecision("denied","not_host_owner")
+            row=db.execute("""SELECT requested_by FROM sec01_host_jobs
+                WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()
+            owner=db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone()
+            if row is None or (row[0]!=owner_id and owner is None):
+                return HostDecision("denied","not_job_requester_or_host_owner")
             updated=db.execute("""UPDATE sec01_host_jobs SET state='cancelled'
                 WHERE host_id=? AND job_id=? AND state IN ('queued','waiting')""",
                 (host_id,job_id)).rowcount
@@ -245,11 +248,13 @@ class HostCommitPolicy:
         if not all(ident(v) for v in (host_id,owner_id,job_id)):
             return HostDecision("denied","invalid_release")
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners
-                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
-                return HostDecision("denied","not_host_owner")
-            row=db.execute("""SELECT state FROM sec01_host_jobs
+            job=db.execute("""SELECT requested_by,state FROM sec01_host_jobs
                 WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()
+            owner=db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone()
+            if job is None or (job[0]!=owner_id and owner is None):
+                return HostDecision("denied","not_job_requester_or_host_owner")
+            row=(job[1],)
             if row!=("reserved",):
                 return HostDecision("denied","job_not_reserved")
             db.execute("""UPDATE sec01_host_jobs SET state='cancelled'

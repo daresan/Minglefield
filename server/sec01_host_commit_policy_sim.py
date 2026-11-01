@@ -230,6 +230,42 @@ class HostCommitPolicy:
             return db.execute("""SELECT COUNT(*) FROM sec01_host_active_slots
                 WHERE host_id=?""",(host_id,)).fetchone()[0]
 
+    def list_hosts(self, admin_id):
+        """Only hosts administered by this authenticated Alpha user."""
+        if not ident(admin_id):
+            return []
+        with self.authority.store._tx() as db:
+            hosts=db.execute("""SELECT h.host_id,h.active FROM alpha_executor_hosts h
+                JOIN sec01_host_admins a ON a.host_id=h.host_id
+                WHERE a.admin_id=? ORDER BY h.host_id""",(admin_id,)).fetchall()
+            result=[]
+            for host_id,active in hosts:
+                rules=db.execute("""SELECT rule_id,priority,enabled,config
+                    FROM sec01_host_rules WHERE host_id=?
+                    ORDER BY priority,rule_id""",(host_id,)).fetchall()
+                slots=db.execute("""SELECT effect_key FROM sec01_host_active_slots
+                    WHERE host_id=? ORDER BY effect_key""",(host_id,)).fetchall()
+                result.append(dict(host_id=host_id,active=bool(active),
+                    active_effects=len(slots),slots=[x[0] for x in slots],
+                    rules=[dict(rule_id=rid,priority=priority,enabled=bool(enabled),
+                                config=json.loads(cfg))
+                           for rid,priority,enabled,cfg in rules]))
+            return result
+
+    def lifecycle(self, host_id, admin_id):
+        """Read-only local mock lifecycle, scoped to a host admin."""
+        with self.authority.store._tx() as db:
+            if not self._admin(db,host_id,admin_id):
+                return None
+            rows=db.execute("""SELECT c.effect_key,c.rule_id,
+                CASE WHEN s.effect_key IS NULL THEN 'finished_mock'
+                     ELSE 'reserved_mock' END
+                FROM sec01_host_commits c
+                LEFT JOIN sec01_host_active_slots s ON s.effect_key=c.effect_key
+                WHERE c.host_id=? ORDER BY c.effect_key""",(host_id,)).fetchall()
+            return [dict(effect_key=key,rule_id=rid,state=state)
+                    for key,rid,state in rows]
+
     def commit_count(self):
         with self.authority.store._tx() as db:
             return db.execute("SELECT count(*) FROM sec01_host_commits").fetchone()[0]

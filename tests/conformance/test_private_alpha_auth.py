@@ -22,6 +22,17 @@ class AlphaAuthTests(unittest.TestCase):
         self.assertIsNotNone(session)
         return invite, session
 
+    def test_grantable_user_directory_requires_session_and_filters_disabled(self):
+        _, owner = self.provision()
+        self.provision("user.friend", "agent.friend")
+        self.provision("user.disabled", "agent.disabled")
+        self.assertIsNone(self.auth.grantable_users("Bearer invalid"))
+        self.assertEqual(self.auth.grantable_users("Bearer "+owner),
+                         [{"user_id":"user.disabled"},{"user_id":"user.friend"}])
+        self.auth.disable_user("user.disabled")
+        self.assertEqual(self.auth.grantable_users("Bearer "+owner),
+                         [{"user_id":"user.friend"}])
+
     def test_invite_one_time_and_no_open_enrollment(self):
         invite, session = self.provision()
         self.assertIsNone(self.auth.redeem(invite, agent_id="agent.two"))

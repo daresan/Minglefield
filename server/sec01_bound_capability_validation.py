@@ -5,7 +5,7 @@ reference check. Both reads are separate from any effect-side atomic admission.
 """
 from dataclasses import dataclass
 
-from sec01_capability_validation import validate_capability_shape
+from sec01_capability_validation import EXPECTED_FIELDS, validate_capability_shape
 from sec01_original_session_binding import verify_original_session_reference
 
 
@@ -24,10 +24,7 @@ def validate_bound_capability(candidate, *, intent, authority, database,
     """
     if type(candidate) is not dict:
         return CompositeValidation(False, "invalid_shape")
-    if set(candidate) != (
-            __import__("sec01_capability_validation",
-                       fromlist=["EXPECTED_FIELDS"]).EXPECTED_FIELDS
-            | {"original_session_reference"}):
+    if set(candidate) != EXPECTED_FIELDS | {"original_session_reference"}:
         return CompositeValidation(False, "invalid_shape")
     reference = candidate["original_session_reference"]
     envelope = {k: v for k, v in candidate.items()

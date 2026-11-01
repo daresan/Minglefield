@@ -55,6 +55,34 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 </fieldset>
 <fieldset><legend>4. Simulieren</legend>
 <button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
+<fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
+<p>Nur Hosts, für die dein angemeldeter Benutzer als Host-Administrator hinterlegt ist.
+Keine echten Effekte, keine GPU-Abfrage.</p>
+<button id="hostRefresh">Hosts und Regeln laden</button>
+<label>Host <select id="hostSelect"></select></label>
+<label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
+<label>Priorität <input id="hostPriority" type="number" value="10" min="0"></label>
+<label><input id="hostEnabled" type="checkbox" checked> Regel aktiv</label>
+<label>Freigabe <select id="hostMode"><option value="automatic">Automatisch</option>
+<option value="manual">Manuell</option></select></label>
+<label><input id="hostIdle" type="checkbox"> Nur wenn kein anderer Effekt läuft</label>
+<label>GPU-Auslastung unter % (leer = ohne Grenze)
+<input id="hostGpu" type="number" min="0" max="100"></label>
+<label>Maximal parallele Effekte (leer = ohne Grenze)
+<input id="hostParallel" type="number" min="1" max="1024"></label>
+<label>Zeitzone <input id="hostTimezone" value="Europe/Berlin"></label>
+<label>Wochentage (0=Mo bis 6=So, komma-getrennt)
+<input id="hostDays" value="0,1,2,3,4,5,6"></label>
+<label>Beginn <input id="hostStart" type="time" value="00:00"></label>
+<label>Ende <input id="hostEnd" type="time" value="23:59"></label>
+<button id="hostSave">Regel speichern</button>
+<button id="hostDelete">Regel löschen</button>
+<button id="hostToggle">Regel aktivieren/deaktivieren</button>
+<p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
+Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
+werden derzeit abgelehnt.</small></p>
+<pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre>
+</fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
 <pre id="output" aria-live="polite">Einladung einlösen oder gültigen Session-Token eingeben.</pre>
 <script>
@@ -178,6 +206,78 @@ document.getElementById("create").onclick=async()=>{
   handleUnauthorized(result);
   show(result);
 };
+const hostOut=document.getElementById("hostOutput");
+const hostSelect=document.getElementById("hostSelect");
+let hostCache=[];
+const hv=id=>document.getElementById(id).value;
+const hm=id=>document.getElementById(id).checked;
+const minutes=s=>{const p=s.split(":").map(Number);return p[0]*60+p[1];};
+const fmtMinutes=n=>String(Math.floor(n/60)).padStart(2,"0")+":"+
+  String(n%60).padStart(2,"0");
+function hostConfig(){
+  const gpu=hv("hostGpu"),parallel=hv("hostParallel");
+  return {mode:hv("hostMode"),idle_only:hm("hostIdle"),
+    gpu_max_percent:gpu===""?null:Number(gpu),
+    max_parallel_effects:parallel===""?null:Number(parallel),
+    timezone:hv("hostTimezone"),
+    weekdays:hv("hostDays").split(",").map(x=>Number(x.trim())),
+    start_minute:minutes(hv("hostStart")),end_minute:minutes(hv("hostEnd"))};
+}
+function loadRule(rule){
+  document.getElementById("hostRuleId").value=rule.rule_id;
+  document.getElementById("hostPriority").value=rule.priority;
+  document.getElementById("hostEnabled").checked=rule.enabled;
+  document.getElementById("hostMode").value=rule.config.mode;
+  document.getElementById("hostIdle").checked=rule.config.idle_only;
+  document.getElementById("hostGpu").value=rule.config.gpu_max_percent??"";
+  document.getElementById("hostParallel").value=rule.config.max_parallel_effects??"";
+  document.getElementById("hostTimezone").value=rule.config.timezone;
+  document.getElementById("hostDays").value=rule.config.weekdays.join(",");
+  document.getElementById("hostStart").value=fmtMinutes(rule.config.start_minute);
+  document.getElementById("hostEnd").value=fmtMinutes(rule.config.end_minute);
+}
+async function refreshHosts(){
+  if(!credential){hostOut.textContent="Bitte zuerst anmelden.";return;}
+  const result=await request("/api/hosts");
+  handleUnauthorized(result);
+  if(result.status!==200){hostOut.textContent=JSON.stringify(result,null,2);return;}
+  const previous=hostSelect.value;
+  hostCache=result.data.hosts;
+  hostSelect.replaceChildren();
+  for(const host of hostCache){
+    const opt=document.createElement("option");
+    opt.value=host.host_id;opt.textContent=host.host_id;hostSelect.append(opt);
+  }
+  if(hostCache.some(h=>h.host_id===previous))hostSelect.value=previous;
+  renderHost();
+}
+function renderHost(){
+  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  hostOut.textContent=host?JSON.stringify(host,null,2):
+    "Keine administrierbaren Hosts vorhanden. Host-Admin-Rechte müssen lokal vergeben werden.";
+}
+hostSelect.onchange=renderHost;
+document.getElementById("hostRefresh").onclick=refreshHosts;
+document.getElementById("hostSave").onclick=async()=>{
+  const result=await api("/api/host/rules",{host_id:hostSelect.value,
+    rule_id:hv("hostRuleId"),priority:Number(hv("hostPriority")),
+    enabled:hm("hostEnabled"),config:hostConfig()});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+document.getElementById("hostDelete").onclick=async()=>{
+  const result=await api("/api/host/rules/delete",
+    {host_id:hostSelect.value,rule_id:hv("hostRuleId")});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+document.getElementById("hostToggle").onclick=async()=>{
+  document.getElementById("hostEnabled").checked=!hm("hostEnabled");
+  document.getElementById("hostSave").click();
+};
+hostOut.onclick=e=>{
+  if(!e.target)return;
+};
 document.getElementById("logout").onclick=async()=>{
   const result=credential?await request("/api/logout",{method:"POST"}):{status:401};
   credential="";expiresAt=0;updateStatus();
@@ -288,6 +388,31 @@ def handler_for(service):
             if not principal:
                 self.reply(401, {"error": "unauthorized"})
                 return
+            if path in ("/api/host/rules","/api/host/rules/delete"):
+                policy=getattr(service,"_host_policy",None)
+                if policy is None:
+                    self.reply(404, {"error":"host_policy_unavailable"})
+                    return
+                if type(body) is not dict:
+                    self.reply(400, {"error":"invalid_host_rule"})
+                    return
+                if path.endswith("/delete"):
+                    if set(body)!={"host_id","rule_id"}:
+                        self.reply(400, {"error":"invalid_host_rule"})
+                        return
+                    result=policy.delete_rule(body["host_id"],principal.user_id,
+                                              body["rule_id"])
+                else:
+                    if set(body)!={"host_id","rule_id","priority","enabled","config"}:
+                        self.reply(400, {"error":"invalid_host_rule"})
+                        return
+                    result=policy.upsert_rule(body["host_id"],principal.user_id,
+                        body["rule_id"],priority=body["priority"],
+                        enabled=body["enabled"],config=body["config"])
+                self.reply(200 if result.state in ("saved","deleted") else 403,
+                           {"state":result.state,"reason":result.reason,
+                            "simulation_only":True})
+                return
             if path == "/api/agents":
                 if hasattr(service, "available_agents"):
                     self.reply(200, {"agents": service.available_agents(
@@ -296,12 +421,18 @@ def handler_for(service):
                     self.reply(200, {"agents": service.agents(principal)})
             elif path == "/api/jobs":
                 self.reply(200, {"jobs": service.jobs(principal)})
+            elif path == "/api/hosts":
+                if not hasattr(service,"_host_policy"):
+                    self.reply(200, {"hosts":[],"simulation_only":True})
+                else:
+                    self.reply(200, {"hosts":service._host_policy.list_hosts(
+                        principal.user_id),"simulation_only":True})
             else:
                 self.reply(404, {"error": "not_found"})
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set"):
+            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -432,6 +563,9 @@ def run_local():
     if args.auth_db:
         from private_alpha_auth import AlphaAuthStore
         service = AlphaAuthStore(args.auth_db)
+        from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+        from sec01_host_commit_policy_sim import HostCommitPolicy
+        service._host_policy=HostCommitPolicy(IntegratedAlphaAdmission(service))
         token = None
     else:
         token = secrets.token_urlsafe(36)

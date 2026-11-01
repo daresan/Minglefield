@@ -4,12 +4,14 @@ This checks record shape, not operator authority, session validity or budget sta
 Those remain transactional checks in the caller.
 """
 import re
+from datetime import datetime
 
 from action_service import MAX_INT
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _SCOPE = re.compile(r"[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_-]*)+\Z")
 _ROLES = {"admin", "approver", "runtime_operator", "billing", "auditor"}
+_DATE_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\Z")
 
 
 def _id(value):
@@ -24,6 +26,16 @@ def _unique_strings(values, predicate):
     return (type(values) is list and bool(values)
             and all(predicate(value) for value in values)
             and len(values) == len(set(values)))
+
+
+def _date_time(value):
+    if type(value) is not str or _DATE_TIME.fullmatch(value) is None:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.utcoffset() is not None
+    except (ValueError, OverflowError):
+        return False
 
 
 def valid_request(value):
@@ -50,7 +62,7 @@ def valid_grant(value):
             and all(_id(value[key]) for key in ("target_id", "approval_ref") if key in value)
             and _unique_strings(value["scopes"], lambda scope: type(scope) is str
                                 and _SCOPE.fullmatch(scope) is not None)
-            and all(type(value[key]) is str for key in ("issued_at", "expires_at"))
+            and all(_date_time(value[key]) for key in ("issued_at", "expires_at"))
             and value["status"] in ("active", "revoked", "expired")
             and ("max_spend_minor" not in value or _integer(value["max_spend_minor"])))
 

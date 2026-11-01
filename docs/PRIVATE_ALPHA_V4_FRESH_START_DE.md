@@ -51,6 +51,7 @@ Das ist **kein Remote-Endpunkt**, sondern eine lokale Administratorfunktion. Fü
 ```powershell
 git pull --ff-only
 python -B -m unittest discover -s tests/conformance -p "test_private_alpha_relogin.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_private_alpha_password_http.py" -v
 python -B -m unittest discover -s tests/conformance -p "test_sec01_authoritative_admission_order.py" -v
 python -B -m unittest discover -s tests/conformance -p "test_private_alpha_browser_enrollment.py" -v
 python -B -m unittest discover -s tests/conformance -p "test_*.py"
@@ -59,7 +60,7 @@ git diff --check
 git status --short
 ```
 
-**Erwartung (noch unbestätigt):** 6 neue Passwort-/Recovery-Tests, 3 SEC-01-Ordnungstests, insgesamt **304 Conformance-Tests** gegenüber der zuletzt bestätigten Baseline 295.
+**Erwartung (noch unbestätigt):** 6 neue Passwort-/Recovery-Tests, 3 HTTP-Passworttests, 3 SEC-01-Ordnungstests, insgesamt **307 Conformance-Tests** gegenüber der zuletzt bestätigten Baseline 295.
 
 ## Sicherheitsgrenzen
 

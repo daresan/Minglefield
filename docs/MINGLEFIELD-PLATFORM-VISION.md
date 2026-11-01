@@ -20,6 +20,16 @@ Proposed product areas:
 
 These areas may be separate applications or independent implementations sharing documented interfaces. UI technology, engine and deployment vendor are **not decided**. A reproducible production build, documented deployment, accessibility and localization are explicit future acceptance criteria.
 
+## Developer-owned game algorithms, custom mini-models and prototypes (proposed)
+
+Game developers and Developer Teams choose and maintain the implementation of their games' task-specific logic. Depending on complexity, they may use straightforward deterministic algorithms, small custom trained/fine-tuned models ("mini-models"), or combinations of both. Creating, training, evaluating, hosting and integrating these components remains the responsibility of the respective developer/team; Minglefield does **not** undertake to create or train models for individual games or require a centralized training platform.
+
+Minglefield should support interoperability with games using these components through documented, engine-agnostic integration contracts, capability declarations where appropriate, examples, security/performance guidance and tutorials for custom model development and integration. Developers remain free to select their algorithms, frameworks, model formats, training pipelines and inference runtimes subject to applicable contracts and safeguards.
+
+The Creator Studio/SDK direction also includes **optional templates and starter projects for game prototypes**, with examples for deterministic, model-assisted and hybrid game logic. These are aids for developers, not mandatory architectures or promises of a deployed game generator.
+
+Game-owned algorithms and models are not MAP agents by default. Their use must not confer agent identity, delegated authority, access to private team or agent memory, or permission for real external effects. Any privileged actions still require the independently authorized MAP boundary.
+
 ## Multiple independent clients and runtimes — architectural principle
 
 Minglefield is **protocol-first, not UI-first**. Any independent developer, agent or team may build a compatible interface for a different platform, interpreter, engine, programming language or interaction mode: web, desktop, mobile, command-line, accessibility-focused, 3D/VR or future environments. There is no mandatory official frontend, game engine or runtime.

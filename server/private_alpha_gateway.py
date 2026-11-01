@@ -92,9 +92,11 @@ werden derzeit abgelehnt.</small></p>
 <label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
 <label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
 <button id="effectSave">Effektdefinition speichern</button>
-<button id="effectManual">Manuellen Start simulieren</button>
+<button id="effectManual">Job in Warteschlange einreihen</button>
+<button id="hostJobsRefresh">Host-Jobs laden</button>
+<pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
 <p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
-beziehungsweise eine unverbindliche Startabsicht zurückgegeben.</small></p>
+beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></p>
 </fieldset>
 <pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre>
 </fieldset>
@@ -292,6 +294,10 @@ document.getElementById("claimHostButton").onclick=async()=>{
   hostOut.textContent=JSON.stringify(result,null,2);
   if(result.status===200)await refreshHosts();
 };
+document.getElementById("hostJobsRefresh").onclick=async()=>{
+  const result=await request("/api/host/jobs?host_id="+encodeURIComponent(hostSelect.value));
+  document.getElementById("hostJobsOutput").textContent=JSON.stringify(result,null,2);
+};
 document.getElementById("effectSave").onclick=async()=>{
   const result=await api("/api/host/effects",
     {host_id:hostSelect.value,effect_id:hv("effectId"),
@@ -303,6 +309,7 @@ document.getElementById("effectManual").onclick=async()=>{
   const result=await api("/api/host/effects/manual",
     {host_id:hostSelect.value,effect_id:hv("effectId")});
   hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
 document.getElementById("hostSave").onclick=async()=>{
   const result=await api("/api/host/rules",{host_id:hostSelect.value,
@@ -442,6 +449,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(200, {"agents": service.agents(principal)})
             elif path == "/api/jobs":
                 self.reply(200, {"jobs": service.jobs(principal)})
+            elif path == "/api/host/jobs":
+                policy=getattr(service,"_host_policy",None)
+                host_id=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_id)!=1:
+                    self.reply(400,{"error":"invalid_host_jobs_query"})
+                else:
+                    jobs=policy.list_host_jobs(host_id[0],principal.user_id)
+                    self.reply(403 if jobs is None else 200,
+                        {"error":"not_host_owner"} if jobs is None else
+                        {"jobs":jobs,"simulation_only":True})
             elif path == "/api/hosts":
                 if not hasattr(service,"_host_policy"):
                     self.reply(200, {"hosts":[],"simulation_only":True})
@@ -590,7 +607,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         return
                     result=policy.manual_start_mock(body["host_id"],principal.user_id,
                         body["effect_id"])
-                self.reply(200 if result.state in ("claimed","saved","requested_mock")
+                self.reply(200 if result.state in ("claimed","saved","requested_mock","queued_mock")
                            else 403,{"state":result.state,"reason":result.reason,
                                     "simulation_only":True})
                 return

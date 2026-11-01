@@ -61,3 +61,36 @@ Even if a future remote admission service serializes current policy with new adm
 No real testers' secrets or media in the public repo. README currently says license selection is pending, so define permitted clone/modify/test use before inviting contributors. No ComfyUI execution, arbitrary workflow upload, custom code nodes, file path control or real media generation is available from this prototype.
 
 Security review and maintainer approval per fixed media action are mandatory before any real-media alpha gate.
+
+## Auth v1 local-only persistence (new, validation pending)
+
+The optional SQLite `private_alpha_auth.py` store now supports operator-created, one-time expiring invitations, local-only redemption, server-generated 15-minute session bearer tokens, logout/revocation, user disablement, a single per-user demo agent and persistent **simulated** job records. It is an isolated prototype, **not** OAuth, real agent onboarding, or a production identity provider. No external effects are allowed.
+
+From the repo root on the server computer, create a local database path **outside the Git checkout**:
+
+```powershell
+$alphaDb = "$env:LOCALAPPDATA\\Minglefield\\private-alpha.sqlite"
+New-Item -ItemType Directory -Force (Split-Path $alphaDb) | Out-Null
+python -B server/private_alpha_admin.py --db $alphaDb invite user.alice
+python -B server/private_alpha_admin.py --db $alphaDb redeem --agent agent.alice
+python -B server/private_alpha_gateway.py --auth-db $alphaDb --port 8767
+```
+
+The first command prints a **one-time invitation secret**. The redemption command prompts for that secret (hidden input) and prints a **test-only session bearer**. Copy only the session bearer into the local webclient. A second user can be provisioned using another invite and another unique agent ID. Sessions expire after 900 seconds; user disable and HTTP `POST /api/logout` revoke sessions. Job records and identities survive process restarts, unlike the original demo mode.
+
+**Never commit the local SQLite file, invite secrets or session bearers. Do not share this version via Serve yet:** invite redemption is operator-managed; there is no validated end-user self-service login, credential refresh/recovery, sufficiently hardened audit/rate limiting, origin assurance or security review. A Tailscale invitation alone does not solve those gaps.
+
+Focused tests:
+
+```powershell
+python -B -m unittest discover -s tests/conformance -p "test_private_alpha_auth.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_private_alpha_auth_gateway.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_private_alpha_gateway.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_*.py"
+python -B tests/conformance/validate_map_v01.py
+git diff --check
+git status --short
+```
+
+Expected full count: **278** (previous maintainer-confirmed 268 + 7 auth store + 3 HTTP auth integration), pending Windows validation. SEC-01 and real media execution remain independently gated.
+

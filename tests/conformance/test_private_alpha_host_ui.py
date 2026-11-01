@@ -69,6 +69,10 @@ class HostUiTests(unittest.TestCase):
         self.assertEqual(self.req("/api/host/rules/delete",self.admin,
             dict(host_id="host.one",rule_id="rule.one"))[0],200)
 
+    def test_get_host_mutation_routes_are_not_available(self):
+        self.assertEqual(self.req("/api/host/rules",self.admin)[0],404)
+        self.assertEqual(self.req("/api/host/rules/delete",self.admin)[0],404)
+
     def test_unauthenticated_denied(self):
         self.assertEqual(self.req("/api/hosts")[0],401)
         self.assertEqual(self.req("/api/host/rules",body={})[0],401)

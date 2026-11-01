@@ -168,10 +168,13 @@ nur gespeichert, nicht auf Erreichbarkeit geprüft. Workflows werden im Tab „E
 <label>ComfyUI API-Adresse <input id="runtimeEndpoint" placeholder="http://127.0.0.1:8188"></label>
 <label><input id="runtimeEnabled" type="checkbox"> Aktiviert</label>
 </div>
-<div class="action-row"><button id="runtimeRefresh">Runtimes laden</button>
+<div class="action-row"><button id="runtimeRefresh">Runtimes laden</button><button id="runtimeCheck">Verbindung prüfen</button>
 <button id="runtimeNew">Neuen Eintrag vorbereiten</button>
 <button id="runtimeSave">Instanz hinzufügen / speichern</button>
 <button id="runtimeDelete">Gespeicherte Instanz löschen</button></div>
+<div id="runtimeStatus" role="status" aria-live="polite" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid var(--line);border-radius:12px">
+<span id="runtimeLamp" aria-hidden="true" style="display:inline-block;width:18px;height:18px;border-radius:50%;background:#8792a4;box-shadow:0 0 0 3px #8792a433"></span>
+<strong id="runtimeStatusText">Nicht geprüft</strong></div>
 <pre id="runtimeOutput" aria-live="polite">Keine Runtimes geladen.</pre></div>
 <div class="form-group"><h3>Regel bearbeiten</h3><div class="field-grid">
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
@@ -675,6 +678,27 @@ document.getElementById("comfyWorkflowInspect").onclick=async()=>{
       ". Noch nicht gespeichert; keine Parameterfreigabe ohne /object_info-Metadaten.";
   }catch(error){output.textContent="Datei nicht akzeptiert: "+error.message;}
 };
+function setRuntimeLamp(state,message){
+  const colors={online:"#36ce83",offline:"#f16e72",unknown:"#8792a4"};
+  const color=colors[state]||colors.unknown;
+  document.getElementById("runtimeLamp").style.background=color;
+  document.getElementById("runtimeLamp").style.boxShadow="0 0 0 3px "+color+"33, 0 0 12px "+color+"66";
+  document.getElementById("runtimeStatusText").textContent=message;
+}
+document.getElementById("runtimeCheck").onclick=async()=>{
+  const id=hv("runtimeSelect");
+  const runtime=runtimeCache.find(r=>r.id===id);
+  if(!runtime){setRuntimeLamp("unknown","Bitte eine gespeicherte Runtime auswählen.");return;}
+  if(!runtime.enabled){setRuntimeLamp("unknown","Runtime deaktiviert");return;}
+  setRuntimeLamp("unknown","Verbindung wird geprüft …");
+  try{
+    const result=await request("/api/host/runtime/status?host_id="+
+      encodeURIComponent(hostSelect.value)+"&runtime_id="+encodeURIComponent(id));
+    if(result.status===200&&result.data.reachable)
+      setRuntimeLamp("online","ComfyUI API erreichbar");
+    else setRuntimeLamp("offline","ComfyUI nicht erreichbar: "+(result.data.error||result.status));
+  }catch(error){setRuntimeLamp("offline","Verbindungsprüfung fehlgeschlagen");}
+};
 let runtimeCache=[];
 async function refreshRuntimes(){
   const output=document.getElementById("runtimeOutput");
@@ -693,6 +717,7 @@ async function refreshRuntimes(){
   output.textContent=runtimeCache.length+" Runtime(s) konfiguriert.";
 }
 function loadSelectedRuntime(){
+  setRuntimeLamp("unknown","Noch nicht geprüft");
   const runtime=runtimeCache.find(r=>r.id===document.getElementById("runtimeSelect").value);
   document.getElementById("runtimeId").value=runtime?.id||"";
   document.getElementById("runtimeType").value=runtime?.type||"comfyui";
@@ -971,6 +996,40 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(403 if jobs is None else 200,
                         {"error":"not_host_owner"} if jobs is None else
                         {"jobs":jobs,"simulation_only":True})
+            elif path == "/api/host/runtime/status":
+                policy=getattr(service,"_host_policy",None)
+                params=parse_qs(urlsplit(self.path).query)
+                hosts=params.get("host_id",[])
+                ids=params.get("runtime_id",[])
+                if policy is None or len(hosts)!=1 or len(ids)!=1:
+                    self.reply(400,{"error":"invalid_runtime_status_query"})
+                else:
+                    runtimes=policy.list_runtimes(hosts[0],principal.user_id)
+                    if runtimes is None:
+                        self.reply(403,{"error":"not_host_owner"})
+                    else:
+                        runtime=next((r for r in runtimes if r["id"]==ids[0]),None)
+                        if runtime is None:
+                            self.reply(404,{"error":"runtime_missing"})
+                        elif not runtime["enabled"]:
+                            self.reply(200,{"reachable":False,"error":"runtime_disabled"})
+                        else:
+                            from urllib.request import urlopen
+                            try:
+                                # Validated loopback-only endpoint; no redirect-following.
+                                from urllib.request import build_opener, HTTPHandler
+                                from urllib.error import HTTPError, URLError
+                                from urllib.request import Request, HTTPRedirectHandler
+                                class NoRedirect(HTTPRedirectHandler):
+                                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                                        return None
+                                opener=build_opener(HTTPHandler(),NoRedirect())
+                                with opener.open(Request(runtime["endpoint"]+"/object_info",
+                                                        headers={"Accept":"application/json"}),timeout=2) as response:
+                                    ok=response.status==200
+                                self.reply(200,{"reachable":ok,"error":None if ok else "http_error"})
+                            except (OSError, ValueError, HTTPError, URLError):
+                                self.reply(200,{"reachable":False,"error":"connection_failed"})
             elif path == "/api/host/runtimes":
                 policy=getattr(service,"_host_policy",None)
                 host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])

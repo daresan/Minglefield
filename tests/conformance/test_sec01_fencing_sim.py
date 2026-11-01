@@ -1,7 +1,11 @@
 """SEC-01 ordering-contract simulation; no real external effects."""
 import unittest
+import sys
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 
 from sec01_fencing_sim import SimulatedEffectBoundary
 

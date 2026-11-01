@@ -60,6 +60,8 @@ class PrivateAlphaGatewayTests(unittest.TestCase):
         self.assertIn(b"Connect", html)
         self.assertIn(b"Logout", html)
         self.assertIn(b"expires_in", html)
+        self.assertIn(b"Zu viele Login-", html)
+        self.assertIn(b"Benutzer-ID oder Passwort nicht akzeptiert", html)
 
     def test_unauthenticated_api_is_denied(self):
         for method, path in (("GET", "/api/agents"), ("GET", "/api/jobs"),

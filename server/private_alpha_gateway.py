@@ -38,10 +38,21 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="connect">Connect</button><button id="logout">Logout</button></fieldset>
 <fieldset><legend>3. Simulieren</legend>
 <button id="create">Simulate action</button><button id="refresh">Jobs aktualisieren</button></fieldset>
+<p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
 <pre id="output" aria-live="polite">Einladung einlösen oder gültigen Session-Token eingeben.</pre>
 <script>
 let credential="";
+let expiresAt=0;
 const out=document.getElementById("output");
+const statusLine=document.getElementById("sessionStatus");
+const updateStatus=()=>{
+  if(!credential){statusLine.textContent="Keine aktive Session.";return;}
+  if(!expiresAt){statusLine.textContent="Session-Token im Tab aktiv (Ablaufzeit nicht bekannt).";return;}
+  const seconds=Math.max(0,Math.ceil((expiresAt-Date.now())/1000));
+  statusLine.textContent=seconds>0?
+    "Session im Tab aktiv. Verbleibend bei letzter Aktualisierung: "+seconds+" Sekunden.":
+    "Session vermutlich abgelaufen – bitte neu anmelden.";
+};
 async function request(path,options={}){
   const headers={...(options.headers||{})};
   if(credential)headers.Authorization="Bearer "+credential;
@@ -49,29 +60,49 @@ async function request(path,options={}){
   return {status:response.status,data:await response.json()};
 }
 const show=v=>out.textContent=JSON.stringify(v,null,2);
+const handleUnauthorized=(reply)=>{
+  if(reply.status===401){credential="";expiresAt=0;updateStatus();
+    statusLine.textContent="Session ungültig, widerrufen oder abgelaufen. Erneut anmelden.";}
+};
 const api=async(path,body)=>request(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-const refresh=async()=>show({agents:await request("/api/agents"),jobs:await request("/api/jobs")});
+const refresh=async()=>{
+  if(!credential){show({message:"Bitte zuerst anmelden."});return;}
+  const agents=await request("/api/agents");
+  const jobs=await request("/api/jobs");
+  handleUnauthorized(agents);
+  handleUnauthorized(jobs);
+  updateStatus();
+  show({agents,jobs});
+};
 document.getElementById("redeem").onclick=async()=>{
   const secret=document.getElementById("invite").value;
   const agent_id=document.getElementById("agent").value;
   document.getElementById("invite").value="";
   const result=await api("/api/redeem",{invitation:secret,agent_id});
-  if(result.status===201){credential=result.data.session_token;show({status:201,message:"Session erstellt und in diesem Tab aktiv. Bitte Connect klicken."});}
+  if(result.status===201){
+    credential=result.data.session_token;
+    expiresAt=Date.now()+result.data.expires_in*1000;
+    updateStatus();
+    show({status:201,message:"Session aktiviert. Connect zeigt Benutzer und Agent getrennt."});
+  }
   else show(result);
 };
 document.getElementById("connect").onclick=async()=>{
   const supplied=document.getElementById("token").value;
-  if(supplied)credential=supplied;
+  if(supplied){credential=supplied;expiresAt=0;updateStatus();}
   document.getElementById("token").value="";
   await refresh();
 };
 document.getElementById("refresh").onclick=refresh;
 document.getElementById("create").onclick=async()=>{
-  show(await api("/api/jobs",{action:"demo.echo",idempotency_key:crypto.randomUUID()}));
+  if(!credential){show({message:"Bitte zuerst anmelden."});return;}
+  const result=await api("/api/jobs",{action:"demo.echo",idempotency_key:crypto.randomUUID()});
+  handleUnauthorized(result);
+  show(result);
 };
 document.getElementById("logout").onclick=async()=>{
   const result=credential?await request("/api/logout",{method:"POST"}):{status:401};
-  credential="";
+  credential="";expiresAt=0;updateStatus();
   show(result);
 };
 </script></html>"""

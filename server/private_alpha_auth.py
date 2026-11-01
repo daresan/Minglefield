@@ -4,6 +4,7 @@ Not a public identity provider: local trusted CLI provisions and redeems
 invites. No user-submitted workflow executes. Never expose this prototype yet.
 """
 import hashlib
+import os
 import hmac
 import secrets
 import sqlite3
@@ -44,6 +45,17 @@ class AlphaAuthStore:
                 job_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, agent_id TEXT NOT NULL,
                 idempotency_key TEXT NOT NULL, action TEXT NOT NULL,
                 UNIQUE(user_id,idempotency_key));""")
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_passwords(
+                user_id TEXT PRIMARY KEY, salt BLOB NOT NULL, password_hash BLOB NOT NULL)""")
+
+    @staticmethod
+    def _password_ok(password):
+        return type(password) is str and 12 <= len(password) <= 256
+
+    @staticmethod
+    def _derive(password, salt):
+        return hashlib.scrypt(password.encode("utf-8"), salt=salt,
+                              n=2**14, r=8, p=1, dklen=32)
 
     def _tx(self):
         # Separate context manager implemented below; IMMEDIATE serializes
@@ -59,9 +71,10 @@ class AlphaAuthStore:
                        (digest(token),user_id,int(self.clock())+ttl))
         return token
 
-    def redeem(self, token, *, agent_id, session_ttl=900):
+    def redeem(self, token, *, agent_id, session_ttl=900, password=None):
         if (type(token) is not str or not token or not ident(agent_id)
-                or type(session_ttl) is not int or not 1 <= session_ttl <= 3600):
+                or type(session_ttl) is not int or not 1 <= session_ttl <= 3600
+                or (password is not None and not self._password_ok(password))):
             return None
         session = secrets.token_urlsafe(36)
         with self._tx() as db:
@@ -78,9 +91,54 @@ class AlphaAuthStore:
             db.execute("INSERT INTO alpha_users(user_id) VALUES(?)", (user,))
             db.execute("INSERT INTO alpha_agents(agent_id,user_id) VALUES(?,?)",
                        (agent_id,user))
+            if password is not None:
+                salt = os.urandom(16)
+                db.execute("INSERT INTO alpha_passwords VALUES(?,?,?)",
+                           (user, salt, self._derive(password, salt)))
             db.execute("INSERT INTO alpha_sessions VALUES(?,?,?,0)",
                        (digest(session),user,int(self.clock())+session_ttl))
         return session
+
+    def set_password_authenticated(self, authorization, password):
+        """Legacy-user migration: require a live session, never an invite."""
+        if not self._password_ok(password):
+            return False
+        principal = self.principal(authorization)
+        if principal is None:
+            return False
+        salt = os.urandom(16)
+        with self._tx() as db:
+            current = db.execute("""SELECT 1 FROM alpha_sessions s
+                JOIN alpha_users u ON u.user_id=s.user_id
+                WHERE s.token_hash=? AND s.user_id=? AND s.revoked=0
+                AND s.expires_at>? AND u.disabled=0""",
+                (digest(authorization[7:]),principal.user_id,self.clock())).fetchone()
+            if not current:
+                return False
+            db.execute("""INSERT INTO alpha_passwords VALUES(?,?,?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                salt=excluded.salt,password_hash=excluded.password_hash""",
+                (principal.user_id,salt,self._derive(password,salt)))
+            db.execute("UPDATE alpha_sessions SET revoked=1 WHERE user_id=? AND token_hash!=?",
+                       (principal.user_id,digest(authorization[7:])))
+            return True
+
+    def login(self, user_id, password, *, session_ttl=900):
+        """Issue a fresh session with a stored password verifier."""
+        if (not ident(user_id) or not self._password_ok(password)
+                or type(session_ttl) is not int or not 1 <= session_ttl <= 3600):
+            return None
+        with self._tx() as db:
+            row=db.execute("""SELECT p.salt,p.password_hash,u.disabled
+                FROM alpha_passwords p JOIN alpha_users u ON u.user_id=p.user_id
+                WHERE p.user_id=?""",(user_id,)).fetchone()
+            if not row or row[2] or not hmac.compare_digest(
+                    self._derive(password,row[0]),row[1]):
+                return None
+            session=secrets.token_urlsafe(36)
+            db.execute("INSERT INTO alpha_sessions VALUES(?,?,?,0)",
+                       (digest(session),user_id,int(self.clock())+session_ttl))
+            return session
 
     def principal(self, authorization):
         if (type(authorization) is not str or not authorization.startswith("Bearer ")

@@ -304,7 +304,12 @@ class HostCommitPolicy:
                     ORDER BY priority,rule_id""",(host_id,)).fetchall()
                 slots=db.execute("""SELECT effect_key FROM sec01_host_active_slots
                     WHERE host_id=? ORDER BY effect_key""",(host_id,)).fetchall()
-                effects=db.execute("""SELECT effect_id,description,enabled\n                    FROM sec01_host_effect_definitions WHERE host_id=?\n                    ORDER BY effect_id""",(host_id,)).fetchall()\n                result.append(dict(host_id=host_id,active=bool(active),\n                    effects=[dict(effect_id=e,description=d,enabled=bool(on))\n                             for e,d,on in effects],
+                effects=db.execute("""SELECT effect_id,description,enabled
+                    FROM sec01_host_effect_definitions WHERE host_id=?
+                    ORDER BY effect_id""",(host_id,)).fetchall()
+                result.append(dict(host_id=host_id,active=bool(active),
+                    effects=[dict(effect_id=e,description=d,enabled=bool(on))
+                             for e,d,on in effects],
                     active_effects=len(slots),slots=[x[0] for x in slots],
                     rules=[dict(rule_id=rid,priority=priority,enabled=bool(enabled),
                                 config=json.loads(cfg))

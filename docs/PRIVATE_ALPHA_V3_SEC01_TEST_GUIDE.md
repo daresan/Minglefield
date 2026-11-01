@@ -29,7 +29,7 @@ git diff --check
 git status --short
 ```
 
-Expected: **3 typed-identity tests, 5 SEC-01 bridge tests and 294 conformance tests** if no other tests were added. These are expectations, not already verified outcomes.
+Expected: **3 typed-identity tests, 5 SEC-01 bridge tests, 1 UI smoke test and 295 conformance tests** if no other tests were added. These are expectations, not already verified outcomes.
 
 For the UI restart the existing **loopback-only** gateway:
 

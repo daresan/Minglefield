@@ -108,6 +108,10 @@ The persisted B2 request is an **internal, server-generated authorization snapsh
 
 **Disposition:** SEC-01 **Critical / OPEN**. The simulation demonstrates an atomic ordering model within one SQLite authority store; it does **not** close the distributed check-to-use race for real effect-owning systems. SEC-02/03/04/05/08 remain separate prerequisites.
 
+## SEC-01 B2 integration contract — design artifact (2026-11-01)
+
+The code-based boundary review is recorded in [SEC01_B2_INTEGRATION_CONTRACT.md](SEC01_B2_INTEGRATION_CONTRACT.md). It identifies B2's existing authority sources and schema-v4 dispatch fields, the separate simulation-only SQLite fence, the proposed responsibilities of MAP authority/coordinator and the game effect owner, and the unresolved distributed atomicity choice. **No option has been approved; no real effects or B2 schema changes were introduced.** The maintainer-confirmed executable baseline remains **222/222 tests** from the preceding SQLite simulation commits. SEC-01 remains Critical / OPEN.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

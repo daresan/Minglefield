@@ -15,29 +15,42 @@ class WorkerClaimTests(unittest.TestCase):
     query = fixture.SubmissionTests.query
     counts = fixture.SubmissionTests.counts
 
-    def test_mutated_request_action_scope_and_identity_bindings_deny_claim(self):
-        cases = (
-            ("action_type", "unknown.action", "action_rule_changed"),
-            ("scope", "game.other", "action_rule_changed"),
-            ("user_id", "user.other", "request_binding_mismatch"),
-            ("agent_id", "agent.other", "request_binding_mismatch"),
-            ("delegation_id", "grant.other", "request_binding_mismatch"),
-            ("target_id", "game.other", "target_denied"),
-        )
-        for key, value, expected in cases:
-            with self.subTest(key=key):
-                self.setUp()
-                job = self.service.submit(**self.args)
-                self.assertTrue(job.allowed)
-                with sqlite3.connect(self.db) as db:
-                    request = json.loads(db.execute(
-                        "SELECT request_json FROM action_jobs").fetchone()[0])
-                    request[key] = value
-                    db.execute("UPDATE action_jobs SET request_json=?",
-                               (json.dumps(request),))
-                result = ClaimWorker(self.service).claim_next("worker.one")
-                self.assertEqual((result.state, result.reason), ("denied", expected))
-                self.assertEqual(self.counts(), (1, 2, 100))
+    def _assert_mutated_request_denied(self, key, value, expected):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        with sqlite3.connect(self.db) as db:
+            request = json.loads(db.execute(
+                "SELECT request_json FROM action_jobs").fetchone()[0])
+            request[key] = value
+            db.execute("UPDATE action_jobs SET request_json=?",
+                       (json.dumps(request),))
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", expected))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_mutated_request_action_type_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "action_type", "unknown.action", "action_rule_changed")
+
+    def test_mutated_request_scope_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "scope", "game.other", "action_rule_changed")
+
+    def test_mutated_request_user_binding_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "user_id", "user.other", "request_binding_mismatch")
+
+    def test_mutated_request_agent_binding_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "agent_id", "agent.other", "request_binding_mismatch")
+
+    def test_mutated_request_delegation_binding_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "delegation_id", "grant.other", "request_binding_mismatch")
+
+    def test_mutated_request_target_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "target_id", "game.other", "target_denied")
 
     def test_claim_is_atomic_and_never_reclaimed(self):
         job = self.service.submit(**self.args)

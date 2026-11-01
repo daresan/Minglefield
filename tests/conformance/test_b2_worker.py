@@ -259,6 +259,23 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual(self.counts(), (1, 2, 100))
 
 
+    def test_changed_agent_policy_revision_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["revision"] += 1
+            # The allowed scopes remain unchanged: revision mismatch alone must deny.
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason),
+                         ("denied", "policy_revision_changed"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
     def test_invalid_agent_revision_denies_claim(self):
         job = self.service.submit(**self.args)
         self.assertTrue(job.allowed)

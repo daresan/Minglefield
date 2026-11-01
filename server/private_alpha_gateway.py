@@ -76,9 +76,9 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <label>Neuen eigenen Agenten anlegen <input id="newAgent" placeholder="agent.example"></label>
 <button id="addAgent">Agent anlegen</button>
 <label>Eigenen Agenten freigeben <select id="grantAgent" aria-label="Eigenen Agenten für Freigabe auswählen"></select></label>
-<label>Für Benutzer <select id="grantee" aria-label="Empfänger der Agentenfreigabe"></select></label>
+<label>Für Benutzer <select id="grantee" aria-label="Empfänger der Agentenfreigabe"></select></label><p><small>Nur aktive, bereits registrierte Alpha-Benutzer stehen zur Auswahl.</small></p>
 <button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button>
-<label>Agent für Simulation <select id="selectedAgent"></select><button id="agentDelete">Agent löschen</button></label>
+<label>Agent für Simulation <select id="selectedAgent"></select></label><button id="agentDelete" type="button">Agent löschen</button>
 <p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
 <div id="agentDetails" role="status">Agent auswählen.</div>
 <div id="agentJobList"><p>Keine Agentenjobs geladen.</p></div>
@@ -449,7 +449,18 @@ async function changeGrant(revoke){
   if(!credential){show({message:"Zuerst anmelden."});return;}
   const result=await api("/api/grants",{agent_id:document.getElementById("grantAgent").value,
     grantee_user_id:document.getElementById("grantee").value,revoke});
-  show(result);
+  if(result.status===200){
+    document.getElementById("agentDetails").textContent=revoke
+      ?"Freigabe für "+document.getElementById("grantee").value+" widerrufen."
+      :"Agent für "+document.getElementById("grantee").value+" freigegeben.";
+    await refresh();
+  }else{
+    const messages={grant_not_permitted:"Freigabe nicht möglich: Bitte eigenen Agenten und aktiven anderen Benutzer auswählen.",
+      invalid_grant:"Bitte einen Agenten und einen Empfänger auswählen.",
+      unauthorized:"Session abgelaufen. Bitte erneut anmelden."};
+    document.getElementById("agentDetails").textContent=
+      messages[result.data?.error]||"Freigabe fehlgeschlagen ("+result.status+").";
+  }
 }
 document.getElementById("grant").onclick=()=>changeGrant(false);
 document.getElementById("revoke").onclick=()=>changeGrant(true);

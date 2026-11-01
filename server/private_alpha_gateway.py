@@ -25,10 +25,10 @@ input,button{font:inherit;padding:.5rem;margin:.3rem}pre{white-space:pre-wrap}
 button{cursor:pointer}small{color:#555}</style>
 <h1>Minglefield — Local Alpha</h1>
 <p>Simulation only. No external effects or public accounts.</p>
-<label>Local test token <input id="token" type="password" autocomplete="off"></label>
+<label>Session-Token (not invitation code) <input id="token" type="password" autocomplete="off"></label>
 <button id="connect">Connect</button><button id="create">Simulate action</button>
-<pre id="output" aria-live="polite">Enter a local test token.</pre>
-<small>The token stays in this tab's memory. Do not use real credentials.</small>
+<pre id="output" aria-live="polite">Enter your session token, not the invitation code.</pre>
+<small>Redeem invitation via the separate local PowerShell admin command first; enter only the resulting session bearer here. It stays in this tab's memory.</small>
 <script>
 let credential="";
 const out=document.getElementById("output");

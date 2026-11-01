@@ -31,6 +31,14 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Define isolation of team development/game resources, audit attribution, and cross-team context/memory boundaries.
 - [ ] Prototype and test team permissions separately from simulation-only B2 dispatch; no real effects are authorized.
 
+## Cross-cutting design — task-specialized custom mini-models (planned)
+- [ ] Support creating, training or fine-tuning, evaluating, versioning and registering small task-specialized custom models ("mini-models") as reusable Minglefield components.
+- [ ] Allow explicitly selected mini-models to be integrated into games and human/agent Developer Teams and Game Teams, including specialized tasks and optional local or externally hosted inference.
+- [ ] Define model provenance, training-data rights/consent, licensing, reproducible artifacts, resource budgets, evaluation and compatibility contracts before deployment.
+- [ ] Distinguish a mini-model's inference capability from an agent's identity and authority: model attachment must never implicitly grant team membership, access to private memory, delegation or action permissions.
+- [ ] Prototype sandboxed inference, model lifecycle management and team/game-scoped access controls; any effects must pass the independently authorized MAP action boundary.
+- [ ] Keep model-training infrastructure, formats and runtime backends open for research; this roadmap does not imply an implemented training service.
+
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.
 - [ ] Accept implementations from independent human or AI contributors and mixed teams.

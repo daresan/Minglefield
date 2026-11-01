@@ -215,6 +215,31 @@ class OwnerUiTests(unittest.TestCase):
                        '"/api/host/jobs/delete"'):
             self.assertIn(marker,PAGE)
 
+    def test_overnight_window_start_day_and_week_rollover(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from sec01_host_commit_policy_sim import _window_matches, HostCommitPolicy
+        rule = dict(start_minute=1200, end_minute=480, weekdays=[0])
+        zone = ZoneInfo("Europe/Vienna")
+        def matches(day, hour, minute=0):
+            return _window_matches(rule, datetime(2026, 11, day, hour, minute, tzinfo=zone))
+        self.assertTrue(matches(2, 20))
+        self.assertTrue(matches(3, 7, 59))
+        self.assertFalse(matches(3, 8))
+        self.assertFalse(matches(2, 19, 59))
+        self.assertFalse(matches(4, 2))
+        rule["weekdays"] = [6]
+        self.assertTrue(matches(1, 23))
+        self.assertTrue(matches(2, 7))
+        self.assertFalse(matches(2, 8))
+        rule["weekdays"] = [0]
+        rule["start_minute"] = 480
+        rule["end_minute"] = 1200
+        self.assertTrue(matches(2, 12))
+        self.assertFalse(matches(3, 4))
+        rule["start_minute"] = rule["end_minute"]
+        self.assertFalse(matches(2, 12))
+
     def test_alpha_tabs_and_one_click_selectors_present(self):
         from private_alpha_gateway import PAGE
         for marker in ('id="alphaNav"', 'id="effectSelect"',

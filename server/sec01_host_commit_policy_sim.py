@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from private_alpha_auth import ident
-from host_runtime_config import validate_runtime, RuntimeConfigurationError
+from host_runtime_config import validate_runtime, RuntimeConfigurationError, prepare_comfy_effect
+from comfy_workflow_inspection import WorkflowError
 
 def _window_matches(config, local):
     """Weekdays denote the day a window starts, including overnight windows."""
@@ -35,6 +36,10 @@ class HostCommitPolicy:
     def __init__(self, authority):
         self.authority=authority
         with authority.store._tx() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_comfy_workflows(
+                host_id TEXT NOT NULL, effect_id TEXT NOT NULL,
+                runtime_id TEXT NOT NULL, workflow TEXT NOT NULL,
+                metadata TEXT NOT NULL, PRIMARY KEY(host_id,effect_id))""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
                 host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,
                 config TEXT NOT NULL, PRIMARY KEY(host_id,runtime_id))""")
@@ -127,6 +132,37 @@ class HostCommitPolicy:
             db.execute("""INSERT INTO sec01_host_owners VALUES(?,?)""",
                        (host_id,owner_id))
             return HostDecision("claimed","local_host_claimed_no_effect")
+
+    def import_comfy_workflow(self, host_id, owner_id, runtime_id, effect_id,
+                              description, workflow, object_info, bindings):
+        """Persist a validated workflow under an existing host effect, never execute it."""
+        if (not all(ident(v) for v in (host_id, owner_id, runtime_id, effect_id))
+                or type(description) is not str or len(description)>256
+                or type(workflow) is not dict or type(object_info) is not dict):
+            return HostDecision("denied", "invalid_workflow_import")
+        raw = json.dumps(workflow, separators=(",", ":"), ensure_ascii=False)
+        try:
+            prepared = prepare_comfy_effect(raw, object_info, bindings)
+        except (WorkflowError, ValueError, TypeError):
+            return HostDecision("denied", "invalid_workflow_import")
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id, owner_id)).fetchone() is None:
+                return HostDecision("denied", "not_host_owner")
+            row = db.execute("SELECT config FROM sec01_host_runtimes WHERE host_id=? AND runtime_id=?",
+                             (host_id, runtime_id)).fetchone()
+            if row is None or json.loads(row[0])["type"] != "comfyui":
+                return HostDecision("denied", "runtime_unavailable")
+            db.execute("""INSERT INTO sec01_host_effect_definitions
+                (host_id,effect_id,description,enabled) VALUES(?,?,?,0)
+                ON CONFLICT(host_id,effect_id) DO UPDATE SET description=excluded.description,
+                enabled=0""", (host_id, effect_id, description))
+            db.execute("""INSERT INTO sec01_host_comfy_workflows
+                (host_id,effect_id,runtime_id,workflow,metadata) VALUES(?,?,?,?,?)
+                ON CONFLICT(host_id,effect_id) DO UPDATE SET runtime_id=excluded.runtime_id,
+                workflow=excluded.workflow,metadata=excluded.metadata""",
+                (host_id, effect_id, runtime_id, raw, json.dumps(prepared, sort_keys=True)))
+        return HostDecision("saved", "comfy_workflow_saved_disabled_no_execution")
 
     def define_effect(self, host_id, owner_id, effect_id, description, enabled):
         """Metadata only. No arbitrary commands, paths, endpoints or execution."""

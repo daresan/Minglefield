@@ -21,7 +21,7 @@ MAX_JOBS_PER_USER = 5
 
 PAGE = """<!doctype html><html lang="de"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Minglefield — Private Alpha (lokal)</title>
+<title>Minglefield — Local Alpha / Private Alpha (lokal)</title>
 <style>body{font:16px system-ui;margin:2rem auto;max-width:42rem;padding:0 1rem}
 input,button{font:inherit;padding:.5rem;margin:.3rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}
 fieldset{margin:1rem 0}button{cursor:pointer}</style>

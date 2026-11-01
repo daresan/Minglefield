@@ -120,6 +120,15 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
 <pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre></fieldset>
 <fieldset id="effectPanel"><legend>Effekte konfigurieren</legend>
+<p><strong>Workflow = ComfyUI API-JSON-Datei.</strong> Ein Workflow wird als
+Effekt importiert, nicht als Runtime. Exportiere ihn in ComfyUI im API-Format.</p>
+<fieldset><legend>Workflow-Datei auswählen (lokale Vorschau)</legend>
+<label>ComfyUI API-JSON <input type="file" id="comfyWorkflowFile" accept=".json,application/json"></label>
+<button id="comfyWorkflowInspect">Datei prüfen</button>
+<pre id="comfyWorkflowOutput" aria-live="polite">Noch keine Datei ausgewählt.</pre>
+<p><small>Diese Vorschau lädt nichts auf den Server und speichert noch keinen Workflow.
+Der persistente Import mit Metadatenprüfung und Parameterauswahl folgt separat.</small></p>
+</fieldset>
 <label>Host-Zuordnung <select id="effectHostSelect"></select></label>
 <fieldset><legend>Effektdefinitionen (keine Jobeinreichung)</legend>
 <label>Bestehenden Effekt auswählen <select id="effectSelect"></select></label>
@@ -145,19 +154,24 @@ Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effe
 Die Hostübernahme ist nur einmalig erforderlich.</small></p></div>
 <div class="form-group"><h3>Hosts und Regeln auswählen</h3><div class="action-row"><button id="hostDelete">Host löschen</button>
 <button id="hostRefresh">Hosts und Regeln laden</button>\n<label>Vorhandene Regel <select id="hostRuleSelect"></select></label>\n<button id="hostLoadRule">Regel bearbeiten</button>
-</div><div class="field-grid"><label>Host <select id="hostSelect"></select></label></div></div><div class="form-group"><h3>Lokale Runtimes</h3>
-<p>Mehrere ComfyUI-Instanzen pro Host. Nur Konfiguration, keine Ausführung.</p>
+</div><div class="field-grid"><label>Host <select id="hostSelect"></select></label></div></div><div class="form-group"><h3>Schritt 2 · ComfyUI-Instanz verbinden</h3>
+<p><strong>Runtime = laufender ComfyUI-Server, keine Datei.</strong>
+Wähle zuerst oben einen eigenen Host. Trage dann eine frei gewählte Runtime-ID
+und die lokale ComfyUI-Adresse ein (normalerweise http://127.0.0.1:8188).
+Klicke auf „Instanz hinzufügen / speichern“. Du kannst mehrere Instanzen pro Host eintragen.</p>
+<p>Bereits gespeicherte Instanzen erscheinen in der Liste. Der Endpunkt wird hier
+nur gespeichert, nicht auf Erreichbarkeit geprüft. Workflows werden im Tab „Effekte“ importiert.</p>
 <div class="field-grid">
-<label>Runtime auswählen <select id="runtimeSelect"></select></label>
-<label>Runtime-ID <input id="runtimeId" placeholder="comfy-main"></label>
+<label>Gespeicherte Instanzen <select id="runtimeSelect"></select></label>
+<label>Neue oder bestehende Runtime-ID <input id="runtimeId" placeholder="comfy-main"></label>
 <label>Typ <select id="runtimeType"><option value="comfyui">ComfyUI</option></select></label>
-<label>Lokaler Endpunkt <input id="runtimeEndpoint" placeholder="http://127.0.0.1:8188"></label>
+<label>ComfyUI API-Adresse <input id="runtimeEndpoint" placeholder="http://127.0.0.1:8188"></label>
 <label><input id="runtimeEnabled" type="checkbox"> Aktiviert</label>
 </div>
 <div class="action-row"><button id="runtimeRefresh">Runtimes laden</button>
-<button id="runtimeNew">Neue Runtime</button>
-<button id="runtimeSave">Runtime speichern</button>
-<button id="runtimeDelete">Runtime löschen</button></div>
+<button id="runtimeNew">Neuen Eintrag vorbereiten</button>
+<button id="runtimeSave">Instanz hinzufügen / speichern</button>
+<button id="runtimeDelete">Gespeicherte Instanz löschen</button></div>
 <pre id="runtimeOutput" aria-live="polite">Keine Runtimes geladen.</pre></div>
 <div class="form-group"><h3>Regel bearbeiten</h3><div class="field-grid">
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
@@ -642,6 +656,24 @@ document.getElementById("hostRuleSelect").onchange=()=>{
   const host=hostCache.find(h=>h.host_id===hostSelect.value);
   const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));
   if(rule)loadRule(rule);
+};
+document.getElementById("comfyWorkflowInspect").onclick=async()=>{
+  const output=document.getElementById("comfyWorkflowOutput");
+  const file=document.getElementById("comfyWorkflowFile").files[0];
+  if(!file){output.textContent="Bitte zuerst eine API-JSON-Datei auswählen.";return;}
+  if(file.size>1024*1024){output.textContent="Datei über 1 MiB: Vorschau abgebrochen.";return;}
+  try{
+    const workflow=JSON.parse(await file.text());
+    if(!workflow||typeof workflow!=="object"||Array.isArray(workflow))
+      throw Error("JSON-Objekt erwartet");
+    const nodes=Object.entries(workflow);
+    if(!nodes.length||!nodes.every(([id,node])=>/^\\d+$/.test(id)&&node&&
+       typeof node.class_type==="string"&&node.inputs&&typeof node.inputs==="object"))
+      throw Error("Kein ComfyUI API-Prompt-Format erkannt (numerische Node-IDs, class_type, inputs)");
+    output.textContent="API-JSON erkannt: "+nodes.length+
+      " Nodes. Datei: "+file.name+
+      ". Noch nicht gespeichert; keine Parameterfreigabe ohne /object_info-Metadaten.";
+  }catch(error){output.textContent="Datei nicht akzeptiert: "+error.message;}
 };
 let runtimeCache=[];
 async function refreshRuntimes(){

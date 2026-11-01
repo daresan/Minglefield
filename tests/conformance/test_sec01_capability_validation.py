@@ -90,6 +90,57 @@ class SEC01CapabilityValidationTests(unittest.TestCase):
                     self.assertIn(result.reason,
                                   ("authority_unavailable", "authority_epoch_changed"))
 
+    def test_fabricated_unsigned_envelope_can_pass_shape_checks(self):
+        # Structural validity alone does not authenticate an issuer.
+        fabricated = dict(self.candidate)
+        self.assertEqual(
+            self.check(fabricated).reason, "shape_valid_not_authenticated")
+        self.assertEqual(self.fence.accepted_count(), 0)
+
+    def test_revocation_after_validation_is_caught_only_at_atomic_accept(self):
+        # This is an explicit check-to-use regression: passing the validator
+        # must never be confused with a durable admission decision.
+        from sec01_authority_fencing_sqlite import AuthoritySnapshot
+        self.assertTrue(self.check().valid)
+        snapshot = AuthoritySnapshot(
+            self.candidate["authority_identities"],
+            self.candidate["authority_epochs"])
+        self.fence.invalidate("grant", IDS[1])
+        rejected = self.fence.accept(
+            snapshot=snapshot, effect_key=INTENT.effect_idempotency_key,
+            binding=(INTENT.job_id, INTENT.request_fingerprint,
+                     INTENT.adapter_id, INTENT.target_id))
+        self.assertEqual((rejected.accepted, rejected.reason),
+                         (False, "authority_revoked_or_changed"))
+        self.assertEqual(self.fence.accepted_count(), 0)
+        self.assertFalse(self.check().valid)
+
+    def test_mutated_target_adapter_and_effect_key_are_rejected(self):
+        for key, replacement in (
+                ("target_id", "target.other"),
+                ("adapter_id", "fake.other"),
+                ("adapter_version", "2"),
+                ("effect_idempotency_key", "effect." + "c" * 64),
+                ("request_fingerprint", "c" * 64)):
+            with self.subTest(field=key):
+                candidate = dict(self.candidate, **{key: replacement})
+                self.assertEqual(self.check(candidate).reason,
+                                 "intent_binding_mismatch")
+        self.assertEqual(self.fence.accepted_count(), 0)
+
+    def test_newly_provisioned_session_identity_exposes_missing_trusted_link(self):
+        # The current B2 projection deliberately excludes the original
+        # session identifier/hash. This validator therefore cannot prove that
+        # authority_identities[0] is the original job session.
+        other = ("session.other", IDS[1], IDS[2], IDS[3])
+        self.fence.provision(other)
+        candidate = dict(self.candidate,
+                         authority_identities=other,
+                         authority_epochs=self.fence.snapshot(other).epochs)
+        self.assertEqual(self.check(candidate).reason,
+                         "shape_valid_not_authenticated")
+        self.assertEqual(self.fence.accepted_count(), 0)
+
     def test_authority_identity_and_epoch_shapes_fail_closed(self):
         variants = (
             dict(self.candidate, authority_identities=IDS[:-1] + ("user.other",)),

@@ -107,6 +107,25 @@ class HostCommitPolicy:
                  datetime.now(timezone.utc).isoformat()))
             return HostDecision("queued_mock",job_id)
 
+    def retry_cancelled_host_job(self, host_id, actor_id, job_id):
+        """Create a new queued intent, keeping the cancelled original."""
+        import secrets
+        if not all(ident(v) for v in (host_id, actor_id, job_id)):
+            return HostDecision("denied", "invalid_job")
+        with self.authority.store._tx() as db:
+            row = db.execute("SELECT effect_id, requested_by, state FROM sec01_host_jobs WHERE host_id=? AND job_id=?", (host_id, job_id)).fetchone()
+            owner = db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?", (host_id, actor_id)).fetchone()
+            if row is None or (row[1] != actor_id and owner is None):
+                return HostDecision("denied", "not_job_requester_or_host_owner")
+            if row[2] != "cancelled":
+                return HostDecision("denied", "job_not_cancelled")
+            effect = db.execute("SELECT enabled FROM sec01_host_effect_definitions WHERE host_id=? AND effect_id=?", (host_id, row[0])).fetchone()
+            if effect != (1,):
+                return HostDecision("denied", "effect_unavailable")
+            new_id = "hostjob." + secrets.token_hex(12)
+            db.execute("INSERT INTO sec01_host_jobs(job_id,host_id,effect_id,requested_by,state,created_at) VALUES(?,?,?,?,?,?)", (new_id,host_id,row[0],actor_id,"queued",datetime.now(timezone.utc).isoformat()))
+            return HostDecision("queued_mock", new_id)
+
     def list_host_jobs(self, host_id, owner_id):
         """Owner-scoped, read-only persisted manual intents."""
         with self.authority.store._tx() as db:

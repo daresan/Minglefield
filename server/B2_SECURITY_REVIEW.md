@@ -59,6 +59,16 @@ The shared `ClaimWorker._check` is used transactionally at claim, prestart and d
 
 **Closure prerequisites:** document and test date-time behavior; explicitly distinguish structural validity from execution authorization; decide on a persisted-request grammar and action-specific parameter contracts; rerun full conformance and obtain maintainer review. No real effects authorized.
 
+## SEC-07 persisted-request contract and parameter boundary — 2026-11-01
+
+The persisted B2 request is an **internal, server-generated authorization snapshot**, not the MAP `action.submit` wire envelope. `ActionService.submit` derives `user_id` from the authenticated session, `scope` from the trusted `ActionRule`, and `version=1` from the server. It copies caller-supplied `parameters` only after validating JSON compatibility, canonicalizing them, and enforcing the 65,536-character encoded limit. The snapshot is persisted with a SHA-256 fingerprint; dispatch rechecks canonical content and fingerprint.
+
+`valid_request` checks the exact internal property set, version, ID shapes, nonempty action/scope strings, action length and object-typed parameters. It **does not** decide which actions exist, whether a scope is granted, whether a target is authorized or whether parameters satisfy the semantics of a particular game action. The shared transactional `ClaimWorker._check` rechecks identity bindings, trusted action rule/scope, grant and agent allowlists, and target. Dispatch additionally checks request fingerprint and adapter mapping. Mutation regression tests now exercise action/scope/identity/target changes at claim, as well as structural corruptions at prestart and dispatch.
+
+**Future adapter contract requirement:** each real adapter or game integration must specify its own versioned parameter contract (schema or equivalent validation), including types, ranges, size/complexity bounds, semantic constraints and canonicalization expectations. The trusted integration boundary must validate parameters before any effect; arbitrary JSON object shape is **not** sufficient evidence of action-specific safety. No universal game-parameter schema is imposed by MAP or this B2 simulation.
+
+**Remaining review:** assess strict grammar for the internal action/scope fields separately from the wire format, and determine whether additional policy revision/fingerprint consistency checks are needed at each transition. The tests added after the 200/200 baseline require local verification. SEC-07 remains open until that review and maintainer acceptance. This section does not authorize external effects.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

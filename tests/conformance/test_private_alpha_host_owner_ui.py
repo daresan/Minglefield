@@ -194,6 +194,27 @@ class OwnerUiTests(unittest.TestCase):
                        'alphaTab="jobs";renderAlphaTabs()'):
             self.assertIn(marker,PAGE)
 
+    def test_alpha_delete_host_job_is_authorized_and_reservation_safe(self):
+        self.assertEqual(self.claim(self.owner)[0],200)
+        self.assertEqual(self.req("/api/host/effects",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo",
+                 description="metadata",enabled=True))[0],200)
+        _,created=self.req("/api/host/effects/manual",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo"))
+        payload=dict(host_id="host.local",job_id=created["reason"])
+        self.assertEqual(self.req("/api/host/jobs/delete",self.other,payload)[0],403)
+        self.assertEqual(self.req("/api/host/jobs/delete",self.owner,payload)[0],200)
+        status,jobs=self.req("/api/host/jobs?host_id=host.local",self.owner)
+        self.assertEqual(status,200)
+        self.assertNotIn(payload["job_id"],[j["job_id"] for j in jobs["jobs"]])
+
+    def test_unified_jobs_selector_and_delete_control(self):
+        from private_alpha_gateway import PAGE
+        for marker in ('id="allJobsSelect"', 'id="allJobDelete"',
+                       'renderAllJobs()', '"/api/jobs/delete"',
+                       '"/api/host/jobs/delete"'):
+            self.assertIn(marker,PAGE)
+
     def test_alpha_tabs_and_one_click_selectors_present(self):
         from private_alpha_gateway import PAGE
         for marker in ('id="alphaNav"', 'id="effectSelect"',

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from private_alpha_auth import ident
+from host_runtime_config import validate_runtime, RuntimeConfigurationError
 
 def _window_matches(config, local):
     """Weekdays denote the day a window starts, including overnight windows."""
@@ -34,6 +35,9 @@ class HostCommitPolicy:
     def __init__(self, authority):
         self.authority=authority
         with authority.store._tx() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
+                host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,
+                config TEXT NOT NULL, PRIMARY KEY(host_id,runtime_id))""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_owners(
                 host_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_effect_definitions(

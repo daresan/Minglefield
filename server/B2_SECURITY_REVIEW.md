@@ -39,6 +39,26 @@ The shared `ClaimWorker._check` path used by claim, prestart and dispatch now re
 
 **Residual work before closure:** compare all security-relevant persisted grant, agent and request fields against their normative schemas; validate typed identity/target/action/scope fields and policy revisions as appropriate; verify nested request parameters against action-specific contracts if defined; establish fail-closed behavior at each transition for remaining malformed-but-type-compatible cases. A passing suite is not evidence of complete schema coverage. SEC-01 through SEC-06 and SEC-08/09 retain their separate status; no actual external effects authorized.
 
+## SEC-07 schema-parity assessment — 2026-11-01
+
+Status: **mitigated, still open pending targeted follow-up**. Maintainer validated commit `862b0a4`: 18/18 dispatch tests, 199/199 conformance tests, MAP v0.1 validator PASS, clean diff/status. This is a local regression baseline, not proof of complete structural or production security.
+
+| Field / boundary | Schema comparison | B2 handling / decision |
+| --- | --- | --- |
+| Agent identity, operators, roles, state, revision and optional runtime/policy | Matches required/optional property sets, ID patterns, role enumeration, uniqueness and basic types | B2 additionally caps integer values at `MAX_INT` and rejects booleans as integers: intentional operational restriction. |
+| Grant identities, optional target/approval, scopes, status and budget | Matches property sets, ID/scope patterns, unique nonempty scopes and status values | B2 caps budgets at `MAX_INT`; intentional operational restriction. |
+| Grant `issued_at` / `expires_at` | Schema declares `format: date-time` | Structural validator currently checks strings only; worker parses timestamps via `_time` and checks interval against server time. Need explicit date-time parity tests and consistent rejection of malformed formats. |
+| Agent `policy.allowed_scopes` | Schema permits an empty array, but each present item must be a nonempty string and entries unique | Structural validator accepts empty arrays; transactional worker requires list membership for the action, so empty means no authorization. |
+| Agent `policy` absent | Schema allows omission | Structural validator accepts omission; worker requires an explicit policy/allowed-scopes list to authorize. This is an intentional fail-closed execution restriction, not a schema mismatch. |
+| Grant `target_id` absent | Schema permits omission | Worker requires exact target binding to the request; omission denies execution. Intentional fail-closed restriction. |
+| Persisted B2 request | Internal record includes version, user/agent/delegation/target, action type, scope, parameters | **Not identical to** `action-submit.schema.json`, which defines an envelope with a payload. Do not claim wire-schema parity for this internal format. Define/document a dedicated persisted-record contract if promoted beyond B2. |
+| Request action/scope strings | Wire `action-submit` constrains `payload.action_type` to a dotted pattern; persisted request has no dedicated normative schema | Current validator accepts any nonempty action/scope strings (action capped at 128); worker requires trusted action rule and exact scope match. Assess whether a stricter internal grammar is appropriate without changing wire semantics. |
+| Nested request `parameters` | Wire payload permits arbitrary JSON object; action-specific contract is not defined here | Validator checks object type only. Worker binds to a trusted action rule but does not perform action-specific parameter validation; keep this as a separate integration contract requirement. |
+
+The shared `ClaimWorker._check` is used transactionally at claim, prestart and dispatch. Post-claim/post-ready mutation tests cover malformed agent, grant and request records and deny before ready/dispatch intent. These tests are **not** exhaustive fuzzing or proof of schema equivalence.
+
+**Closure prerequisites:** document and test date-time behavior; explicitly distinguish structural validity from execution authorization; decide on a persisted-request grammar and action-specific parameter contracts; rerun full conformance and obtain maintainer review. No real effects authorized.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

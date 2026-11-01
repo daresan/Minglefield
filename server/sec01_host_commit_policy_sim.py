@@ -22,6 +22,12 @@ class HostCommitPolicy:
     def __init__(self, authority):
         self.authority=authority
         with authority.store._tx() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_owners(
+                host_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_effect_definitions(
+                host_id TEXT NOT NULL, effect_id TEXT NOT NULL,
+                description TEXT NOT NULL, enabled INTEGER NOT NULL,
+                PRIMARY KEY(host_id,effect_id))""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_admins(
                 host_id TEXT NOT NULL, admin_id TEXT NOT NULL,
                 PRIMARY KEY(host_id,admin_id))""")
@@ -37,6 +43,56 @@ class HostCommitPolicy:
                 binding TEXT NOT NULL, rule_id TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
                 effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)""")
+
+    def claim_local_host(self, host_id, owner_id):
+        """Only invoke after gateway-local bootstrap proof AND live Alpha session."""
+        if not ident(host_id) or not ident(owner_id):
+            return HostDecision("denied","invalid_host")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM alpha_users WHERE user_id=? AND disabled=0""",
+                          (owner_id,)).fetchone() is None:
+                return HostDecision("denied","invalid_owner")
+            old=db.execute("""SELECT owner_id FROM sec01_host_owners
+                WHERE host_id=?""",(host_id,)).fetchone()
+            if old is not None:
+                return HostDecision("claimed" if old==(owner_id,) else "denied",
+                    "already_owned" if old==(owner_id,) else "host_owned_by_other_user")
+            host=db.execute("""SELECT operator_id FROM alpha_executor_hosts
+                WHERE host_id=?""",(host_id,)).fetchone()
+            if host is not None and host[0]!=owner_id:
+                return HostDecision("denied","existing_host_requires_operator_migration")
+            if host is None:
+                db.execute("""INSERT INTO alpha_executor_hosts VALUES(?,?,1)""",
+                           (host_id,owner_id))
+            db.execute("""INSERT INTO sec01_host_owners VALUES(?,?)""",
+                       (host_id,owner_id))
+            return HostDecision("claimed","local_host_claimed_no_effect")
+
+    def define_effect(self, host_id, owner_id, effect_id, description, enabled):
+        """Metadata only. No arbitrary commands, paths, endpoints or execution."""
+        if (not ident(host_id) or not ident(owner_id) or not ident(effect_id)
+                or type(description) is not str or len(description)>256
+                or type(enabled) is not bool):
+            return HostDecision("denied","invalid_effect_definition")
+        with self.authority.store._tx() as db:
+            if not self._admin(db,host_id,owner_id):
+                return HostDecision("denied","not_host_owner")
+            db.execute("""INSERT INTO sec01_host_effect_definitions VALUES(?,?,?,?)
+                ON CONFLICT(host_id,effect_id) DO UPDATE SET
+                description=excluded.description,enabled=excluded.enabled""",
+                (host_id,effect_id,description,int(enabled)))
+            return HostDecision("saved","effect_metadata_only")
+
+    def manual_start_mock(self, host_id, owner_id, effect_id):
+        """Explicit manual request recorded only as intent; NEVER executes."""
+        with self.authority.store._tx() as db:
+            if not self._admin(db,host_id,owner_id):
+                return HostDecision("denied","not_host_owner")
+            row=db.execute("""SELECT enabled FROM sec01_host_effect_definitions
+                WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()
+            if row!=(1,):
+                return HostDecision("denied","effect_unavailable")
+            return HostDecision("requested_mock","manual_intent_only_no_execution")
 
     def add_admin_fixture(self, host_id, admin_id):
         """Trusted LOCAL provisioning; never expose to a requester."""
@@ -236,8 +292,11 @@ class HostCommitPolicy:
             return []
         with self.authority.store._tx() as db:
             hosts=db.execute("""SELECT h.host_id,h.active FROM alpha_executor_hosts h
-                JOIN sec01_host_admins a ON a.host_id=h.host_id
-                WHERE a.admin_id=? ORDER BY h.host_id""",(admin_id,)).fetchall()
+                WHERE EXISTS(SELECT 1 FROM sec01_host_admins a
+                    WHERE a.host_id=h.host_id AND a.admin_id=?)
+                  OR EXISTS(SELECT 1 FROM sec01_host_owners o
+                    WHERE o.host_id=h.host_id AND o.owner_id=?)
+                ORDER BY h.host_id""",(admin_id,admin_id)).fetchall()
             result=[]
             for host_id,active in hosts:
                 rules=db.execute("""SELECT rule_id,priority,enabled,config
@@ -245,7 +304,7 @@ class HostCommitPolicy:
                     ORDER BY priority,rule_id""",(host_id,)).fetchall()
                 slots=db.execute("""SELECT effect_key FROM sec01_host_active_slots
                     WHERE host_id=? ORDER BY effect_key""",(host_id,)).fetchall()
-                result.append(dict(host_id=host_id,active=bool(active),
+                effects=db.execute("""SELECT effect_id,description,enabled\n                    FROM sec01_host_effect_definitions WHERE host_id=?\n                    ORDER BY effect_id""",(host_id,)).fetchall()\n                result.append(dict(host_id=host_id,active=bool(active),\n                    effects=[dict(effect_id=e,description=d,enabled=bool(on))\n                             for e,d,on in effects],
                     active_effects=len(slots),slots=[x[0] for x in slots],
                     rules=[dict(rule_id=rid,priority=priority,enabled=bool(enabled),
                                 config=json.loads(cfg))

@@ -31,13 +31,13 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Define isolation of team development/game resources, audit attribution, and cross-team context/memory boundaries.
 - [ ] Prototype and test team permissions separately from simulation-only B2 dispatch; no real effects are authorized.
 
-## Cross-cutting design — task-specialized custom mini-models (planned)
-- [ ] Support creating, training or fine-tuning, evaluating, versioning and registering small task-specialized custom models ("mini-models") as reusable Minglefield components.
-- [ ] Allow explicitly selected mini-models to be integrated into games and human/agent Developer Teams and Game Teams, including specialized tasks and optional local or externally hosted inference.
-- [ ] Define model provenance, training-data rights/consent, licensing, reproducible artifacts, resource budgets, evaluation and compatibility contracts before deployment.
-- [ ] Distinguish a mini-model's inference capability from an agent's identity and authority: model attachment must never implicitly grant team membership, access to private memory, delegation or action permissions.
-- [ ] Prototype sandboxed inference, model lifecycle management and team/game-scoped access controls; any effects must pass the independently authorized MAP action boundary.
-- [ ] Keep model-training infrastructure, formats and runtime backends open for research; this roadmap does not imply an implemented training service.
+## Cross-cutting design — developer-owned game logic and specialized models (planned)
+- [ ] Ensure MAP-compatible games can integrate developer-chosen deterministic algorithms and/or small task-specialized custom models ("mini-models") according to task complexity; neither approach is mandatory.
+- [ ] Keep design, implementation, training/fine-tuning, evaluation, deployment and integration of such algorithms/models the responsibility and choice of the individual game developer or Developer Team. Minglefield is **not** required to provide a central model-creation or training service.
+- [ ] Publish engine-agnostic interface specifications, recommended practices, security and performance guidance, and practical tutorials for building and integrating custom mini-models or deterministic algorithms.
+- [ ] Provide optional example implementations and reusable starter templates for game prototypes, including deterministic-only, mini-model-assisted and hybrid patterns.
+- [ ] Document versioning, reproducibility, model/data provenance and licensing considerations where relevant, while allowing independently developed runtimes and inference backends.
+- [ ] Preserve game/team isolation and MAP authorization boundaries: integrating game logic or a model never implicitly grants agent identity, delegation, private memory access or external-effect authority.
 
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.

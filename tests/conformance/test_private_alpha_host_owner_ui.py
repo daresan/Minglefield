@@ -152,12 +152,14 @@ class OwnerUiTests(unittest.TestCase):
         self.assertEqual(self.req("/api/host/jobs/release",self.other,payloads[0])[0],403)
         self.assertEqual(self.req("/api/host/jobs/release",self.owner,payloads[0])[0],200)
         self.assertEqual(self.policy.active_count("host.local"),0)
+        self.assertEqual(self.req("/api/host/jobs?host_id=host.local",self.owner)[1]["jobs"][0]["state"],"waiting")
         self.assertEqual(self.req("/api/host/jobs/reserve",self.owner,payloads[1])[0],200)
 
     def test_alpha_tabs_and_one_click_selectors_present(self):
         from private_alpha_gateway import PAGE
         for marker in ('id="alphaNav"', 'id="effectSelect"',
-                       'id="hostJobSelect"', 'renderAlphaTabs()',
+                       'id="hostJobSelect"', 'id="hostJobPanel"',
+                       'id="jobActionOutput"', 'id="jobEffectSelect"', 'renderAlphaTabs()',
                        'loadSelectedEffect', 'button.disabled=!credential'):
             self.assertIn(marker,PAGE)
 

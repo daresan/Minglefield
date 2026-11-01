@@ -112,6 +112,10 @@ The persisted B2 request is an **internal, server-generated authorization snapsh
 
 The code-based boundary review is recorded in [SEC01_B2_INTEGRATION_CONTRACT.md](SEC01_B2_INTEGRATION_CONTRACT.md). It identifies B2's existing authority sources and schema-v4 dispatch fields, the separate simulation-only SQLite fence, the proposed responsibilities of MAP authority/coordinator and the game effect owner, and the unresolved distributed atomicity choice. **No option has been approved; no real effects or B2 schema changes were introduced.** The maintainer-confirmed executable baseline remains **222/222 tests** from the preceding SQLite simulation commits. SEC-01 remains Critical / OPEN.
 
+## SEC-01 preferred architecture — remote authoritative admission (2026-11-01)
+
+The maintainer selected **Variant 2** as the preferred *design direction*. See [SEC01_REMOTE_ADMISSION_ARCHITECTURE.md](SEC01_REMOTE_ADMISSION_ARCHITECTURE.md) for responsibility boundaries, revoke-first/admit-first transaction order, capability-to-admission race, partitions, game-side receipt enforcement and required adversarial tests. A remotely performed authorization *precheck* is explicitly insufficient; the service must own a serialized admission/idempotency decision and the game must enforce its receipt at its effect boundary. This preference is **not production approval**, does not solve admission-to-game execution atomicity by itself and does not change B2. Maintainer-confirmed executable baseline: **257/257** conformance tests, MAP validator PASS and clean working tree. SEC-01 remains Critical / OPEN.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

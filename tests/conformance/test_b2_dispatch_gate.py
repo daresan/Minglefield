@@ -55,6 +55,21 @@ class DispatchGateTests(unittest.TestCase):
                     [("denied", None)])
                 self.assertEqual(self.counts(), (1, 4, 100))
 
+    def test_agent_revision_change_after_ready_denies_dispatch(self):
+        claim = self.prepare()
+        with closing(sqlite3.connect(self.db)) as db:
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["revision"] += 1
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        result = self.dispatch(claim)
+        self.assertEqual((result.state, result.reason),
+                         ("denied", "policy_revision_changed"))
+        self.assertEqual(self.query(
+            "SELECT state,effect_idempotency_key,adapter_id,dispatched_at FROM action_jobs"),
+            [("denied", None, None, None)])
+        self.assertEqual(self.counts(), (1, 4, 100))
+
     def test_commits_intent_once(self):
         claim = self.prepare()
         self.assertEqual(self.dispatch(claim).state, "dispatch_committed")

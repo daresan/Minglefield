@@ -96,6 +96,18 @@ The persisted B2 request is an **internal, server-generated authorization snapsh
 
 **Disposition:** SEC-01 remains **Critical / open**. The next implementation step should be a simulation-only adversarial regression demonstrating the current post-intent limitation, followed by an independent adapter-fencing RFC before production design approval.
 
+## SEC-01 isolated SQLite acceptance simulation — maintainer validation (2026-11-01)
+
+**Verified baseline:** after commits `6971f4a` and `6128d1c`, the maintainer reported **222/222 full conformance tests OK**, MAP v0.1 validator PASS, and clean `git diff --check` and `git status --short`. This validates the new tests as part of the complete suite; no separate focused-test output was supplied.
+
+**Implementation scope:** `server/sec01_fencing_sqlite.py` is an independent simulation-only SQLite acceptance model. `BEGIN IMMEDIATE` serializes `revoke()` and `accept()` across separate database connections; persisted authority epoch/revocation and idempotency key/binding records survive reconstruction of the component. Six new tests cover revocation-before-acceptance, acceptance-before-revocation, restart persistence, binding mismatch, competing acceptance/revocation transactions, same-key concurrency and invalid input. The preexisting in-memory simulation remains separate.
+
+**Integration decision:** keep this model **disconnected from B2**. It uses a separate local SQLite database; it does not derive authority from B2 grants, original sessions or agent revisions, authenticate an executor, exchange cryptographically bound capabilities, or invoke any external game/adapter. An `already_accepted_no_new_effect` response after revocation describes historical acceptance, **not permission for new invocation**. The acceptance record is not evidence that an external effect executed or succeeded.
+
+**Next design checkpoint:** inspect B2's authority sources and transaction boundaries and draft an explicit adapter-fencing integration contract (authority/epoch ownership, immutable binding and issuer, revocation propagation, atomic effect-side acceptance, failure/reconciliation semantics). Do not add automatic dispatch replay, real calls, shared-schema migration or a public API on the basis of these passing tests.
+
+**Disposition:** SEC-01 **Critical / OPEN**. The simulation demonstrates an atomic ordering model within one SQLite authority store; it does **not** close the distributed check-to-use race for real effect-owning systems. SEC-02/03/04/05/08 remain separate prerequisites.
+
 ## Release gates for future real-adapter design
 
 1. Resolve SEC-01 through SEC-04 and SEC-06, including a concrete threat model and independent adversarial tests.

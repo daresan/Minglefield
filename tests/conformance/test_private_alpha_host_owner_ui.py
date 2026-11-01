@@ -51,7 +51,7 @@ class OwnerUiTests(unittest.TestCase):
         from private_alpha_gateway import PAGE
         for control in ('id="claimHost"', 'id="claimSecret"',
                         'id="claimHostButton"', 'id="effectSave"',
-                        'id="effectManual"', 'id="hostJobsRefresh"', 'id="hostJobCancel"'):
+                        'id="effectManual"', 'id="hostJobsRefresh"', 'id="hostJobCancel"', 'id="hostJobEvaluate"'):
             self.assertIn(control,PAGE)
         self.assertNotIn("Host-Admin-Rechte müssen lokal vergeben werden",PAGE)
         self.assertNotIn("Nur Hosts, für die dein angemeldeter Benutzer",PAGE)
@@ -102,6 +102,26 @@ class OwnerUiTests(unittest.TestCase):
         jobs=self.req("/api/host/jobs?host_id=host.local",self.owner)[1]["jobs"]
         self.assertEqual(jobs[0]["state"],"cancelled")
         self.assertEqual(self.policy.active_count("host.local"),0)
+
+    def test_policy_preflight_waits_without_reservation(self):
+        self.assertEqual(self.claim(self.owner)[0],200)
+        self.assertEqual(self.req("/api/host/effects",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo",
+                 description="metadata",enabled=True))[0],200)
+        _,created=self.req("/api/host/effects/manual",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo"))
+        job_id=created["reason"]
+        payload=dict(host_id="host.local",job_id=job_id)
+        self.assertEqual(self.req("/api/host/jobs/evaluate",self.other,payload)[0],403)
+        status,decision=self.req("/api/host/jobs/evaluate",self.owner,payload)
+        self.assertEqual(status,200)
+        self.assertEqual(decision["state"],"waiting")
+        self.assertEqual(decision["reason"],"no_enabled_rule")
+        self.assertEqual(self.policy.active_count("host.local"),0)
+        self.assertEqual(self.req("/api/host/jobs?host_id=host.local",
+                                  self.owner)[1]["jobs"][0]["state"],"waiting")
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payload)[0],200)
+        self.assertEqual(self.req("/api/host/jobs/evaluate",self.owner,payload)[0],403)
 
     def test_claim_requires_console_secret_and_cannot_steal(self):
         self.assertEqual(self.claim(self.owner,"wrong")[0],403)

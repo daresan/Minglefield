@@ -106,6 +106,9 @@ class SEC01OriginalSessionBindingTests(unittest.TestCase):
     def test_uncommitted_job_and_malformed_context_denied(self):
         submission = self.service.submit(**self.args)
         self.assertTrue(submission.allowed)
+        ClaimWorker(self.service)  # migrate action schema v1 -> v2
+        migrate_b2_prestart(self.db)  # v2 -> v3
+        migrate_b2_dispatch(self.db)  # v3 -> v4 (projection prerequisite)
         self.assertIsNone(project_committed_intent(
             self.db, job_id=submission.job_id))
         with self.assertRaises(ValueError):

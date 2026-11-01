@@ -56,6 +56,23 @@ class AlphaReloginTests(unittest.TestCase):
             "Bearer "+old,"passphrase-test-123456"))
         self.assertIsNone(self.store.login("user.legacy","passphrase-test-123456"))
 
+    def test_local_operator_recovery_preserves_legacy_agent_and_jobs(self):
+        old=self.store.redeem(self.store.invite("user.legacy"),agent_id="agent.legacy")
+        principal=self.store.principal("Bearer "+old)
+        self.assertEqual(self.store.submit(principal,
+            {"action":"demo.echo","idempotency_key":"first"})[0],201)
+        self.now+=901
+        self.assertTrue(self.store.operator_reset_password(
+            "user.legacy","new-test-password-123"))
+        self.assertIsNone(self.store.principal("Bearer "+old))
+        fresh=self.store.login("user.legacy","new-test-password-123")
+        self.assertIsNotNone(fresh)
+        p=self.store.principal("Bearer "+fresh)
+        self.assertEqual(p.agent_id,"agent.legacy")
+        self.assertEqual(len(self.store.jobs(p)),1)
+        self.assertFalse(self.store.operator_reset_password(
+            "user.missing","new-test-password-123"))
+
     def test_existing_password_is_not_stored_in_plaintext(self):
         self.store.redeem(self.store.invite("user.alpha"),agent_id="agent.alpha",
                           password="passphrase-test-123456")

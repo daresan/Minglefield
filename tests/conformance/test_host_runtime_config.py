@@ -50,6 +50,17 @@ class HostRuntimeConfigTests(unittest.TestCase):
             prepare_comfy_effect(workflow, None, ["1.steps"])
 
 
+    def test_direct_gateway_script_import(self):
+        import subprocess
+        import sys
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[2]
+        command = [sys.executable, "-B", "-c",
+                   "import host_runtime_config; import sec01_host_commit_policy_sim"]
+        result = subprocess.run(command, cwd=root / "server",
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_sqlite_persistence_and_owner_authorization(self):
         import os
         import sys

@@ -1,4 +1,4 @@
-"""Host-admin policy and local atomic mock-commit conformance tests."""
+﻿"""Host-admin policy and local atomic mock-commit conformance tests."""
 import json
 import sys
 import tempfile
@@ -138,9 +138,20 @@ class HostPolicyTests(unittest.TestCase):
             binding=self.binding,now=NOW).state,"duplicate")
 
     def test_bad_rule_rejected(self):
-        self.assertEqual(self.save(rule(gpu_max_percent=101)).reason,"invalid_rule")
-        self.assertEqual(self.save(rule(start_minute=1300,end_minute=100)).reason,
-                         "invalid_rule")
+        self.assertEqual(
+            self.save(rule(gpu_max_percent=101)).reason,
+            "invalid_rule"
+        )
+        self.assertEqual(
+            self.save(rule(start_minute=100, end_minute=100)).reason,
+            "invalid_rule"
+        )
+
+    def test_overnight_rule_accepted(self):
+        self.assertEqual(
+            self.save(rule(start_minute=1300, end_minute=100)).reason,
+            "rule_saved"
+        )
 
 if __name__=="__main__":
     unittest.main()

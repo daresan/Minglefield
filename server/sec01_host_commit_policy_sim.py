@@ -257,12 +257,12 @@ class HostCommitPolicy:
             row=(job[1],)
             if row!=("reserved",):
                 return HostDecision("denied","job_not_reserved")
-            db.execute("""UPDATE sec01_host_jobs SET state='cancelled'
+            db.execute("""UPDATE sec01_host_jobs SET state='waiting'
                 WHERE host_id=? AND job_id=? AND state='reserved'""",
                 (host_id,job_id))
             db.execute("""DELETE FROM sec01_host_active_slots
                 WHERE host_id=? AND effect_key=?""",(host_id,job_id))
-            return HostDecision("cancelled_mock","reserved_mock_slot_released")
+            return HostDecision("waiting_mock","reserved_mock_slot_released_job_retained")
 
     def add_admin_fixture(self, host_id, admin_id):
         """Trusted LOCAL provisioning; never expose to a requester."""

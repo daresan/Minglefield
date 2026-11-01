@@ -51,7 +51,7 @@ class OwnerUiTests(unittest.TestCase):
         from private_alpha_gateway import PAGE
         for control in ('id="claimHost"', 'id="claimSecret"',
                         'id="claimHostButton"', 'id="effectSave"',
-                        'id="effectManual"'):
+                        'id="effectManual"', 'id="hostJobsRefresh"'):
             self.assertIn(control,PAGE)
         self.assertNotIn("Host-Admin-Rechte müssen lokal vergeben werden",PAGE)
         self.assertNotIn("Nur Hosts, für die dein angemeldeter Benutzer",PAGE)
@@ -70,9 +70,20 @@ class OwnerUiTests(unittest.TestCase):
         self.assertEqual(self.req("/api/host/effects",self.owner,
             dict(host_id="host.local",effect_id="effect.demo",
                  description="only metadata",enabled=True))[0],200)
-        self.assertEqual(self.req("/api/host/effects/manual",self.owner,
-            dict(host_id="host.local",effect_id="effect.demo"))[1]["reason"],
-            "manual_intent_only_no_execution")
+        result=self.req("/api/host/effects/manual",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo"))
+        self.assertEqual(result[0],200)
+        self.assertEqual(result[1]["state"],"queued_mock")
+        self.assertTrue(result[1]["reason"].startswith("hostjob."))
+        jobs=self.req("/api/host/jobs?host_id=host.local",self.owner)
+        self.assertEqual(jobs[0],200)
+        self.assertEqual(len(jobs[1]["jobs"]),1)
+        self.assertEqual(jobs[1]["jobs"][0]["state"],"queued")
+        self.assertEqual(jobs[1]["jobs"][0]["job_id"],result[1]["reason"])
+        self.assertEqual(self.req("/api/host/jobs?host_id=host.local",self.other)[0],403)
+        reopened=HostCommitPolicy(IntegratedAlphaAdmission(self.store))
+        self.assertEqual(reopened.list_host_jobs("host.local","user.owner"),
+                         jobs[1]["jobs"])
 
     def test_claim_requires_console_secret_and_cannot_steal(self):
         self.assertEqual(self.claim(self.owner,"wrong")[0],403)

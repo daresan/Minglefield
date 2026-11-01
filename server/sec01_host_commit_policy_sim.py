@@ -65,6 +65,45 @@ class HostCommitPolicy:
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
                 effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)""")
 
+    def upsert_runtime(self, host_id, owner_id, config):
+        """Store host-owned runtime settings without starting execution."""
+        if not ident(host_id) or not ident(owner_id):
+            return HostDecision("denied", "invalid_host")
+        try:
+            runtime = validate_runtime(config)
+        except (RuntimeConfigurationError, ValueError):
+            return HostDecision("denied", "invalid_runtime")
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id, owner_id)).fetchone() is None:
+                return HostDecision("denied", "not_host_owner")
+            db.execute("""INSERT INTO sec01_host_runtimes
+                (host_id,runtime_id,config) VALUES(?,?,?)
+                ON CONFLICT(host_id,runtime_id) DO UPDATE SET config=excluded.config""",
+                (host_id, runtime["id"], json.dumps(runtime, sort_keys=True)))
+        return HostDecision("saved", "runtime_config_saved")
+
+    def list_runtimes(self, host_id, owner_id):
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id, owner_id)).fetchone() is None:
+                return None
+            rows = db.execute("SELECT config FROM sec01_host_runtimes WHERE host_id=? ORDER BY runtime_id",
+                              (host_id,)).fetchall()
+            return [json.loads(row[0]) for row in rows]
+
+    def delete_runtime(self, host_id, owner_id, runtime_id):
+        if not all(ident(v) for v in (host_id, owner_id, runtime_id)):
+            return HostDecision("denied", "invalid_runtime")
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id, owner_id)).fetchone() is None:
+                return HostDecision("denied", "not_host_owner")
+            count = db.execute("DELETE FROM sec01_host_runtimes WHERE host_id=? AND runtime_id=?",
+                               (host_id, runtime_id)).rowcount
+            return HostDecision("deleted" if count else "denied",
+                                "runtime_deleted" if count else "runtime_missing")
+
     def claim_local_host(self, host_id, owner_id):
         """Only invoke after gateway-local bootstrap proof AND live Alpha session."""
         if not ident(host_id) or not ident(owner_id):

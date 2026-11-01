@@ -14,6 +14,8 @@ def main():
     redeem.add_argument("--agent", required=True)
     revoke = sub.add_parser("disable-user")
     revoke.add_argument("user_id")
+    reset = sub.add_parser("reset-password", help="LOCAL OPERATOR ONLY: reset password")
+    reset.add_argument("user_id")
     args = parser.parse_args()
     store = AlphaAuthStore(args.db)
     if args.command == "invite":
@@ -25,6 +27,14 @@ def main():
         if session is None:
             raise SystemExit("Invitation invalid, used, expired or agent occupied")
         print("Session bearer (local test only; never share):", session)
+    elif args.command == "reset-password":
+        password = getpass.getpass("New password (min 12 chars): ")
+        confirmation = getpass.getpass("Repeat new password: ")
+        if password != confirmation:
+            raise SystemExit("Passwords differ")
+        if not store.operator_reset_password(args.user_id, password):
+            raise SystemExit("Unknown/disabled account or invalid password")
+        print("Password reset; old sessions revoked. Agents and jobs preserved.")
     else:
         print("Disabled" if store.disable_user(args.user_id) else "Unknown user")
 

@@ -154,6 +154,25 @@ class OwnerUiTests(unittest.TestCase):
         self.assertEqual(self.policy.active_count("host.local"),0)
         self.assertEqual(self.req("/api/host/jobs/reserve",self.owner,payloads[1])[0],200)
 
+    def test_alpha_tabs_and_one_click_selectors_present(self):
+        from private_alpha_gateway import PAGE
+        for marker in ('id="alphaNav"', 'id="effectSelect"',
+                       'id="hostJobSelect"', 'renderAlphaTabs()',
+                       'loadSelectedEffect', 'button.disabled=!credential'):
+            self.assertIn(marker,PAGE)
+
+    def test_requester_may_cancel_own_waiting_or_reserved_job(self):
+        self.assertEqual(self.claim(self.owner)[0],200)
+        self.assertEqual(self.req("/api/host/effects",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo",
+                 description="metadata",enabled=True))[0],200)
+        _,created=self.req("/api/host/effects/manual",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo"))
+        job_id=created["reason"]
+        payload=dict(host_id="host.local",job_id=job_id)
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payload)[0],200)
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.other,payload)[0],403)
+
     def test_claim_requires_console_secret_and_cannot_steal(self):
         self.assertEqual(self.claim(self.owner,"wrong")[0],403)
         self.assertEqual(self.claim(self.owner)[0],200)

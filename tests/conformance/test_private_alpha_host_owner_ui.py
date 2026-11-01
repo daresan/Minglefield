@@ -177,6 +177,15 @@ class OwnerUiTests(unittest.TestCase):
         from private_alpha_gateway import PAGE
         self.assertIn('id="hostJobRetry"',PAGE)
 
+    def test_agent_and_job_outputs_are_scoped_to_tabs(self):
+        from private_alpha_gateway import PAGE
+        self.assertNotIn('id="output"',PAGE)
+        self.assertIn('id="agentOutput"',PAGE)
+        self.assertIn('id="demoJobsOutput"',PAGE)
+        self.assertIn('id="jobAgentSelect"',PAGE)
+        self.assertIn('demoJobsOut.textContent=JSON.stringify(jobs,null,2)',PAGE)
+        self.assertNotIn('show({agents,jobs})',PAGE)
+
     def test_alpha_tabs_and_one_click_selectors_present(self):
         from private_alpha_gateway import PAGE
         for marker in ('id="alphaNav"', 'id="effectSelect"',

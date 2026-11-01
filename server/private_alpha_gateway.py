@@ -58,7 +58,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
 <p>Nur Hosts, für die dein angemeldeter Benutzer als Host-Administrator hinterlegt ist.
 Keine echten Effekte, keine GPU-Abfrage.</p>
-<button id="hostRefresh">Hosts und Regeln laden</button>
+<button id="hostRefresh">Hosts und Regeln laden</button>\n<label>Vorhandene Regel <select id="hostRuleSelect"></select></label>\n<button id="hostLoadRule">Regel bearbeiten</button>
 <label>Host <select id="hostSelect"></select></label>
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
 <label>Priorität <input id="hostPriority" type="number" value="10" min="0"></label>
@@ -253,10 +253,21 @@ async function refreshHosts(){
 }
 function renderHost(){
   const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const select=document.getElementById("hostRuleSelect");
+  select.replaceChildren();
+  if(host)for(const rule of host.rules){
+    const opt=document.createElement("option");opt.value=rule.rule_id;
+    opt.textContent=rule.rule_id+" (Priorität "+rule.priority+")";select.append(opt);
+  }
   hostOut.textContent=host?JSON.stringify(host,null,2):
     "Keine administrierbaren Hosts vorhanden. Host-Admin-Rechte müssen lokal vergeben werden.";
 }
 hostSelect.onchange=renderHost;
+document.getElementById("hostLoadRule").onclick=()=>{
+  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));
+  if(rule)loadRule(rule);
+};
 document.getElementById("hostRefresh").onclick=refreshHosts;
 document.getElementById("hostSave").onclick=async()=>{
   const result=await api("/api/host/rules",{host_id:hostSelect.value,

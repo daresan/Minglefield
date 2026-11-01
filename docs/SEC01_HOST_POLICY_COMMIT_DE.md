@@ -47,3 +47,25 @@ Letzter vom Betreiber bestätigter Stand: **354/354**. Hinzugefügt: **14 Tests*
 3. Host-eigene GPU-/Busy-Telemetrie, Job-Queue, Kalender und Freigabe-UI.
 4. Dauerhafte Reservation/Lease-/Effect-Lifecycle-Semantik und crash-sichere Idempotenz.
 5. Erst danach Prüfung einer echten Executor-Schnittstelle. **Kein Serve, keine realen Effekte.**
+
+## Erweiterung: Host-parallele Mock-Slots und Fehlerbehebung
+
+Der ursprüngliche Testlauf zeigte zwölf `invalid_intent`-Fehler, weil das JSON-Admission-Binding fälschlich als einfacher Identifier geprüft wurde. Das Binding wird jetzt als begrenzter JSON-String akzeptiert und anschließend exakt mit dem gespeicherten Admission-Datensatz verglichen.
+
+Regeln können zusätzlich `max_parallel_effects` (1 bis 1024 oder `null` für keine Grenze) enthalten. Für bestehende Regeln ohne Feld bleibt die Konfiguration gültig. Der Host zählt aktive Mock-Slots aus der eigenen SQLite-Tabelle; Prüfung und Reservierung erfolgen in derselben `BEGIN IMMEDIATE`-Transaktion. Ein autorisierter Host-Administrator kann einen Slot durch `finish_mock` freigeben. Der Mock-Commit bleibt im Idempotenz-Ledger erhalten. Die neue Datei `tests/conformance/test_sec01_host_parallel_slots.py` testet Grenzwert, Freigabe, sechs konkurrierende Requests, fehlende Administratorberechtigung und ungültige Werte.
+
+**Wichtig:** Die Mock-Slots sind keine GPU-Prozessüberwachung. Ein Absturz lässt den Slot zunächst belegt; es gibt noch keine Recovery-/Lease-Semantik. Die lokale Regelverwaltung ist keine HTTP-API. Die bisherige `idle_only`-Bedingung verwendet weiterhin übergebene Test-Telemetrie, während `max_parallel_effects` ausschließlich die intern reservierten Mock-Slots zählt. Beide Mechanismen dürfen nicht mit produktiver Host-Messung verwechselt werden.
+
+Validierung:
+
+```powershell
+git pull --ff-only
+python -B -m unittest discover -s tests/conformance -p "test_sec01_host_commit_policy.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_sec01_host_parallel_slots.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_*.py"
+python -B tests/conformance/validate_map_v01.py
+git diff --check
+git status --short
+```
+
+Letzter Lauf des Betreibers: 368 Tests, davon 12 Host-Policy-Fehlschläge und ein unabhängiger HTTP-Testfehler (WinError 10053). Nach dieser Korrektur und fünf neuen Tests: **373 Tests erwartet**, noch nicht bestätigt.

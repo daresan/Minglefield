@@ -22,6 +22,21 @@ class AlphaAuthTests(unittest.TestCase):
         self.assertIsNotNone(session)
         return invite, session
 
+    def test_owner_can_list_delegations_without_exposing_to_other_users(self):
+        _, owner=self.provision()
+        _, friend=self.provision("user.friend","agent.friend")
+        self.assertEqual(self.auth.grant_agent("Bearer "+owner,
+            agent_id="agent.one",grantee_user_id="user.friend")[0],200)
+        status,data=self.auth.owned_agent_grants("Bearer "+owner,"agent.one")
+        self.assertEqual(status,200)
+        self.assertEqual(data["grantees"],["user.friend"])
+        self.assertEqual(self.auth.owned_agent_grants("Bearer "+friend,"agent.one")[0],403)
+        self.assertEqual(self.auth.owned_agent_grants("Bearer invalid","agent.one")[0],401)
+        self.assertEqual(self.auth.grant_agent("Bearer "+owner,
+            agent_id="agent.one",grantee_user_id="user.friend",revoke=True)[0],200)
+        self.assertEqual(self.auth.owned_agent_grants("Bearer "+owner,
+            "agent.one")[1]["grantees"],[])
+
     def test_grantable_user_directory_requires_session_and_filters_disabled(self):
         _, owner = self.provision()
         self.provision("user.friend", "agent.friend")

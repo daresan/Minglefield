@@ -186,6 +186,14 @@ class OwnerUiTests(unittest.TestCase):
         self.assertIn('demoJobsOut.textContent=JSON.stringify(jobs,null,2)',PAGE)
         self.assertNotIn('show({agents,jobs})',PAGE)
 
+    def test_agent_job_shortcuts_open_jobs_tab(self):
+        from private_alpha_gateway import PAGE
+        for marker in ('id="agentJobList"', 'id="agentDetails"',
+                       'id="demoJobSelect"', 'renderAgentJobs()',
+                       'cachedDemoJobs.filter(j=>j.agent_id===agentSelect.value)',
+                       'alphaTab="jobs";renderAlphaTabs()'):
+            self.assertIn(marker,PAGE)
+
     def test_alpha_tabs_and_one_click_selectors_present(self):
         from private_alpha_gateway import PAGE
         for marker in ('id="alphaNav"', 'id="effectSelect"',

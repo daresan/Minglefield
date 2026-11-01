@@ -90,6 +90,18 @@ The exact serialized representation, cryptography, freshness mechanism, replay r
 
 Mandatory negative tests include post-intent grant revocation, session revocation/expiry, principal disablement, agent suspension/policy updates, effect-key rebinding, epoch rollback, cross-adapter audience misuse, parallel accept/revoke ordering, process restart, uncertain accepted-before-timeout states and stale/partitioned authority.
 
+## G.1 Capability-validator adversarial follow-up (2026-11-01)
+
+The isolated `sec01_capability_validation.py` validator checks exact envelope shape, committed intent fields, context strings, a time interval and the current simulated authority epochs. **It does not authenticate provenance or bind validation atomically to admission.** New adversarial regression tests at `41a059a` illustrate three distinct boundaries:
+
+- An unsigned envelope constructed to match the trusted inputs can pass structural checks; `shape_valid_not_authenticated` is not an authorization decision.
+- Revoking a grant after successful structural validation but before SQLite admission causes the *atomic admission* to reject the old epoch. Calling the validator alone does not protect this gap.
+- The B2 `CommittedIntent` projection excludes the original session reference. Therefore the validator currently matches grant/agent/principal authority identities against the intent but **cannot establish that the supplied session identity is the original job session**. A separately provisioned session ID can pass its shape checks. This is deliberately documented as an unresolved binding gap, **not** an acceptable credential model.
+
+**Required bridge decision before any capability issuance:** bind an opaque, trusted original-session identifier to the projected intent using an internal authority lookup or a protected issuer-side mapping. Do not expose `session_token_hash` or bearer credentials as external artifact fields. The issuer must authenticate the executor, establish that original-session link, sign or otherwise authenticate the complete envelope, and ensure effect-side admission enforces current authority atomically.
+
+These new tests require maintainer-local validation; the last confirmed full-suite baseline remains **235/235** until reported otherwise. No B2 state, wire schema or real-effect path is changed by these tests.
+
 ## H. Decision and non-goals
 
 **Decision:** keep `server/sec01_fencing_sqlite.py` and `server/sec01_fencing_sim.py` isolated; do **not** change `action_jobs` schema v4, B2 coordinator, dispatch path, or public MAP wire contracts on this design step.

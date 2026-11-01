@@ -64,11 +64,15 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button>
 <label>Agent für Simulation <select id="selectedAgent"></select></label>
 <p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
+<div id="agentDetails" role="status">Agent auswählen.</div>
+<div id="agentJobList"><p>Keine Agentenjobs geladen.</p></div>
 <pre id="agentOutput" aria-live="polite">Noch keine Agenten geladen.</pre>
 </fieldset>
 <fieldset><legend>4. Simulieren</legend>
 <label>Agent für Demo-Job <select id="jobAgentSelect"></select></label>
 <button id="create">Demo-Job erstellen</button><button id="refresh">Jobs aktualisieren</button>
+<label>Demo-Job auswählen <select id="demoJobSelect"></select></label>
+<div id="selectedJobDetails" role="status">Job auswählen.</div>
 <pre id="demoJobsOutput" aria-live="polite">Noch keine Demo-Jobs geladen.</pre></fieldset>
 <fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und steuern (Simulation)</legend>
 <label>Host für Job <select id="jobHostSelect"></select></label>
@@ -194,6 +198,46 @@ const show=(v,area="agents")=>{
   target.textContent=JSON.stringify(v,null,2);
 };
 const agentSelect=document.getElementById("selectedAgent");
+let cachedAgents=[],cachedDemoJobs=[],cachedHostJobs=[];
+const demoJobSelect=document.getElementById("demoJobSelect");
+function showSelectedJob(){
+  const job=cachedDemoJobs.find(j=>j.job_id===demoJobSelect.value)
+    ||cachedHostJobs.find(j=>j.job_id===document.getElementById("hostJobSelect").value);
+  document.getElementById("selectedJobDetails").textContent=job
+    ?[job.job_id,job.user_id||job.requested_by||"",job.state||""].join(" · ")
+    :"Job auswählen.";
+}
+function renderAgentJobs(){
+  const agent=cachedAgents.find(a=>a.agent_id===agentSelect.value);
+  document.getElementById("agentDetails").textContent=agent
+    ?[agent.agent_id,"Besitzer: "+agent.owner,"Zugriff: "+agent.relationship].join(" · ")
+    :"Agent auswählen.";
+  const container=document.getElementById("agentJobList");
+  container.replaceChildren();
+  const jobs=cachedDemoJobs.filter(j=>j.agent_id===agentSelect.value);
+  if(!jobs.length){container.textContent="Keine Jobs dieses Agenten vorhanden.";return;}
+  for(const job of jobs){
+    const button=document.createElement("button");button.type="button";
+    button.textContent=[job.job_id,job.user_id||"",job.state||""].join(" · ");
+    button.onclick=()=>{
+      alphaTab="jobs";renderAlphaTabs();
+      demoJobSelect.value=job.job_id;showSelectedJob();
+    };
+    container.append(button);
+  }
+}
+agentSelect.onchange=renderAgentJobs;
+demoJobSelect.onchange=showSelectedJob;
+function renderDemoJobs(){
+  const previous=demoJobSelect.value;
+  demoJobSelect.replaceChildren();
+  for(const job of cachedDemoJobs){
+    const option=document.createElement("option");option.value=job.job_id;
+    option.textContent=job.job_id+" · "+job.state;demoJobSelect.append(option);
+  }
+  if(cachedDemoJobs.some(j=>j.job_id===previous))demoJobSelect.value=previous;
+  showSelectedJob();renderAgentJobs();
+}
 function fillAgents(agents){
   const last=agentSelect.value;
   const jobAgentSelect=document.getElementById("jobAgentSelect");
@@ -220,7 +264,8 @@ const refresh=async()=>{
   const jobs=await request("/api/jobs");
   handleUnauthorized(agents);
   handleUnauthorized(jobs);
-  if(credential && agents.status===200)fillAgents(agents.data.agents);
+  if(credential && agents.status===200){cachedAgents=agents.data.agents;fillAgents(cachedAgents);}
+  if(credential && jobs.status===200){cachedDemoJobs=jobs.data.jobs;renderDemoJobs();}
   if(credential)await refreshHosts();
   if(credential)updateStatus();
   out.textContent=agents.status===200?JSON.stringify({agents:agents.data.agents},null,2):JSON.stringify(agents,null,2);
@@ -300,6 +345,7 @@ document.getElementById("create").onclick=async()=>{
     action:"demo.echo",idempotency_key:crypto.randomUUID()});
   handleUnauthorized(result);
   show(result,"jobs");
+  if(result.status===201||result.status===200)await refresh();
 };
 const hostOut=document.getElementById("hostOutput");
 const hostSelect=document.getElementById("hostSelect");
@@ -461,6 +507,7 @@ document.getElementById("hostJobsRefresh").onclick=async()=>{
   const result=await request("/api/host/jobs?host_id="+encodeURIComponent(hostSelect.value));
   document.getElementById("hostJobsOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200){
+    cachedHostJobs=result.data.jobs;
     const select=document.getElementById("hostJobSelect");
     const old=select.value;select.replaceChildren();
     for(const job of result.data.jobs){
@@ -470,6 +517,7 @@ document.getElementById("hostJobsRefresh").onclick=async()=>{
     }
     if(result.data.jobs.some(j=>j.job_id===old))select.value=old;
     if(select.value)document.getElementById("hostJobId").value=select.value;
+    showSelectedJob();
   }
 };
 document.getElementById("effectSave").onclick=async()=>{

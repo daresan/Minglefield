@@ -47,6 +47,15 @@ class OwnerUiTests(unittest.TestCase):
         return self.req("/api/host/claim",token,
             dict(host_id="host.local",bootstrap_secret=secret))
 
+    def test_host_claim_controls_really_exist_in_html(self):
+        from private_alpha_gateway import PAGE
+        for control in ('id="claimHost"', 'id="claimSecret"',
+                        'id="claimHostButton"', 'id="effectSave"',
+                        'id="effectManual"'):
+            self.assertIn(control,PAGE)
+        self.assertNotIn("Host-Admin-Rechte müssen lokal vergeben werden",PAGE)
+        self.assertNotIn("Nur Hosts, für die dein angemeldeter Benutzer",PAGE)
+
     def test_owner_can_claim_and_configure_without_admin_fixture(self):
         self.assertEqual(self.claim(self.owner)[0],200)
         self.assertEqual(self.req("/api/hosts",self.owner)[1]["hosts"][0]["host_id"],

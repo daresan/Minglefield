@@ -18,12 +18,16 @@ class WorkerClaimTests(unittest.TestCase):
     def _assert_mutated_request_denied(self, key, value, expected):
         job = self.service.submit(**self.args)
         self.assertTrue(job.allowed)
-        with sqlite3.connect(self.db) as db:
+        db = sqlite3.connect(self.db)
+        try:
             request = json.loads(db.execute(
                 "SELECT request_json FROM action_jobs").fetchone()[0])
             request[key] = value
             db.execute("UPDATE action_jobs SET request_json=?",
                        (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
         result = ClaimWorker(self.service).claim_next("worker.one")
         self.assertEqual((result.state, result.reason), ("denied", expected))
         self.assertEqual(self.counts(), (1, 2, 100))

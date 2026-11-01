@@ -252,6 +252,20 @@ class HostCommitPolicy:
                            for rid,priority,enabled,cfg in rules]))
             return result
 
+    def restart_recovery_snapshot(self, host_id, admin_id):
+        """Crash-safe conservative policy: all retained slots remain blocked.
+
+        A restart NEVER converts a historical mock commit into a new one.
+        Recovery is observational until an admin explicitly resolves a slot.
+        """
+        with self.authority.store._tx() as db:
+            if not self._admin(db,host_id,admin_id):
+                return None
+            rows=db.execute("""SELECT effect_key FROM sec01_host_active_slots
+                WHERE host_id=? ORDER BY effect_key""",(host_id,)).fetchall()
+            return [dict(effect_key=key,state="uncertain_after_restart",
+                         auto_retry_allowed=False) for (key,) in rows]
+
     def lifecycle(self, host_id, admin_id):
         """Read-only local mock lifecycle, scoped to a host admin."""
         with self.authority.store._tx() as db:

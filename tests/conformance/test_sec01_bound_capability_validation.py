@@ -6,20 +6,19 @@ from dataclasses import asdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
-from test_sec01_original_session_binding import (
-    SEC01OriginalSessionBindingTests, SECRET)
+import test_sec01_original_session_binding as session_fixture
 from sec01_authority_fencing_sqlite import (
     AuthoritySnapshot, SQLiteAuthorityFence)
 from sec01_bound_capability_validation import validate_bound_capability
 
 class SEC01BoundCapabilityTests(unittest.TestCase):
-    setUp = SEC01OriginalSessionBindingTests.setUp
-    issue = SEC01OriginalSessionBindingTests.issue
-    new_service = SEC01OriginalSessionBindingTests.new_service
-    query = SEC01OriginalSessionBindingTests.query
-    counts = SEC01OriginalSessionBindingTests.counts
-    committed = SEC01OriginalSessionBindingTests.committed
-    reference = SEC01OriginalSessionBindingTests.reference
+    setUp = session_fixture.SEC01OriginalSessionBindingTests.setUp
+    issue = session_fixture.SEC01OriginalSessionBindingTests.issue
+    new_service = session_fixture.SEC01OriginalSessionBindingTests.new_service
+    query = session_fixture.SEC01OriginalSessionBindingTests.query
+    counts = session_fixture.SEC01OriginalSessionBindingTests.counts
+    committed = session_fixture.SEC01OriginalSessionBindingTests.committed
+    reference = session_fixture.SEC01OriginalSessionBindingTests.reference
 
     def prepare(self):
         intent = self.committed()
@@ -39,7 +38,7 @@ class SEC01BoundCapabilityTests(unittest.TestCase):
     def check(self, intent, fence, candidate):
         return validate_bound_capability(
             candidate, intent=intent, authority=fence, database=self.db,
-            issuer_secret=SECRET, now=self.now, expected_issuer="map.test",
+            issuer_secret=session_fixture.SECRET, now=self.now, expected_issuer="map.test",
             expected_audience=intent.adapter_id, expected_executor="worker.one")
 
     def test_valid_composite_is_not_admission(self):

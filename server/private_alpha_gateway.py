@@ -68,12 +68,17 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <div id="agentJobList"><p>Keine Agentenjobs geladen.</p></div>
 <pre id="agentOutput" aria-live="polite">Noch keine Agenten geladen.</pre>
 </fieldset>
-<fieldset><legend>4. Simulieren</legend>
+<fieldset><legend>Jobs — einheitliche Übersicht (lokale Alpha)</legend>
+<label>Alle Jobs <select id="allJobsSelect"></select></label>
+<button id="allJobDelete">Ausgewählten Testjob endgültig löschen</button>
+<div id="allJobDetails" role="status">Job auswählen.</div>
+<p><small>Nur lokale Testdaten. Reservierte Jobs müssen zuerst freigegeben werden.</small></p>
+<fieldset><legend>Demo-Jobs</legend>
 <label>Agent für Demo-Job <select id="jobAgentSelect"></select></label>
 <button id="create">Demo-Job erstellen</button><button id="refresh">Jobs aktualisieren</button>
 <label>Demo-Job auswählen <select id="demoJobSelect"></select></label>
 <div id="selectedJobDetails" role="status">Job auswählen.</div>
-<pre id="demoJobsOutput" aria-live="polite">Noch keine Demo-Jobs geladen.</pre></fieldset>
+<pre id="demoJobsOutput" aria-live="polite">Noch keine Demo-Jobs geladen.</pre></fieldset></fieldset>
 <fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und steuern (Simulation)</legend>
 <label>Host für Job <select id="jobHostSelect"></select></label>
 <label>Effekt für Job <select id="jobEffectSelect"></select></label>
@@ -200,6 +205,48 @@ const show=(v,area="agents")=>{
 const agentSelect=document.getElementById("selectedAgent");
 let cachedAgents=[],cachedDemoJobs=[],cachedHostJobs=[];
 const demoJobSelect=document.getElementById("demoJobSelect");
+const allJobsSelect=document.getElementById("allJobsSelect");
+function renderAllJobs(){
+  const previous=allJobsSelect.value;allJobsSelect.replaceChildren();
+  for(const job of cachedDemoJobs){
+    const option=document.createElement("option");option.value="demo:"+job.job_id;
+    option.textContent="Demo · "+job.job_id+" · "+job.state;allJobsSelect.append(option);
+  }
+  for(const job of cachedHostJobs){
+    const option=document.createElement("option");option.value="host:"+job.job_id;
+    option.textContent="Host · "+job.job_id+" · "+job.state;allJobsSelect.append(option);
+  }
+  if([...allJobsSelect.options].some(o=>o.value===previous))allJobsSelect.value=previous;
+  showAllJob();
+}
+function showAllJob(){
+  const [kind,...parts]=allJobsSelect.value.split(":");const id=parts.join(":");
+  const job=(kind==="demo"?cachedDemoJobs:cachedHostJobs).find(j=>j.job_id===id);
+  document.getElementById("allJobDetails").textContent=job
+    ?[kind,job.job_id,job.state,job.user_id||job.requested_by||"",job.agent_id||job.effect_id||""].join(" · ")
+    :"Job auswählen.";
+  if(job&&kind==="demo"){demoJobSelect.value=id;showSelectedJob();}
+  if(job&&kind==="host"){
+    document.getElementById("hostJobSelect").value=id;
+    document.getElementById("hostJobId").value=id;showSelectedJob();
+  }
+}
+allJobsSelect.onchange=showAllJob;
+document.getElementById("allJobDelete").onclick=async()=>{
+  const [kind,...parts]=allJobsSelect.value.split(":");const id=parts.join(":");
+  if(!id||!["demo","host"].includes(kind))return;
+  if(!confirm("Testjob "+id+" endgültig löschen? Diese Aktion kann nicht rückgängig gemacht werden."))return;
+  const path=kind==="demo"?"/api/jobs/delete":"/api/host/jobs/delete";
+  const payload=kind==="demo"?{job_id:id}:{host_id:hv("jobHostSelect"),job_id:id};
+  const result=await api(path,payload);
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200){
+    if(kind==="demo")cachedDemoJobs=cachedDemoJobs.filter(j=>j.job_id!==id);
+    else cachedHostJobs=cachedHostJobs.filter(j=>j.job_id!==id);
+    renderDemoJobs();renderAllJobs();await refresh();
+  }
+};
+
 function showSelectedJob(){
   const job=cachedDemoJobs.find(j=>j.job_id===demoJobSelect.value)
     ||cachedHostJobs.find(j=>j.job_id===document.getElementById("hostJobSelect").value);
@@ -236,7 +283,7 @@ function renderDemoJobs(){
     option.textContent=job.job_id+" · "+job.state;demoJobSelect.append(option);
   }
   if(cachedDemoJobs.some(j=>j.job_id===previous))demoJobSelect.value=previous;
-  showSelectedJob();renderAgentJobs();
+  showSelectedJob();renderAgentJobs();renderAllJobs();
 }
 function fillAgents(agents){
   const last=agentSelect.value;
@@ -517,7 +564,7 @@ document.getElementById("hostJobsRefresh").onclick=async()=>{
     }
     if(result.data.jobs.some(j=>j.job_id===old))select.value=old;
     if(select.value)document.getElementById("hostJobId").value=select.value;
-    showSelectedJob();
+    showSelectedJob();renderAllJobs();
   }
 };
 document.getElementById("effectSave").onclick=async()=>{

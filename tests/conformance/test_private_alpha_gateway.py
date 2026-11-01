@@ -52,6 +52,15 @@ class PrivateAlphaGatewayTests(unittest.TestCase):
         self.assertIn(b"Local Alpha", html)
         self.assertEqual(self.http.server_address[0], "127.0.0.1")
 
+    def test_session_feedback_and_typed_identity_text_are_visible(self):
+        status, _, html = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn(b"sessionStatus", html)
+        self.assertIn(b"Session-Token", html)
+        self.assertIn(b"Connect", html)
+        self.assertIn(b"Logout", html)
+        self.assertIn(b"expires_in", html)
+
     def test_unauthenticated_api_is_denied(self):
         for method, path in (("GET", "/api/agents"), ("GET", "/api/jobs"),
                              ("POST", "/api/jobs")):

@@ -22,20 +22,36 @@ MAX_JOBS_PER_USER = 5
 PAGE = """<!doctype html><html lang="de"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Minglefield — Local Alpha / Private Alpha (lokal)</title>
-<style>body{font:16px system-ui;margin:2rem auto;max-width:74rem;padding:0 1rem}
-input,button{font:inherit;padding:.5rem;margin:.3rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}
-fieldset{margin:1rem 0;border:1px solid #8885;border-radius:12px;padding:1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:end}
-fieldset>legend{font-weight:700;padding:0 .5rem}
-fieldset>label{display:flex;flex-direction:column;gap:.25rem;min-width:13rem;flex:1 1 13rem}
-fieldset>label:has(input[type=checkbox]){flex-direction:row;align-items:center}
-fieldset>p,fieldset>pre,fieldset>fieldset{flex-basis:100%}
-input,select{max-width:100%;box-sizing:border-box}
-button{cursor:pointer;border-radius:7px;border:1px solid #8886}
-#alphaNav{display:flex;flex-wrap:wrap;gap:.4rem;margin:1rem 0}
-#alphaNav button[aria-current=page]{font-weight:800;outline:2px solid currentColor}
+<style>
+:root{font-family:Inter,"Segoe UI",system-ui,sans-serif;color-scheme:dark;--bg:#0b1020;--surface:#151d30;--raised:#1c2940;--line:#34425b;--text:#f0f4fb;--muted:#b6c3d6;--accent:#7aaaff;--danger:#ff9c9c}
+*{box-sizing:border-box}body{margin:0 auto;max-width:1440px;padding:30px clamp(16px,3vw,48px) 64px;background:radial-gradient(ellipse at top right,#1c2d51 0,transparent 46%),var(--bg);color:var(--text);font-size:16px;line-height:1.5}
+h1{font-size:clamp(26px,3vw,38px);letter-spacing:-.04em;margin:0 0 14px;font-weight:750}
+body>p{color:var(--muted)}#alphaNav{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 28px;padding:7px;border:1px solid var(--line);background:#10192b;border-radius:16px}
+#alphaNav button{flex:1 1 120px;background:transparent;border-color:transparent;box-shadow:none;font-weight:600}
+#alphaNav button[aria-current=page]{background:#2a426b;color:#fff;border-color:#5579b3}
 #alphaNav button:disabled{opacity:.4;cursor:not-allowed}
 .alphaPanel[hidden]{display:none!important}
-#hostJobsOutput{max-height:20rem;overflow:auto}</style>
+fieldset{margin:0 0 22px;border:1px solid var(--line);border-radius:18px;padding:clamp(16px,2.5vw,28px);display:flex;flex-wrap:wrap;gap:16px;align-items:end;background:var(--surface);box-shadow:0 12px 30px #0002;min-width:0}
+fieldset fieldset{background:#10192b;box-shadow:none;margin:8px 0}
+fieldset>legend{font-size:19px;font-weight:700;letter-spacing:-.015em;padding:0 10px;color:var(--text)}
+fieldset>label{display:flex;flex-direction:column;gap:7px;min-width:min(100%,230px);flex:1 1 240px;font-size:15px;font-weight:600;color:var(--muted)}
+fieldset>label:has(input[type=checkbox]){flex-direction:row;align-items:center;flex:0 1 auto;min-width:200px}
+fieldset>p,fieldset>pre,fieldset>fieldset,fieldset>div:not(:has(select)){flex-basis:100%}
+input,select,button{font:inherit;min-height:44px;border-radius:10px}
+input,select{width:100%;max-width:100%;padding:10px 13px;background:#0d1628;border:1px solid #50617d;color:var(--text);font-size:16px}
+select{cursor:pointer}select option{font-size:16px;background:#17243a;color:#fff}
+input[type=checkbox]{width:20px;min-height:20px;accent-color:var(--accent)}
+button{cursor:pointer;border:1px solid #5079bb;padding:10px 18px;background:#315c9d;color:#fff;font-weight:650;transition:background .15s,border-color .15s;max-width:100%;height:auto}
+button:hover:not(:disabled){background:#4175c1}button:disabled{opacity:.45;cursor:not-allowed}
+button[id$="Delete"],#hostRuleDelete,#allJobDelete{background:transparent;color:var(--danger);border-color:#78464f;font-size:14px;font-weight:600;min-height:40px;padding:8px 13px}
+button[id$="Delete"]:hover,#hostRuleDelete:hover,#allJobDelete:hover{background:#5b2634}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1424;border:1px solid #30405b;border-radius:12px;padding:16px;color:#cbd8ea;font:14px/1.55 ui-monospace,Consolas,monospace;max-height:340px;overflow:auto}
+small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left:3px solid var(--accent);padding:10px 16px;color:var(--muted)}
+#agentDetails,#allJobDetails,#selectedJobDetails,#agentJobList{font-size:16px;color:var(--text)}
+#hostJobsOutput{max-height:20rem;overflow:auto}
+@media(max-width:700px){body{padding:18px 12px 40px}fieldset{padding:18px 14px}fieldset>label{flex-basis:100%}#alphaNav button{flex:1 1 40%}}
+</style>
 <h1>Minglefield Private Alpha</h1>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
 <p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
@@ -59,8 +75,8 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <fieldset><legend>3. Agenten verwalten oder beauftragen</legend>
 <label>Neuen eigenen Agenten anlegen <input id="newAgent" placeholder="agent.example"></label>
 <button id="addAgent">Agent anlegen</button>
-<label>Eigenen Agenten freigeben <input id="grantAgent" placeholder="agent.example"></label>
-<label>Für Benutzer <input id="grantee" placeholder="user.friend"></label>
+<label>Eigenen Agenten freigeben <select id="grantAgent" aria-label="Eigenen Agenten für Freigabe auswählen"></select></label>
+<label>Für Benutzer <select id="grantee" aria-label="Empfänger der Agentenfreigabe"></select></label>
 <button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button>
 <label>Agent für Simulation <select id="selectedAgent"></select><button id="agentDelete">Agent löschen</button></label>
 <p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
@@ -86,7 +102,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 
 <button id="hostJobsRefresh">Host-Jobs laden</button>
 <label>Bestehenden Job auswählen <select id="hostJobSelect"></select></label>
-<label>Job-ID <input id="hostJobId" placeholder="hostjob.…"></label>
+<label>Job-ID <select id="hostJobId" aria-label="Host-Job auswählen"></select></label>
 <button id="hostJobCancel">Eingereihten Job abbrechen</button>
 <button id="hostJobRetry">Abgebrochenen Job erneut einreihen</button>
 <button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button>
@@ -205,6 +221,24 @@ const show=(v,area="agents")=>{
   const target=area==="login"?statusLine:area==="jobs"?demoJobsOut:out;
   target.textContent=JSON.stringify(v,null,2);
 };
+function fillSelect(id,items,selected){
+  const select=document.getElementById(id);
+  const previous=selected===undefined?select.value:selected;
+  select.replaceChildren();
+  for(const item of items){
+    const option=document.createElement("option");
+    option.value=item.value;option.textContent=item.label;
+    select.append(option);
+  }
+  if(items.some(item=>item.value===previous))select.value=previous;
+  return select;
+}
+async function refreshGrantUsers(){
+  const result=await request("/api/grantable-users");
+  if(result.status===200){
+    fillSelect("grantee",result.data.users.map(user=>({value:user.user_id,label:user.user_id})));
+  }
+}
 const agentSelect=document.getElementById("selectedAgent");
 let cachedAgents=[],cachedDemoJobs=[],cachedHostJobs=[];
 const demoJobSelect=document.getElementById("demoJobSelect");
@@ -253,7 +287,7 @@ async function deleteSelected(path,payload,name,impact){
     if(result.status===200||result.status===404){
       cachedHostJobs=[];
       document.getElementById("hostJobSelect").replaceChildren();
-      document.getElementById("hostJobId").value="";
+      document.getElementById("hostJobId").replaceChildren();
       await refresh();
       renderDemoJobs();renderAllJobs();
     }
@@ -341,6 +375,11 @@ const refresh=async()=>{
   handleUnauthorized(agents);
   handleUnauthorized(jobs);
   if(credential && agents.status===200){cachedAgents=agents.data.agents;fillAgents(cachedAgents);}
+  if(credential && agents.status===200){
+    fillSelect("grantAgent",cachedAgents.filter(a=>a.relationship==="owned")
+      .map(a=>({value:a.agent_id,label:a.agent_id})));
+    await refreshGrantUsers();
+  }
   if(credential && jobs.status===200){cachedDemoJobs=jobs.data.jobs;renderDemoJobs();}
   if(credential)await refreshHosts();
   if(credential)updateStatus();
@@ -403,6 +442,7 @@ document.getElementById("addAgent").onclick=async()=>{
   if(result.status===201){
     document.getElementById("newAgent").value="";
     await refresh();agentSelect.value=agent_id;
+    document.getElementById("grantAgent").value=agent_id;
   } else show(result);
 };
 async function changeGrant(revoke){
@@ -606,6 +646,7 @@ document.getElementById("hostJobsRefresh").onclick=async()=>{
     cachedHostJobs=result.data.jobs;
     const select=document.getElementById("hostJobSelect");
     const old=select.value;select.replaceChildren();
+    fillSelect("hostJobId",result.data.jobs.map(j=>({value:j.job_id,label:j.job_id+" · "+j.state})));
     for(const job of result.data.jobs){
       const opt=document.createElement("option");opt.value=job.job_id;
       opt.textContent=job.effect_id+" · "+job.state+" · "+job.job_id;
@@ -768,6 +809,12 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         self.headers.get("Authorization"))})
                 else:
                     self.reply(200, {"agents": service.agents(principal)})
+            elif path == "/api/grantable-users":
+                if hasattr(service, "grantable_users"):
+                    users=service.grantable_users(self.headers.get("Authorization"))
+                    self.reply(200, {"users":users if users is not None else []})
+                else:
+                    self.reply(200, {"users":[]})
             elif path == "/api/jobs":
                 self.reply(200, {"jobs": service.jobs(principal)})
             elif path == "/api/host/jobs":

@@ -81,6 +81,20 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="hostJobRelease">Reservierung aufheben (Mock)</button>
 <pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
 <pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre></fieldset>
+<fieldset id="effectPanel"><legend>Effekte konfigurieren</legend>
+<label>Host-Zuordnung <select id="effectHostSelect"></select></label>
+<fieldset><legend>Effektdefinitionen (keine Jobeinreichung)</legend>
+<label>Bestehenden Effekt auswählen <select id="effectSelect"></select></label>
+<label>Effekt-ID <input id="effectId" placeholder="effect.example"></label>
+<label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
+<label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
+<button id="effectSave">Effektdefinition speichern</button>
+
+<p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
+beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></p>
+</fieldset>
+<pre id="effectOutput" aria-live="polite">Effekt auswählen oder anlegen.</pre>
+</fieldset>
 <fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
 <p>Eigene Hosts werden deinem angemeldeten Minglefield-Benutzer zugeordnet.
 Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effekte.</p>
@@ -113,16 +127,9 @@ Die Hostübernahme ist nur einmalig erforderlich.</small></p>
 <p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
 Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
 werden derzeit abgelehnt.</small></p>
-<fieldset><legend>Effektdefinitionen (keine Jobeinreichung)</legend>
-<label>Bestehenden Effekt auswählen <select id="effectSelect"></select></label>
-<label>Effekt-ID <input id="effectId" placeholder="effect.example"></label>
-<label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
-<label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
-<button id="effectSave">Effektdefinition speichern</button>
+<label>Effekte auf diesem Host <select id="hostEffectShortcut"></select></label>
+<button id="hostOpenEffect">Effekt im Effekte-Tab öffnen</button>
 
-<p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
-beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></p>
-</fieldset>
 <pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre>
 </fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
@@ -138,8 +145,8 @@ const alphaPanels={
   login:alphaSections.slice(0,3),
   agents:[alphaSections[3]],
   jobs:[alphaSections[4],document.getElementById("hostJobPanel")],
-  hosts:[alphaSections[6]],
-  effects:[alphaSections[6]]
+  hosts:[alphaSections[7]],
+  effects:[document.getElementById("effectPanel")]
 };
 let alphaTab="login";
 for(const [key,label] of [["login","Anmeldung"],["hosts","Hosts"],
@@ -159,23 +166,7 @@ function renderAlphaTabs(){
     section.classList.add("alphaPanel");
     section.hidden=!(alphaPanels[alphaTab]||[]).includes(section);
   }
-  const hostFieldset=alphaSections[6];
-  const effectFieldset=hostFieldset?.querySelector("fieldset");
-  if(effectFieldset){
-    effectFieldset.hidden=alphaTab==="hosts";
-    for(const element of hostFieldset.children){
-      if(element===effectFieldset||element.tagName==="LEGEND")continue;
-      if(element.id==="hostOutput")element.hidden=alphaTab==="effects";
-      else element.hidden=alphaTab==="effects";
-    }
-    if(alphaTab==="effects"){
-      for(const id of ["hostSelect","hostRefresh"]){
-        const element=document.getElementById(id);
-        if(element?.parentElement?.tagName==="LABEL")element.parentElement.hidden=false;
-        else if(element)element.hidden=false;
-      }
-    }
-  }
+
 }
 renderAlphaTabs();
 const updateStatus=()=>{
@@ -218,6 +209,7 @@ const refresh=async()=>{
   handleUnauthorized(agents);
   handleUnauthorized(jobs);
   if(credential && agents.status===200)fillAgents(agents.data.agents);
+  if(credential)await refreshHosts();
   if(credential)updateStatus();
   show({agents,jobs});
 };
@@ -334,14 +326,17 @@ async function refreshHosts(){
   hostCache=result.data.hosts;
   hostSelect.replaceChildren();
   const jobHost=document.getElementById("jobHostSelect");jobHost.replaceChildren();
+  const effectHost=document.getElementById("effectHostSelect");effectHost.replaceChildren();
   for(const host of hostCache){
     const opt=document.createElement("option");
     opt.value=host.host_id;opt.textContent=host.host_id;hostSelect.append(opt);
     const copy=opt.cloneNode(true);jobHost.append(copy);
+    effectHost.append(opt.cloneNode(true));
   }
   if(hostCache.some(h=>h.host_id===previous))hostSelect.value=previous;
   renderHost();
   jobHost.value=hostSelect.value;
+  effectHost.value=hostSelect.value;
   renderJobEffects();
 }
 function renderHost(){
@@ -352,6 +347,8 @@ function renderHost(){
     const opt=document.createElement("option");opt.value=rule.rule_id;
     opt.textContent=rule.rule_id+" (Priorität "+rule.priority+")";select.append(opt);
   }
+  const shortcuts=document.getElementById("hostEffectShortcut");shortcuts.replaceChildren();
+  for(const effect of host?.effects||[]){const opt=document.createElement("option");opt.value=effect.effect_id;opt.textContent=effect.effect_id;shortcuts.append(opt);}
   const effects=document.getElementById("effectSelect");
   const previousEffect=effects.value;
   effects.replaceChildren();
@@ -380,7 +377,7 @@ document.getElementById("jobHostSelect").onchange=()=>{
   hostSelect.value=hv("jobHostSelect");renderHost();renderJobEffects();
 };
 function loadSelectedEffect(){
-  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const host=hostCache.find(h=>h.host_id===hv("effectHostSelect"));
   const effect=host?.effects.find(e=>e.effect_id===document.getElementById("effectSelect").value);
   if(!effect)return;
   document.getElementById("effectId").value=effect.effect_id;
@@ -394,6 +391,14 @@ document.getElementById("hostRuleSelect").onchange=()=>{
   if(rule)loadRule(rule);
 };
 hostSelect.onchange=renderHost;
+document.getElementById("effectHostSelect").onchange=()=>{
+  hostSelect.value=hv("effectHostSelect");renderHost();
+};
+document.getElementById("hostOpenEffect").onclick=()=>{
+  document.getElementById("effectHostSelect").value=hostSelect.value;
+  document.getElementById("effectSelect").value=hv("hostEffectShortcut");
+  loadSelectedEffect();alphaTab="effects";renderAlphaTabs();
+};
 document.getElementById("hostLoadRule").onclick=()=>{
   const host=hostCache.find(h=>h.host_id===hostSelect.value);
   const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));

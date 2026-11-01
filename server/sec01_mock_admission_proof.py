@@ -43,7 +43,8 @@ def verify_mock_proof(proof, *, verifier_secret, issuer, audience, executor,
         raise ValueError("invalid trusted verification context")
     if (type(proof) is not dict or set(proof)!={"payload","mac"}
             or not _valid(proof["payload"])
-            or type(proof["mac"]) is not str or len(proof["mac"])!=64):
+            or type(proof["mac"]) is not str or len(proof["mac"])!=64
+            or any(ch not in "0123456789abcdef" for ch in proof["mac"])):
         return ProofCheck(False,"invalid_shape")
     payload=proof["payload"]
     if (payload["issuer"],payload["audience"],payload["executor"],

@@ -9,7 +9,12 @@ import json
 import re
 from urllib.parse import urlsplit
 
-from server.comfy_workflow_inspection import inspect_api_workflow, WorkflowError
+try:
+    from server.comfy_workflow_inspection import inspect_api_workflow, WorkflowError
+except ModuleNotFoundError as exc:
+    if exc.name != 'server':
+        raise
+    from comfy_workflow_inspection import inspect_api_workflow, WorkflowError
 
 _ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$")
 _TYPES = frozenset(("comfyui",))

@@ -98,3 +98,43 @@ git status --short
 
 **Maintainer-confirmed Windows baseline: 278/278 conformance tests**, MAP v0.1 validator PASS and clean working tree. Subsequent UI/documentation adjustments require renewed local verification. SEC-01 and real media execution remain independently gated.
 
+
+## Auth v2 local browser registration (2026-11-01; Windows validation pending)
+
+With the **same** `--auth-db` mode, the local page now offers **Einladung einlösen**, **Connect**, **Logout**, and **Simulate action**. The operator still creates invitations locally, but the invited person can redeem the one-time invitation on the browser page while the browser is on the **same computer**. For existing v1 users, the existing valid session token can still be entered manually; previously redeemed invites cannot be reused.
+
+In PowerShell terminal A, launch the gateway (database path must be the same as the admin terminal):
+
+```powershell
+$alphaDb = "$env:LOCALAPPDATA\Minglefield\private-alpha.sqlite"
+python -B server/private_alpha_gateway.py --auth-db $alphaDb --port 8767
+```
+
+In a **separate** PowerShell terminal B:
+
+```powershell
+$alphaDb = "$env:LOCALAPPDATA\Minglefield\private-alpha.sqlite"
+python -B server/private_alpha_admin.py --db $alphaDb invite user.test2
+```
+
+Open `http://127.0.0.1:8767/`; paste the **invitation** into the new **Einladungscode** input, enter a unique agent ID such as `agent.test2`, then click **Einladung einlösen**. On success the session is held **only in that browser tab's RAM**; click **Connect** to display agents and jobs. A page reload forgets it. **Logout** revokes the active session. A browser may also use the manual session-token field if one was issued by the older PowerShell `redeem` command.
+
+The new `/api/redeem` endpoint intentionally requires loopback source and a loopback Host / same-origin Origin, plus a small per-process rate limit. These are **local development safeguards, not sufficient protections for remote exposure**. It is not a tailnet registration endpoint. Avoid exposing it through any proxy, including Serve, even to approved friends: production-grade invitation rate limiting, authenticated user lifecycle/recovery, CSRF/Origin/CORS policy, logging/auditing, persistent rate controls, and a threat review still remain. Secure remote invitation redemption must be designed separately.
+
+Focused additions:
+
+```powershell
+python -B -m unittest discover -s tests/conformance -p "test_private_alpha_browser_enrollment.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_sec01_mock_admission_proof.py" -v
+python -B -m unittest discover -s tests/conformance -p "test_*.py"
+python -B tests/conformance/validate_map_v01.py
+git diff --check
+git status --short
+```
+
+Last **confirmed** baseline: 278/278. New tests: four browser onboarding and four mock proof tests; **expected 286** before maintainer local confirmation.
+
+## SEC-01 mock admission proof (not coupled to real effects)
+
+`server/sec01_mock_admission_proof.py` uses a test-only HMAC-SHA256 proof over canonical JSON (issuer, audience, executor, job, request fingerprint, effect key, lifetime and nonce). It rejects modified content, wrong key/audience/context, unknown fields and expired proofs. It does **not** establish that an admission was actually committed. It is not connected to B2, the mock game adapter, or the Private Alpha gateway, and does not sign credentials usable by real developers. Real third-party adapters require separate issuer key management, authenticated trust distribution and an authoritative atomic admission protocol.
+

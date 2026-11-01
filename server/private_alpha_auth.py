@@ -331,15 +331,6 @@ class AlphaAuthStore:
             return [{"agent_id": agent, "owner":principal.user_id,
                      "allowed_actions":["demo.echo"]} for (agent,) in rows]
 
-    def delete_alpha_job(self, principal, job_id):
-        """Local alpha only: delete a simulated demo job owned by caller."""
-        if not ident(job_id):
-            return 400, {"error":"invalid_job_id"}
-        with self._tx() as db:
-            deleted=db.execute("DELETE FROM alpha_jobs WHERE job_id=? AND user_id=?",
-                               (job_id,principal.user_id)).rowcount
-        return (200,{"state":"deleted_alpha"}) if deleted else (404,{"error":"job_not_found"})
-
     def jobs(self, principal):
         with self._tx() as db:
             rows = db.execute("""SELECT job_id,user_id,agent_id,action

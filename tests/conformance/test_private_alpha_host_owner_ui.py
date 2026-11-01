@@ -203,6 +203,8 @@ class OwnerUiTests(unittest.TestCase):
             dict(host_id="host.local",effect_id="effect.demo"))
         payload=dict(host_id="host.local",job_id=created["reason"])
         self.assertEqual(self.req("/api/host/jobs/delete",self.other,payload)[0],403)
+        self.assertEqual(self.req("/api/host/jobs/delete",self.owner,payload)[0],409)
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payload)[0],200)
         self.assertEqual(self.req("/api/host/jobs/delete",self.owner,payload)[0],200)
         status,jobs=self.req("/api/host/jobs?host_id=host.local",self.owner)
         self.assertEqual(status,200)

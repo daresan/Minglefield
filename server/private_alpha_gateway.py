@@ -62,7 +62,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <label>Eigenen Agenten freigeben <input id="grantAgent" placeholder="agent.example"></label>
 <label>Für Benutzer <input id="grantee" placeholder="user.friend"></label>
 <button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button>
-<label>Agent für Simulation <select id="selectedAgent"></select></label>
+<label>Agent für Simulation <select id="selectedAgent"></select><button id="agentDelete">Agent löschen</button></label>
 <p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
 <div id="agentDetails" role="status">Agent auswählen.</div>
 <div id="agentJobList"><p>Keine Agentenjobs geladen.</p></div>
@@ -101,6 +101,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <label>Effekt-ID <input id="effectId" placeholder="effect.example"></label>
 <label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
 <label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
+<button id="effectDelete">Effekt löschen</button>
 <button id="effectSave">Effektdefinition speichern</button>
 
 <p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
@@ -117,6 +118,7 @@ Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effe
 <button id="claimHostButton">Diesen lokalen Host übernehmen</button>
 <p><small>Den Bestätigungscode zeigt das lokal mit --auth-db gestartete Gateway beim Start.
 Die Hostübernahme ist nur einmalig erforderlich.</small></p>
+<button id="hostDelete">Host löschen</button>
 <button id="hostRefresh">Hosts und Regeln laden</button>\n<label>Vorhandene Regel <select id="hostRuleSelect"></select></label>\n<button id="hostLoadRule">Regel bearbeiten</button>
 <label>Host <select id="hostSelect"></select></label>
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
@@ -135,7 +137,7 @@ Die Hostübernahme ist nur einmalig erforderlich.</small></p>
 <label>Beginn <input id="hostStart" type="time" value="00:00"></label>
 <label>Ende <input id="hostEnd" type="time" value="23:59"></label>
 <button id="hostSave">Regel speichern</button>
-<button id="hostDelete">Regel löschen</button>
+<button id="hostRuleDelete">Regel löschen</button>
 <button id="hostToggle">Regel aktivieren/deaktivieren</button>
 <p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
 Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
@@ -147,6 +149,7 @@ werden derzeit abgelehnt.</small></p>
 </fieldset>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
 
+<p id="deleteStatus" role="status" aria-live="polite"></p>
 <script>
 let credential="";
 let expiresAt=0;
@@ -232,20 +235,46 @@ function showAllJob(){
   }
 }
 allJobsSelect.onchange=showAllJob;
+async function deleteSelected(path,payload,name,impact){
+  if(!name)return;
+  if(!confirm(name+" endgültig löschen? "+impact))return;
+  const output=document.getElementById("deleteStatus");
+  try{
+    const result=await api(path,payload);
+    handleUnauthorized(result);
+    const messages={unauthorized:"Bitte erneut anmelden.",not_resource_owner:"Keine Löschberechtigung.",
+      resource_not_found:"Eintrag wurde bereits gelöscht oder ist nicht vorhanden.",
+      cancel_job_first:"Job zuerst stornieren; Reservierungen vorher freigeben.",
+      delete_dependent_jobs_first:"Zugehörige Jobs zuerst stornieren und einzeln löschen.",
+      active_reservation_exists:"Aktive Reservierungen zuerst klären.",
+      protected_history_exists:"Geschützte Historie verhindert die Löschung.",
+      protected_history_or_reservation_exists:"Geschützte Historie oder Reservierung verhindert die Löschung.",
+      delete_transaction_failed:"Löschen fehlgeschlagen. Alle Änderungen wurden zurückgerollt."};
+    if(result.status===200||result.status===404){
+      cachedHostJobs=[];
+      document.getElementById("hostJobSelect").replaceChildren();
+      document.getElementById("hostJobId").value="";
+      await refresh();
+      renderDemoJobs();renderAllJobs();
+    }
+    output.textContent=result.status===200?name+" wurde gelöscht.":
+      (messages[result.data.error]||"Löschen fehlgeschlagen: "+(result.data.error||result.status));
+  }catch(error){output.textContent="Verbindung fehlgeschlagen. Listen vor erneutem Löschen aktualisieren.";}
+}
 document.getElementById("allJobDelete").onclick=async()=>{
   const [kind,...parts]=allJobsSelect.value.split(":");const id=parts.join(":");
   if(!id||!["demo","host"].includes(kind))return;
-  if(!confirm("Testjob "+id+" endgültig löschen? Diese Aktion kann nicht rückgängig gemacht werden."))return;
-  const path=kind==="demo"?"/api/jobs/delete":"/api/host/jobs/delete";
-  const payload=kind==="demo"?{job_id:id}:{host_id:hv("jobHostSelect"),job_id:id};
-  const result=await api(path,payload);
-  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
-  if(result.status===200){
-    if(kind==="demo")cachedDemoJobs=cachedDemoJobs.filter(j=>j.job_id!==id);
-    else cachedHostJobs=cachedHostJobs.filter(j=>j.job_id!==id);
-    renderDemoJobs();renderAllJobs();await refresh();
-  }
+  await deleteSelected(kind==="demo"?"/api/jobs/delete":"/api/host/jobs/delete",
+    kind==="demo"?{job_id:id}:{host_id:hv("jobHostSelect"),job_id:id},id,
+    "Nur inaktive Alpha-Testdaten werden entfernt. Host-Jobs zuerst stornieren.");
 };
+document.getElementById("agentDelete").onclick=()=>deleteSelected("/api/agents/delete",
+  {agent_id:agentSelect.value},agentSelect.value,"Delegationen und Host-Zuordnungen werden entfernt. Zugehörige Jobs vorher einzeln löschen.");
+document.getElementById("hostDelete").onclick=()=>deleteSelected("/api/hosts/delete",
+  {host_id:hostSelect.value},hostSelect.value,"Effektdefinitionen, Regeln und Zuordnungen werden entfernt. Jobs und Reservierungen vorher klären.");
+document.getElementById("effectDelete").onclick=()=>deleteSelected("/api/host/effects/delete",
+  {host_id:hv("effectHostSelect"),effect_id:hv("effectSelect")},hv("effectSelect"),
+  "Die Effektdefinition wird entfernt. Zugehörige Jobs vorher einzeln löschen.");
 
 function showSelectedJob(){
   const job=cachedDemoJobs.find(j=>j.job_id===demoJobSelect.value)
@@ -445,8 +474,19 @@ async function refreshHosts(){
   jobHost.value=hostSelect.value;
   effectHost.value=hostSelect.value;
   renderJobEffects();
+  if(hostSelect.value)await document.getElementById("hostJobsRefresh").onclick();
 }
+let renderedHostId="";
 function renderHost(){
+  document.getElementById("jobHostSelect").value=hostSelect.value;
+  renderJobEffects();
+  if(renderedHostId!==hostSelect.value){
+    renderedHostId=hostSelect.value;cachedHostJobs=[];
+    document.getElementById("hostJobSelect").replaceChildren();
+    document.getElementById("hostJobId").value="";
+    document.getElementById("hostJobsOutput").textContent="Keine Host-Jobs geladen.";
+    renderAllJobs();showSelectedJob();
+  }
   const host=hostCache.find(h=>h.host_id===hostSelect.value);
   const select=document.getElementById("hostRuleSelect");
   select.replaceChildren();
@@ -454,6 +494,7 @@ function renderHost(){
     const opt=document.createElement("option");opt.value=rule.rule_id;
     opt.textContent=rule.rule_id+" (Priorität "+rule.priority+")";select.append(opt);
   }
+  if(!host?.rules.length)document.getElementById("hostRuleId").value="";
   const shortcuts=document.getElementById("hostEffectShortcut");shortcuts.replaceChildren();
   for(const effect of host?.effects||[]){const opt=document.createElement("option");opt.value=effect.effect_id;opt.textContent=effect.effect_id;shortcuts.append(opt);}
   const effects=document.getElementById("effectSelect");
@@ -465,7 +506,13 @@ function renderHost(){
     effects.append(opt);
   }
   if(host?.effects.some(e=>e.effect_id===previousEffect))effects.value=previousEffect;
+  document.getElementById("effectHostSelect").value=hostSelect.value;
   if(effects.value)loadSelectedEffect();
+  else {
+    document.getElementById("effectId").value="";
+    document.getElementById("effectDescription").value="";
+    document.getElementById("effectEnabled").checked=true;
+  }
   hostOut.textContent=host?JSON.stringify(host,null,2):
     "Noch kein eigener Host vorhanden. Oben Host-ID und lokalen Bestätigungscode eingeben und Host übernehmen.";
 }
@@ -551,7 +598,9 @@ document.getElementById("hostJobSelect").onchange=()=>{
   document.getElementById("hostJobId").value=hv("hostJobSelect");
 };
 document.getElementById("hostJobsRefresh").onclick=async()=>{
-  const result=await request("/api/host/jobs?host_id="+encodeURIComponent(hostSelect.value));
+  const requestedHost=hostSelect.value;
+  const result=await request("/api/host/jobs?host_id="+encodeURIComponent(requestedHost));
+  if(requestedHost!==hostSelect.value)return;
   document.getElementById("hostJobsOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200){
     cachedHostJobs=result.data.jobs;
@@ -563,7 +612,7 @@ document.getElementById("hostJobsRefresh").onclick=async()=>{
       select.append(opt);
     }
     if(result.data.jobs.some(j=>j.job_id===old))select.value=old;
-    if(select.value)document.getElementById("hostJobId").value=select.value;
+    document.getElementById("hostJobId").value=select.value;
     showSelectedJob();renderAllJobs();
   }
 };
@@ -587,7 +636,7 @@ document.getElementById("hostSave").onclick=async()=>{
   hostOut.textContent=JSON.stringify(result,null,2);
   if(result.status===200)await refreshHosts();
 };
-document.getElementById("hostDelete").onclick=async()=>{
+document.getElementById("hostRuleDelete").onclick=async()=>{
   const result=await api("/api/host/rules/delete",
     {host_id:hostSelect.value,rule_id:hv("hostRuleId")});
   hostOut.textContent=JSON.stringify(result,null,2);
@@ -669,6 +718,9 @@ class AlphaSimulation:
             return 201, dict(record)
 
 
+from private_alpha_delete import ROUTES as DELETE_ROUTES, delete_resource
+
+
 def handler_for(service, *, local_bootstrap_secret=None):
     # In-memory abuse throttle for the LOCAL browser onboarding prototype.
     attempts = {}
@@ -739,7 +791,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -837,6 +889,14 @@ def handler_for(service, *, local_bootstrap_secret=None):
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
                 return
+            if path in DELETE_ROUTES:
+                if not hasattr(service, "_active_user"):
+                    self.reply(404, {"error": "unavailable"})
+                    return
+                status, result = delete_resource(service, self.headers.get("Authorization"),
+                    DELETE_ROUTES[path][0], body)
+                self.reply(status, result)
+                return
             if path in ("/api/host/claim","/api/host/effects",
                         "/api/host/effects/manual","/api/host/jobs/cancel",
                         "/api/host/jobs/retry", "/api/host/jobs/delete",
@@ -870,16 +930,6 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         body["host_id"],principal.user_id,body["job_id"],
                         now=int(time.time()))
                     self.reply(200 if result.state=="waiting" else 403,
-                        {"state":result.state,"reason":result.reason,
-                         "simulation_only":True})
-                    return
-                if path=="/api/host/jobs/delete":
-                    if set(body)!={"host_id","job_id"}:
-                        self.reply(400,{"error":"invalid_job_delete"})
-                        return
-                    result=policy.delete_alpha_host_job(
-                        body["host_id"],principal.user_id,body["job_id"])
-                    self.reply(200 if result.state=="deleted_alpha" else 403,
                         {"state":result.state,"reason":result.reason,
                          "simulation_only":True})
                     return
@@ -964,17 +1014,6 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 self.reply(200 if result.state in ("saved","deleted") else 403,
                            {"state":result.state,"reason":result.reason,
                             "simulation_only":True})
-                return
-            if path == "/api/jobs/delete":
-                if type(body) is not dict or set(body)!={"job_id"}:
-                    self.reply(400,{"error":"invalid_job_delete"})
-                    return
-                delete=getattr(service,"delete_alpha_job",None)
-                if delete is None:
-                    self.reply(404,{"error":"unavailable"})
-                    return
-                status,result=delete(principal,body["job_id"])
-                self.reply(status,result)
                 return
             if path == "/api/agents":
                 if not hasattr(service, "create_agent") or set(body) != {"agent_id"}:

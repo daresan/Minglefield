@@ -126,26 +126,6 @@ class HostCommitPolicy:
             db.execute("INSERT INTO sec01_host_jobs(job_id,host_id,effect_id,requested_by,state,created_at) VALUES(?,?,?,?,?,?)", (new_id,host_id,row[0],actor_id,"queued",datetime.now(timezone.utc).isoformat()))
             return HostDecision("queued_mock", new_id)
 
-    def delete_alpha_host_job(self, host_id, actor_id, job_id):
-        """Local alpha purge only; never delete a reserved or executing job."""
-        if not all(ident(v) for v in (host_id,actor_id,job_id)):
-            return HostDecision("denied","invalid_job")
-        with self.authority.store._tx() as db:
-            row=db.execute("SELECT requested_by,state FROM sec01_host_jobs WHERE host_id=? AND job_id=?",
-                           (host_id,job_id)).fetchone()
-            owner=db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
-                             (host_id,actor_id)).fetchone()
-            if row is None or (row[0]!=actor_id and owner is None):
-                return HostDecision("denied","not_job_requester_or_host_owner")
-            if row[1] not in ("cancelled","queued","waiting"):
-                return HostDecision("denied","job_not_safe_to_delete")
-            if db.execute("SELECT 1 FROM sec01_host_active_slots WHERE effect_key=?",
-                          (job_id,)).fetchone():
-                return HostDecision("denied","active_slot_exists")
-            db.execute("DELETE FROM sec01_host_jobs WHERE host_id=? AND job_id=?",
-                       (host_id,job_id))
-            return HostDecision("deleted_alpha","job_purged_local_alpha")
-
     def list_host_jobs(self, host_id, owner_id):
         """Owner-scoped, read-only persisted manual intents."""
         with self.authority.store._tx() as db:

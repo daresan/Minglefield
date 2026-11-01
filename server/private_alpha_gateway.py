@@ -14,7 +14,7 @@ import time
 from threading import Lock
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 MAX_BODY = 4096
 MAX_JOBS_PER_USER = 5

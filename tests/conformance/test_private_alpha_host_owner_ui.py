@@ -51,7 +51,7 @@ class OwnerUiTests(unittest.TestCase):
         from private_alpha_gateway import PAGE
         for control in ('id="claimHost"', 'id="claimSecret"',
                         'id="claimHostButton"', 'id="effectSave"',
-                        'id="effectManual"', 'id="hostJobsRefresh"', 'id="hostJobCancel"', 'id="hostJobEvaluate"'):
+                        'id="effectManual"', 'id="hostJobsRefresh"', 'id="hostJobCancel"', 'id="hostJobEvaluate"', 'id="hostJobReserve"', 'id="hostJobRelease"'):
             self.assertIn(control,PAGE)
         self.assertNotIn("Host-Admin-Rechte müssen lokal vergeben werden",PAGE)
         self.assertNotIn("Nur Hosts, für die dein angemeldeter Benutzer",PAGE)
@@ -122,6 +122,37 @@ class OwnerUiTests(unittest.TestCase):
                                   self.owner)[1]["jobs"][0]["state"],"waiting")
         self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payload)[0],200)
         self.assertEqual(self.req("/api/host/jobs/evaluate",self.owner,payload)[0],403)
+
+    def test_mock_reservation_enforces_limit_and_owner_release(self):
+        self.assertEqual(self.claim(self.owner)[0],200)
+        self.assertEqual(self.req("/api/host/effects",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo",
+                 description="metadata",enabled=True))[0],200)
+        config=dict(mode="automatic",idle_only=False,gpu_max_percent=None,
+            max_parallel_effects=1,timezone="UTC",weekdays=list(range(7)),
+            start_minute=0,end_minute=1440)
+        self.assertEqual(self.req("/api/host/rules",self.owner,
+            dict(host_id="host.local",rule_id="rule.one",priority=1,
+                 enabled=True,config=config))[0],200)
+        payloads=[]
+        for _ in range(2):
+            _,created=self.req("/api/host/effects/manual",self.owner,
+                dict(host_id="host.local",effect_id="effect.demo"))
+            payload=dict(host_id="host.local",job_id=created["reason"])
+            self.assertEqual(self.req("/api/host/jobs/evaluate",self.owner,payload)[0],200)
+            payloads.append(payload)
+        self.assertEqual(self.req("/api/host/jobs/reserve",self.other,payloads[0])[0],403)
+        status,first=self.req("/api/host/jobs/reserve",self.owner,payloads[0])
+        self.assertEqual((status,first["state"]),(200,"reserved_mock"))
+        self.assertEqual(self.policy.active_count("host.local"),1)
+        self.assertEqual(self.req("/api/host/jobs/reserve",self.owner,payloads[0])[0],403)
+        status,blocked=self.req("/api/host/jobs/reserve",self.owner,payloads[1])
+        self.assertEqual((status,blocked["reason"]),(409,"parallel_limit_reached"))
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payloads[0])[0],403)
+        self.assertEqual(self.req("/api/host/jobs/release",self.other,payloads[0])[0],403)
+        self.assertEqual(self.req("/api/host/jobs/release",self.owner,payloads[0])[0],200)
+        self.assertEqual(self.policy.active_count("host.local"),0)
+        self.assertEqual(self.req("/api/host/jobs/reserve",self.owner,payloads[1])[0],200)
 
     def test_claim_requires_console_secret_and_cannot_steal(self):
         self.assertEqual(self.claim(self.owner,"wrong")[0],403)

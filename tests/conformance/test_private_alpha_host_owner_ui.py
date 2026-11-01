@@ -155,6 +155,28 @@ class OwnerUiTests(unittest.TestCase):
         self.assertEqual(self.req("/api/host/jobs?host_id=host.local",self.owner)[1]["jobs"][0]["state"],"waiting")
         self.assertEqual(self.req("/api/host/jobs/reserve",self.owner,payloads[1])[0],200)
 
+    def test_retry_cancelled_job_preserves_original(self):
+        self.assertEqual(self.claim(self.owner)[0],200)
+        self.assertEqual(self.req("/api/host/effects",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo",
+                 description="metadata",enabled=True))[0],200)
+        _,created=self.req("/api/host/effects/manual",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo"))
+        original=created["reason"]
+        payload=dict(host_id="host.local",job_id=original)
+        self.assertEqual(self.req("/api/host/jobs/retry",self.owner,payload)[0],403)
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payload)[0],200)
+        self.assertEqual(self.req("/api/host/jobs/retry",self.other,payload)[0],403)
+        status,retried=self.req("/api/host/jobs/retry",self.owner,payload)
+        self.assertEqual((status,retried["state"]),(200,"queued_mock"))
+        self.assertNotEqual(retried["reason"],original)
+        status,jobs=self.req("/api/host/jobs?host_id=host.local",self.owner)
+        states={j["job_id"]:j["state"] for j in jobs["jobs"]}
+        self.assertEqual(states[original],"cancelled")
+        self.assertEqual(states[retried["reason"]],"queued")
+        from private_alpha_gateway import PAGE
+        self.assertIn('id="hostJobRetry"',PAGE)
+
     def test_alpha_tabs_and_one_click_selectors_present(self):
         from private_alpha_gateway import PAGE
         for marker in ('id="alphaNav"', 'id="effectSelect"',

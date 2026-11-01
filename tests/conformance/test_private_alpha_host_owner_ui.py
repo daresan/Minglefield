@@ -51,7 +51,7 @@ class OwnerUiTests(unittest.TestCase):
         from private_alpha_gateway import PAGE
         for control in ('id="claimHost"', 'id="claimSecret"',
                         'id="claimHostButton"', 'id="effectSave"',
-                        'id="effectManual"', 'id="hostJobsRefresh"'):
+                        'id="effectManual"', 'id="hostJobsRefresh"', 'id="hostJobCancel"'):
             self.assertIn(control,PAGE)
         self.assertNotIn("Host-Admin-Rechte müssen lokal vergeben werden",PAGE)
         self.assertNotIn("Nur Hosts, für die dein angemeldeter Benutzer",PAGE)
@@ -84,6 +84,24 @@ class OwnerUiTests(unittest.TestCase):
         reopened=HostCommitPolicy(IntegratedAlphaAdmission(self.store))
         self.assertEqual(reopened.list_host_jobs("host.local","user.owner"),
                          jobs[1]["jobs"])
+
+    def test_owner_can_cancel_queued_job_without_execution(self):
+        self.assertEqual(self.claim(self.owner)[0],200)
+        self.assertEqual(self.req("/api/host/effects",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo",
+                 description="metadata",enabled=True))[0],200)
+        status,created=self.req("/api/host/effects/manual",self.owner,
+            dict(host_id="host.local",effect_id="effect.demo"))
+        self.assertEqual(status,200)
+        job_id=created["reason"]
+        payload=dict(host_id="host.local",job_id=job_id)
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.other,payload)[0],403)
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payload)[0],200)
+        self.assertEqual(self.req("/api/host/jobs/cancel",self.owner,payload)[1]["reason"],
+                         "already_cancelled")
+        jobs=self.req("/api/host/jobs?host_id=host.local",self.owner)[1]["jobs"]
+        self.assertEqual(jobs[0]["state"],"cancelled")
+        self.assertEqual(self.policy.active_count("host.local"),0)
 
     def test_claim_requires_console_secret_and_cannot_steal(self):
         self.assertEqual(self.claim(self.owner,"wrong")[0],403)

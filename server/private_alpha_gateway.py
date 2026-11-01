@@ -94,6 +94,8 @@ werden derzeit abgelehnt.</small></p>
 <button id="effectSave">Effektdefinition speichern</button>
 <button id="effectManual">Job in Warteschlange einreihen</button>
 <button id="hostJobsRefresh">Host-Jobs laden</button>
+<label>Job-ID <input id="hostJobId" placeholder="hostjob.…"></label>
+<button id="hostJobCancel">Eingereihten Job abbrechen</button>
 <pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
 <p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
 beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></p>
@@ -294,6 +296,12 @@ document.getElementById("claimHostButton").onclick=async()=>{
   hostOut.textContent=JSON.stringify(result,null,2);
   if(result.status===200)await refreshHosts();
 };
+document.getElementById("hostJobCancel").onclick=async()=>{
+  const result=await api("/api/host/jobs/cancel",
+    {host_id:hostSelect.value,job_id:hv("hostJobId")});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
 document.getElementById("hostJobsRefresh").onclick=async()=>{
   const result=await request("/api/host/jobs?host_id="+encodeURIComponent(hostSelect.value));
   document.getElementById("hostJobsOutput").textContent=JSON.stringify(result,null,2);
@@ -470,7 +478,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual"):
+            if path not in ("/api/jobs", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -569,10 +577,20 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 self.reply(400, {"error": "invalid_json"})
                 return
             if path in ("/api/host/claim","/api/host/effects",
-                        "/api/host/effects/manual"):
+                        "/api/host/effects/manual","/api/host/jobs/cancel"):
                 policy=getattr(service,"_host_policy",None)
                 if policy is None or type(body) is not dict:
                     self.reply(404,{"error":"host_management_unavailable"})
+                    return
+                if path=="/api/host/jobs/cancel":
+                    if set(body)!={"host_id","job_id"}:
+                        self.reply(400,{"error":"invalid_job_cancel"})
+                        return
+                    result=policy.cancel_queued_host_job(
+                        body["host_id"],principal.user_id,body["job_id"])
+                    self.reply(200 if result.state=="cancelled_mock" else 403,
+                        {"state":result.state,"reason":result.reason,
+                         "simulation_only":True})
                     return
                 if path=="/api/host/claim":
                     if set(body)!={"host_id","bootstrap_secret"}:

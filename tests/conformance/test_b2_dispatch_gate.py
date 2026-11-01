@@ -1,5 +1,6 @@
 """B2.3b dispatch intent tests; no effects."""
 import sqlite3
+import json
 import unittest
 from contextlib import closing
 import test_action_submission as fixture

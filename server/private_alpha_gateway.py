@@ -622,20 +622,20 @@ for(const [id,path] of [
   ["hostJobReserve","/api/host/jobs/reserve"],
   ["hostJobRelease","/api/host/jobs/release"]]){
   document.getElementById(id).onclick=async()=>{
-    const result=await api(path,{host_id:hostSelect.value,job_id:hv("hostJobId")});
+    const result=await api(path,{host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
     document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
     if(result.status===200)document.getElementById("hostJobsRefresh").click();
   };
 }
 document.getElementById("hostJobEvaluate").onclick=async()=>{
   const result=await api("/api/host/jobs/evaluate",
-    {host_id:hostSelect.value,job_id:hv("hostJobId")});
+    {host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
 document.getElementById("hostJobCancel").onclick=async()=>{
   const result=await api("/api/host/jobs/cancel",
-    {host_id:hostSelect.value,job_id:hv("hostJobId")});
+    {host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
@@ -649,9 +649,9 @@ document.getElementById("hostJobSelect").onchange=()=>{
   document.getElementById("hostJobId").value=hv("hostJobSelect");
 };
 document.getElementById("hostJobsRefresh").onclick=async()=>{
-  const requestedHost=hostSelect.value;
+  const requestedHost=hv("jobHostSelect");
   const result=await request("/api/host/jobs?host_id="+encodeURIComponent(requestedHost));
-  if(requestedHost!==hostSelect.value)return;
+  if(requestedHost!==hv("jobHostSelect"))return;
   document.getElementById("hostJobsOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200){
     cachedHostJobs=result.data.jobs;
@@ -677,7 +677,7 @@ document.getElementById("effectSave").onclick=async()=>{
 };
 document.getElementById("effectManual").onclick=async()=>{
   const result=await api("/api/host/effects/manual",
-    {host_id:hostSelect.value,effect_id:hv("effectId")});
+    {host_id:hv("jobHostSelect"),effect_id:hv("jobEffectSelect")});
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };

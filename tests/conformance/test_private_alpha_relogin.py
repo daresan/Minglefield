@@ -1,5 +1,6 @@
 """Private Alpha v4 repeat login and legacy account migration tests."""
 import sys
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -77,7 +78,9 @@ class AlphaReloginTests(unittest.TestCase):
         self.store.redeem(self.store.invite("user.alpha"),agent_id="agent.alpha",
                           password="passphrase-test-123456")
         import sqlite3
-        with sqlite3.connect(self.db) as db:
+        # sqlite3.Connection context management commits, but does not close.
+        # Windows cannot delete the TemporaryDirectory while this handle is open.
+        with closing(sqlite3.connect(self.db)) as db:
             row=db.execute("SELECT salt,password_hash FROM alpha_passwords").fetchone()
         self.assertEqual(len(row[0]),16)
         self.assertEqual(len(row[1]),32)

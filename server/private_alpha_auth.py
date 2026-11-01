@@ -263,6 +263,27 @@ class AlphaAuthStore:
             return 200, {"agent_id":agent_id,"grantee_user_id":grantee_user_id,
                          "action":"demo.echo","revoked":revoke}
 
+    def owned_agent_grants(self, authorization, agent_id):
+        """Read active demo delegations of an owned agent; never expose other owners' grants."""
+        if not ident(agent_id):
+            return 400, {"error":"invalid_agent_id"}
+        with self._tx() as db:
+            owner=self._active_user(db,authorization)
+            if owner is None:
+                return 401, {"error":"unauthorized"}
+            agent=db.execute("""SELECT 1 FROM alpha_agents
+                WHERE agent_id=? AND user_id=? AND disabled=0""",
+                (agent_id,owner)).fetchone()
+            if not agent:
+                return 403, {"error":"not_resource_owner"}
+            rows=db.execute("""SELECT g.grantee_user_id FROM alpha_agent_grants g
+                JOIN alpha_users u ON u.user_id=g.grantee_user_id AND u.disabled=0
+                WHERE g.agent_id=? AND g.action='demo.echo' AND g.revoked=0
+                ORDER BY g.grantee_user_id""",(agent_id,)).fetchall()
+            return 200, {"agent_id":agent_id,
+                         "grantees":[row[0] for row in rows],
+                         "action":"demo.echo"}
+
     def grantable_users(self, authorization):
         """Local-alpha directory: active user IDs only, no secrets or sessions."""
         with self._tx() as db:

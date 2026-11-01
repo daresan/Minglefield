@@ -145,7 +145,21 @@ Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effe
 Die Hostübernahme ist nur einmalig erforderlich.</small></p></div>
 <div class="form-group"><h3>Hosts und Regeln auswählen</h3><div class="action-row"><button id="hostDelete">Host löschen</button>
 <button id="hostRefresh">Hosts und Regeln laden</button>\n<label>Vorhandene Regel <select id="hostRuleSelect"></select></label>\n<button id="hostLoadRule">Regel bearbeiten</button>
-</div><div class="field-grid"><label>Host <select id="hostSelect"></select></label></div></div><div class="form-group"><h3>Regel bearbeiten</h3><div class="field-grid">
+</div><div class="field-grid"><label>Host <select id="hostSelect"></select></label></div></div><div class="form-group"><h3>Lokale Runtimes</h3>
+<p>Mehrere ComfyUI-Instanzen pro Host. Nur Konfiguration, keine Ausführung.</p>
+<div class="field-grid">
+<label>Runtime auswählen <select id="runtimeSelect"></select></label>
+<label>Runtime-ID <input id="runtimeId" placeholder="comfy-main"></label>
+<label>Typ <select id="runtimeType"><option value="comfyui">ComfyUI</option></select></label>
+<label>Lokaler Endpunkt <input id="runtimeEndpoint" placeholder="http://127.0.0.1:8188"></label>
+<label><input id="runtimeEnabled" type="checkbox"> Aktiviert</label>
+</div>
+<div class="action-row"><button id="runtimeRefresh">Runtimes laden</button>
+<button id="runtimeNew">Neue Runtime</button>
+<button id="runtimeSave">Runtime speichern</button>
+<button id="runtimeDelete">Runtime löschen</button></div>
+<pre id="runtimeOutput" aria-live="polite">Keine Runtimes geladen.</pre></div>
+<div class="form-group"><h3>Regel bearbeiten</h3><div class="field-grid">
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
 <label>Priorität <input id="hostPriority" type="number" value="10" min="0"></label>
 <label><input id="hostEnabled" type="checkbox" checked> Regel aktiv</label>
@@ -555,6 +569,7 @@ async function refreshHosts(){
   }
   if(hostCache.some(h=>h.host_id===previous))hostSelect.value=previous;
   renderHost();
+  await refreshRuntimes();
   jobHost.value=hostSelect.value;
   effectHost.value=hostSelect.value;
   renderJobEffects();
@@ -628,7 +643,52 @@ document.getElementById("hostRuleSelect").onchange=()=>{
   const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));
   if(rule)loadRule(rule);
 };
-hostSelect.onchange=renderHost;
+let runtimeCache=[];
+async function refreshRuntimes(){
+  const output=document.getElementById("runtimeOutput");
+  const select=document.getElementById("runtimeSelect");
+  if(!hostSelect.value){select.replaceChildren();runtimeCache=[];return;}
+  const response=await request("/api/host/runtimes?host_id="+encodeURIComponent(hostSelect.value));
+  if(response.status!==200){output.textContent=JSON.stringify(response,null,2);return;}
+  runtimeCache=response.data.runtimes;
+  const old=select.value;select.replaceChildren();
+  for(const runtime of runtimeCache){
+    const option=document.createElement("option");option.value=runtime.id;
+    option.textContent=runtime.id+" · "+runtime.type;select.append(option);
+  }
+  if(runtimeCache.some(r=>r.id===old))select.value=old;
+  loadSelectedRuntime();
+  output.textContent=runtimeCache.length+" Runtime(s) konfiguriert.";
+}
+function loadSelectedRuntime(){
+  const runtime=runtimeCache.find(r=>r.id===document.getElementById("runtimeSelect").value);
+  document.getElementById("runtimeId").value=runtime?.id||"";
+  document.getElementById("runtimeType").value=runtime?.type||"comfyui";
+  document.getElementById("runtimeEndpoint").value=runtime?.endpoint||"";
+  document.getElementById("runtimeEnabled").checked=runtime?.enabled||false;
+}
+document.getElementById("runtimeSelect").onchange=loadSelectedRuntime;
+document.getElementById("runtimeRefresh").onclick=refreshRuntimes;
+document.getElementById("runtimeNew").onclick=()=>{
+  document.getElementById("runtimeSelect").value="";
+  loadSelectedRuntime();
+};
+document.getElementById("runtimeSave").onclick=async()=>{
+  const result=await api("/api/host/runtimes",{host_id:hostSelect.value,
+    runtime:{id:hv("runtimeId"),type:hv("runtimeType"),
+      endpoint:hv("runtimeEndpoint"),enabled:hm("runtimeEnabled")}});
+  document.getElementById("runtimeOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshRuntimes();
+};
+document.getElementById("runtimeDelete").onclick=async()=>{
+  const id=hv("runtimeSelect");
+  if(!id||!confirm("Runtime "+id+" löschen?"))return;
+  const result=await api("/api/host/runtimes/delete",
+    {host_id:hostSelect.value,runtime_id:id});
+  document.getElementById("runtimeOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshRuntimes();
+};
+hostSelect.onchange=()=>{renderHost();refreshRuntimes();};
 document.getElementById("effectHostSelect").onchange=()=>{
   hostSelect.value=hv("effectHostSelect");renderHost();
 };

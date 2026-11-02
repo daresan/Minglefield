@@ -574,6 +574,29 @@ class HostCommitPolicy:
                 "lockfile":lock_report,"registry":catalog,
                 "notes":"Lockfile declarations are untrusted until artifact and source verification is implemented."}
 
+    def inspect_game_installation_evidence(self, host_id, owner_id, project_id):
+        """Owner-scoped, read-only journal inventory; records are NOT attestations.
+
+        No client-facing insertion path exists. Presence never promotes an
+        integration to installation_verified.
+        """
+        with self.authority.store._tx() as db:
+            authorized=db.execute("""SELECT 1 FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+            if authorized is None:
+                return None
+            rows=db.execute("""SELECT integration_id,installer_run_id,recorded_at
+                FROM alpha_game_installation_evidence
+                WHERE host_id=? AND project_id=?
+                ORDER BY integration_id,recorded_at DESC,installer_run_id""",
+                (host_id,project_id)).fetchall()
+        return {"project_id":project_id,"state":"unverified",
+                "records":[{"integration_id":row[0],"installer_run_id":row[1],
+                            "recorded_at":row[2],"verification_state":"unknown"}
+                           for row in rows],
+                "note":"Journal entries are not proof of artifact integrity or installed bytes."}
+
     def inspect_game_integration_releases(self, host_id, owner_id, project_id, *, fetcher=None):
         """Read-only update discovery; never accept release sources from the client."""
         from game_integration_updates import discover_integration_update

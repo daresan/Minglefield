@@ -37,6 +37,42 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(projects[0]["project_id"], "game.one")
         self.assertEqual(projects[0]["settings_revision"], 1)
 
+    def test_explicit_directory_preparation(self):
+        repo=self.root / "repo"
+        repo.mkdir()
+        marker=repo / "keep.txt"
+        marker.write_text("keep")
+        stage=repo / "stage"
+        output=repo / "output"
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.prepare","Prepare",
+            str(repo),str(stage),str(output)).state,"created")
+        self.assertEqual(self.policy.prepare_game_project_directories(
+            "host.one","user.other","game.prepare",1)["reason"],"not_host_owner")
+        self.assertEqual(self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.prepare",2)["reason"],"revision_conflict")
+        self.assertFalse(stage.exists())
+        result=self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.prepare",1)
+        self.assertEqual(result["state"],"prepared")
+        self.assertEqual(set(result["created"]),{str(stage),str(output)})
+        self.assertTrue(stage.is_dir())
+        self.assertTrue(output.is_dir())
+        self.assertEqual(self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.prepare",1)["created"],[])
+        self.assertEqual(marker.read_text(),"keep")
+
+    def test_directory_preparation_rejects_unsafe_paths(self):
+        repo=self.root / "repo"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.unsafe","Unsafe",
+            str(repo),str(repo),str(self.root / "output")).state,"created")
+        result=self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.unsafe",1)
+        self.assertEqual(result["reason"],"unsafe_project_paths")
+        self.assertFalse((self.root / "output").exists())
+
     def test_read_only_directory_inspection(self):
         repo = self.root / "repo"
         repo.mkdir()

@@ -108,6 +108,12 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <label>Host für Job <select id="jobHostSelect"></select></label>
 <label>Effekt für Job <select id="jobEffectSelect"></select></label>
 <div id="jobParameterFields" style="display:grid;gap:6px"></div>
+<fieldset><legend>ComfyUI-Eingabedateien (auch ohne Upload-Node)</legend>
+<label>Runtime <select id="jobComfyRuntime"></select></label>
+<label>Dateien auswählen <input id="jobComfyFiles" type="file" multiple accept="image/*,video/*,audio/*,.glb,.gltf,.obj,.ply"></label>
+<button id="jobComfyUpload" type="button">Dateien in ComfyUI hochladen</button>
+<pre id="jobComfyUploadOutput" aria-live="polite">Noch keine Dateien hochgeladen.</pre>
+</fieldset>
 <button id="effectManual">Job in Warteschlange einreihen</button>
 
 <button id="hostJobsRefresh">Host-Jobs laden</button>
@@ -176,6 +182,7 @@ nur gespeichert, nicht auf Erreichbarkeit geprüft. Workflows werden im Tab „E
 <label>Neue oder bestehende Runtime-ID <input id="runtimeId" placeholder="comfy-main"></label>
 <label>Typ <select id="runtimeType"><option value="comfyui">ComfyUI</option></select></label>
 <label>ComfyUI API-Adresse <input id="runtimeEndpoint" placeholder="http://127.0.0.1:8188"></label>
+<label>Input-Ordner (nur Anzeige, Upload erfolgt per API) <input id="runtimeInputFolder" placeholder="ComfyUI/input"></label>
 <label><input id="runtimeEnabled" type="checkbox"> Aktiviert</label>
 </div>
 <div class="action-row"><button id="runtimeRefresh">Runtimes laden</button><button id="runtimeCheck">Verbindung prüfen</button>
@@ -686,8 +693,25 @@ function renderJobEffects(){
   }
   if([...select.options].some(o=>o.value===previous))select.value=previous;
   renderJobParameters();
+  refreshJobComfyRuntimes();
 }
-document.getElementById("jobEffectSelect").onchange=renderJobParameters;
+async function refreshJobComfyRuntimes(){
+  const select=document.getElementById("jobComfyRuntime");
+  const old=select.value;select.replaceChildren();
+  const host=hv("jobHostSelect");
+  if(!host)return;
+  const response=await request("/api/host/runtimes?host_id="+encodeURIComponent(host));
+  if(response.status!==200)return;
+  for(const runtime of response.data.runtimes.filter(x=>x.type==="comfyui"&&x.enabled)){
+    const option=document.createElement("option");option.value=runtime.id;
+    option.textContent=runtime.id;select.append(option);
+  }
+  const effect=hostCache.find(h=>h.host_id===host)?.effects.find(e=>e.effect_id===hv("jobEffectSelect"));
+  const preferred=effect?.comfy_workflow?.runtime_id;
+  if([...select.options].some(o=>o.value===preferred))select.value=preferred;
+  else if([...select.options].some(o=>o.value===old))select.value=old;
+}
+document.getElementById("jobEffectSelect").onchange=()=>{renderJobParameters();refreshJobComfyRuntimes();};
 document.getElementById("jobHostSelect").onchange=()=>{
   hostSelect.value=hv("jobHostSelect");renderHost();renderJobEffects();
 };
@@ -850,6 +874,7 @@ function loadSelectedRuntime(){
   document.getElementById("runtimeType").value=runtime?.type||"comfyui";
   document.getElementById("runtimeEndpoint").value=runtime?.endpoint||"";
   document.getElementById("runtimeEnabled").checked=runtime?.enabled||false;
+  document.getElementById("runtimeInputFolder").value=runtime?.input_folder||"";
 }
 document.getElementById("runtimeSelect").onchange=loadSelectedRuntime;
 document.getElementById("runtimeRefresh").onclick=refreshRuntimes;
@@ -860,7 +885,7 @@ document.getElementById("runtimeNew").onclick=()=>{
 document.getElementById("runtimeSave").onclick=async()=>{
   const result=await api("/api/host/runtimes",{host_id:hostSelect.value,
     runtime:{id:hv("runtimeId"),type:hv("runtimeType"),
-      endpoint:hv("runtimeEndpoint"),enabled:hm("runtimeEnabled")}});
+      endpoint:hv("runtimeEndpoint"),enabled:hm("runtimeEnabled"),input_folder:hv("runtimeInputFolder")}});
   document.getElementById("runtimeOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)await refreshRuntimes();
 };

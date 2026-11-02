@@ -653,11 +653,24 @@ function renderJobParameters(){
   for(const p of specs){
     const label=document.createElement("label");
     label.textContent=p.binding+" · "+p.class_type+" ("+p.type+")";
-    const field=document.createElement("input");
+    const field=p.type==="enum"?document.createElement("select"):
+      (p.widget==="textarea"||p.type==="string"&&/prompt|text|description/i.test(p.input))
+      ?document.createElement("textarea"):document.createElement("input");
     field.dataset.binding=p.binding;field.dataset.kind=p.type;
+    if(field.tagName==="SELECT"){
+      for(const choice of p.constraints?.choices||p.choices||[]){
+        const option=document.createElement("option");option.value=choice;
+        option.textContent=choice;field.append(option);
+      }
+      field.value=String(p.default??"");
+    }else if(field.tagName==="TEXTAREA"){field.rows=5;field.value=String(p.default??"");}
     if(p.type==="boolean"){field.type="checkbox";field.checked=p.default===true;}
-    else {field.type=p.type==="integer"||p.type==="number"?"number":"text";
-      if(field.type==="number")field.step=p.type==="integer"?"1":"any";
+    else if(field.tagName==="INPUT"){field.type=p.type==="integer"||p.type==="number"?"number":"text";
+      if(field.type==="number"){
+        field.step=String(p.constraints?.step??(p.type==="integer"?1:"any"));
+        if(Number.isFinite(p.constraints?.min))field.min=String(p.constraints.min);
+        if(Number.isFinite(p.constraints?.max))field.max=String(p.constraints.max);
+      }
       field.value=String(p.default??"");}
     label.append(field);area.append(label);
   }

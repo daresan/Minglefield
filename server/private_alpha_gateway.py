@@ -195,6 +195,14 @@ nur gespeichert, nicht auf Erreichbarkeit geprüft. Workflows werden im Tab „E
 <span id="runtimeLamp" aria-hidden="true" style="display:inline-block;width:18px;height:18px;border-radius:50%;background:#8792a4;box-shadow:0 0 0 3px #8792a433"></span>
 <strong id="runtimeStatusText">Nicht geprüft</strong></div>
 <pre id="runtimeOutput" aria-live="polite">Keine Runtimes geladen.</pre></div>
+<div class="form-group"><h3>Host-Speicherorte</h3>
+<p>Lokale Verzeichnisse werden persistent in der Host-Datenbank gespeichert. Keine Umgebungsvariablen erforderlich.</p>
+<div class="field-grid">
+<label>Asset-Staging-Verzeichnis <input id="hostStagingRoot" placeholder="C:\\Minglefield\\Staging"></label>
+<label>Output-Verzeichnis <input id="hostOutputRoot" placeholder="C:\\Minglefield\\Output"></label>
+</div><div class="action-row"><button type="button" id="hostSettingsLoad">Einstellungen laden</button>
+<button type="button" id="hostSettingsSave">Einstellungen speichern</button></div>
+<pre id="hostSettingsStatus" aria-live="polite"></pre></div>
 <div class="form-group"><h3>Regel bearbeiten</h3><div class="field-grid">
 <label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
 <label>Priorität <input id="hostPriority" type="number" value="10" min="0"></label>
@@ -1220,6 +1228,24 @@ document.getElementById("effectManual").onclick=async()=>{
     {host_id:hv("jobHostSelect"),effect_id:hv("jobEffectSelect"),parameters});
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+async function loadHostStorageSettings(){
+  const host_id=hv("hostSelect");
+  const result=await request("/api/host/settings?host_id="+encodeURIComponent(host_id));
+  document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
+  if(result.status===200){
+    document.getElementById("hostStagingRoot").value=result.data.settings.staging_root||"";
+    document.getElementById("hostOutputRoot").value=result.data.settings.output_root||"";
+  }
+}
+document.getElementById("hostSettingsLoad").onclick=loadHostStorageSettings;
+document.getElementById("hostSettingsSave").onclick=async()=>{
+  const result=await api("/api/host/settings",{
+    host_id:hv("hostSelect"),
+    settings:{staging_root:document.getElementById("hostStagingRoot").value.trim(),
+              output_root:document.getElementById("hostOutputRoot").value.trim()}
+  });
+  document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
 };
 document.getElementById("hostSave").onclick=async()=>{
   const result=await api("/api/host/rules",{host_id:hostSelect.value,

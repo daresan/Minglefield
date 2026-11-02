@@ -1759,7 +1759,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/game/projects", "/api/game/projects/update"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/game/projects", "/api/game/projects/update", "/api/game/projects/delete"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -1945,6 +1945,23 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 body = json.loads(self.rfile.read(int(length)))
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
+                return
+            if path=="/api/game/projects/delete":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or type(body["host_id"]) is not str
+                        or type(body["project_id"]) is not str
+                        or type(body["settings_revision"]) is not int):
+                    self.reply(400,{"error":"invalid_project_delete"})
+                    return
+                decision=policy.delete_game_project(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["settings_revision"])
+                status=200 if decision.state=="deleted" else (
+                    403 if decision.reason=="not_host_owner" else
+                    409 if decision.reason in ("revision_conflict","project_not_found") else 400)
+                self.reply(status,{"state":decision.state,"reason":decision.reason})
                 return
             if path=="/api/game/projects/update":
                 policy=getattr(service,"_host_policy",None)

@@ -61,6 +61,20 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 **Delivery acceptance and continuity:** [P1.4f completion gate, P1.5 scope and later stages](docs/GAME-DELIVERY-CONTINUITY.md). Finish the complete integration-update workflow before P1.5; P1.4f.2g is not the stopping point.
 
+## P1.4g — Universal Package Verification & Community Trust (MCV v0.1; planned)
+
+**Placement:** after the P1.4f Game integration-update acceptance gate, before P1.5 Game workspace/assets. Design the P1.4f evidence interfaces to be package-kind-neutral now; do not postpone the first working approved Game update for a community network.
+
+- [ ] Audit and consolidate existing package identity/lock, registry, evidence evaluator, artifact hashing, installation journal, host authorization and audit flows before extending them; avoid duplicate implementations and orphaned helpers.
+- [ ] Define one verification envelope for Games/integrations, Agents, models, Effects, Services and future package kinds, with artifact digest, publisher/release identity, provenance, verification policy and package-kind-specific checks.
+- [ ] Bootstrap policy: one explicitly authorized trust domain plus mandatory independent technical checks. Multiple agents under the same operator do not count as independent domains.
+- [ ] Add signed verifier attestations (e.g. Ed25519), verifier identity/key lifecycle, revocation, expiry and distinct trust-domain counting; require explicit policy selection before moving to multi-party quorum.
+- [ ] Keep artifact integrity, installed-state verification, security-review claims and community approval as separate states. A quorum cannot override failed cryptographic or installation checks.
+- [ ] Reuse the access-controlled runtime evidence journal and existing host/project authorization; no blockchain network or paid third-party service required for v0.1.
+- [ ] Add end-to-end, tamper, forged-attestation, duplicate-domain, revoked-key and downgrade tests before exposing any approval as trusted.
+
+**Dependency:** P1.4f first delivers a real approved, audited and recoverable Game update; P1.4g generalizes that path rather than introducing a second installer. P1.5 resumes after the P1.4g minimum acceptance gate. The public roadmap is a plan, not a claim that MCV is implemented.
+
 ## P1.4f.2g — Close integration update foundations, then return to Game delivery
 
 - [x] **2g.1:** Choose root `minglefield.lock` as the single future resolved-package lock; keep alpha `.minglefield/integrations.lock.json` read-only, never silently merge two locks. Add draft schema and offline conformance tests. See [unified lock contract](docs/UNIFIED-PACKAGE-LOCK-v0.1-DRAFT.md).

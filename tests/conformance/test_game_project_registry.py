@@ -181,6 +181,29 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(report["manifest"]["state"],"compatible")
         self.assertFalse(report["issues"])
 
+    def test_update_inspection_reads_explicit_release_source_without_writes(self):
+        repo=self.root/"release_repo"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.release","Release",
+            str(repo),str(repo/"staging"),str(repo/"output")).state,"created")
+        called=[]
+        def fetcher(source):
+            called.append(source)
+            return {"state":"available","releases":[{"tag_name":"v1.0.0"}]}
+        self.assertIsNone(self.policy.inspect_game_integration_update(
+            "host.one","user.other","game.release",
+            release_repository="owner/repo",release_fetcher=fetcher))
+        self.assertEqual(called,[])
+        result=self.policy.inspect_game_integration_update(
+            "host.one","user.owner","game.release",
+            release_repository="owner/repo",release_fetcher=fetcher)
+        self.assertEqual(called,["owner/repo"])
+        self.assertEqual(result["release_catalog"]["state"],"available")
+        self.assertIsNone(result["update_available"])
+        self.assertIsNone(result["integration_version"])
+        self.assertFalse((repo/".minglefield").exists())
+
     def test_manifest_version_policy_preserves_future_and_mismatched_files(self):
         import json
         repo=self.root/"version_repo"

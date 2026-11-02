@@ -771,6 +771,18 @@ function renderJobParameters(){
             return;
           }
           picker.dataset.stagedAssetId=result.data.asset.asset_id;
+          const bindingField=[...document.querySelectorAll("#jobParameterFields [data-binding]")]
+            .find(x=>x.dataset.binding===picker.dataset.fileBinding);
+          if(bindingField){
+            const token="minglefield-asset:"+result.data.asset.asset_id;
+            if(bindingField.tagName==="SELECT"){
+              const option=document.createElement("option");
+              option.value=token;option.textContent="Lokales Asset: "+selected.name;
+              bindingField.append(option);
+            }
+            bindingField.value=token;
+          }
+          document.getElementById("effectManual").disabled=false;
           status.textContent="Lokal gespeichert: "+selected.name+
             " · Asset-ID "+result.data.asset.asset_id+
             " · SHA-256 "+result.data.asset.sha256;
@@ -804,6 +816,11 @@ async function refreshJobFileChoices(){
       option.value=value;option.textContent=value;field.append(option);
     }
     if(choices.includes(previous))field.value=previous;
+    else if(previous.startsWith("minglefield-asset:")){
+      const option=document.createElement("option");
+      option.value=previous;option.textContent="Lokales Asset: "+previous.slice(17);
+      field.append(option);field.value=previous;
+    }
   }
 }
 function renderJobEffects(){
@@ -1213,6 +1230,7 @@ document.getElementById("jobComfyUpload").onclick=async()=>{
 document.getElementById("effectManual").onclick=async()=>{
   const parameters={};
   for(const field of document.querySelectorAll("#jobParameterFields input, #jobParameterFields select, #jobParameterFields textarea")){
+    if(!field.dataset.binding)continue;
     let value;
     if(field.dataset.kind==="boolean")value=field.checked;
     else if(field.dataset.kind==="integer"||field.dataset.kind==="number"){

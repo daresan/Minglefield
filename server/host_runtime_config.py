@@ -46,8 +46,13 @@ def validate_runtime(configuration):
     enabled = configuration.get("enabled", False)
     if type(enabled) is not bool:
         raise RuntimeConfigurationError("invalid_enabled")
+    input_folder = configuration.get("input_folder", "")
+    if (type(input_folder) is not str or len(input_folder) > 512
+            or "\\x00" in input_folder):
+        raise RuntimeConfigurationError("invalid_input_folder")
+    # Informational only: uploads use ComfyUI /upload/*, never filesystem writes.
     return {"id": runtime_id, "type": kind, "endpoint": endpoint.rstrip("/"),
-            "enabled": enabled}
+            "enabled": enabled, "input_folder": input_folder}
 
 
 class HostRuntimeRegistry:

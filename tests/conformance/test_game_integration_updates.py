@@ -33,7 +33,11 @@ class GameIntegrationUpdateTests(unittest.TestCase):
         self.assertEqual(preview["changed_files"],{"state":"unknown","files":[],
                          "comparison_url":"https://github.com/alice/godot/compare/1.2.3...v1.3.0"})
         self.assertEqual(preview["compatibility"]["state"],"unknown")
+        self.assertEqual(preview["compatibility"]["reason"],"no_verified_compatibility_contract")
+        self.assertIs(preview["compatibility"]["requires_manual_review"],True)
         self.assertEqual(preview["migration"]["state"],"unknown")
+        self.assertEqual(preview["migration"]["reason"],"no_verified_migration_plan")
+        self.assertIs(preview["migration"]["requires_manual_review"],True)
         self.assertEqual(preview["artifact_integrity"]["state"],"unknown")
         self.assertIs(preview["installation_allowed"],False)
         verified=discover_integration_update(ENTRY,CATALOG,fetcher=releases,

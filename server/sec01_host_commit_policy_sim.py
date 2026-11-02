@@ -148,6 +148,32 @@ class HostCommitPolicy:
                 (name.strip(),*paths,host_id,owner_id,project_id,revision))
         return HostDecision("saved","game_project_updated")
 
+    def inspect_game_project_paths(self, host_id, owner_id, project_id):
+        """Read-only local directory inspection; no creation or writes."""
+        from pathlib import Path
+        if not ident(project_id):
+            return None
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return None
+            row=db.execute("""SELECT repository_root,staging_root,output_root
+                FROM alpha_game_projects WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+        if row is None:
+            return None
+        result={}
+        for key,raw in zip(("repository_root","staging_root","output_root"),row):
+            path=Path(raw)
+            try:
+                exists=path.exists()
+                is_directory=path.is_dir() if exists else False
+                result[key]={"path":raw,"state":(
+                    "missing" if not exists else "directory" if is_directory else "not_directory")}
+            except OSError:
+                result[key]={"path":raw,"state":"unavailable"}
+        return result
+
     def delete_game_project(self, host_id, owner_id, project_id, revision):
         """Remove only a registry row, never project directories or files."""
         if not ident(project_id) or type(revision) is not int or revision < 1:

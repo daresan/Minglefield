@@ -316,7 +316,7 @@ class HostCommitPolicy:
                         return HostDecision("denied","invalid_parameter_type")
                     if kind=="boolean" and type(value) is not bool:
                         return HostDecision("denied","invalid_parameter_type")
-                    if kind in ("string","enum") and type(value) is not str:
+                    if kind in ("string","enum","file") and type(value) is not str:
                         return HostDecision("denied","invalid_parameter_type")
                     constraints=spec.get("constraints",spec.get("limits",{}))
                     if kind=="enum" and value not in ((current_file_choices or {}).get(key, constraints.get("choices",spec.get("choices",[])))):
@@ -328,7 +328,7 @@ class HostCommitPolicy:
                             return HostDecision("denied","parameter_below_minimum")
                         if type(maximum) in (int,float) and value>maximum:
                             return HostDecision("denied","parameter_above_maximum")
-                    if kind not in ("integer","number","boolean","string","enum"):
+                    if kind not in ("integer","number","boolean","string","enum","file"):
                         return HostDecision("denied","invalid_parameter_type")
                 snapshot=(metadata["workflow_sha256"],json.dumps(values,allow_nan=False,sort_keys=True))
             elif values:

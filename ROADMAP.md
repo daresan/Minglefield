@@ -65,7 +65,7 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 - [x] **2g.1:** Choose root `minglefield.lock` as the single future resolved-package lock; keep alpha `.minglefield/integrations.lock.json` read-only, never silently merge two locks. Add draft schema and offline conformance tests. See [unified lock contract](docs/UNIFIED-PACKAGE-LOCK-v0.1-DRAFT.md).
 - [x] Verify 2g.1 tests on Windows (4 package-lock, 8 integration, 26 Game-project; 38/38 OK); no writer, migration or Game repository changes.
-- [ ] **2g.2:** Define independent release/source/artifact/installation verification evidence and negative tests.
+- [x] **2g.2 (implementation pending Windows verification):** Define independent release/source/artifact/installation evidence and offline negative tests. See [verification contract](docs/GAME-INTEGRATION-VERIFICATION-v0.1-DRAFT.md). This classifier does not perform trusted I/O or issue attestations.
 - [ ] **2g.3:** Read-only unified lock inspection and verification report; explicit owner-scoped access and collision detection.
 - [ ] Resume **P1.4f integration update preview/opt-in update flow**, then return to **P1.5 Game assets** and the planned **Game build/test/launch and agent collaboration**. Do not expand a general-purpose package manager during this milestone.
 

@@ -181,7 +181,7 @@ class GameProjectHttpTests(unittest.TestCase):
                                       self.owner,body)[0],200)
         status,data=self.request("GET",route,self.owner)
         self.assertEqual(status,200)
-        self.assertEqual(data["update_state"],"no_known_update")
+        self.assertEqual(data["update_state"],"availability_unknown")
         self.assertIsNone(data["update_available"])
 
     def test_invalid_requests_are_rejected(self):

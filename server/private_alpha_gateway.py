@@ -1547,7 +1547,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -1632,6 +1632,34 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 else:
                     revoke(self.headers.get("Authorization"))
                     self.reply(200, {"status": "session_revoked"})
+                return
+            if path == "/api/host/assets/stage":
+                import os
+                from pathlib import Path
+                from game_asset_staging import ProjectAssetStaging, StagingError, MAX_ASSET_BYTES
+                policy=getattr(service,"_host_policy",None)
+                host_id=self.headers.get("X-Minglefield-Host","")
+                filename=self.headers.get("X-Minglefield-Filename","")
+                length=self.headers.get("Content-Length","")
+                configured=os.environ.get("MINGLEFIELD_GAME_STAGING_ROOT","")
+                if self.headers.get("Content-Type","").split(";")[0].strip()!="application/octet-stream":
+                    self.reply(415,{"error":"binary_upload_required"})
+                    return
+                if not configured:
+                    self.reply(409,{"error":"staging_root_not_configured"})
+                    return
+                if not length.isdecimal() or int(length)>MAX_ASSET_BYTES:
+                    self.reply(413,{"error":"invalid_asset_size"})
+                    return
+                if not policy or policy.list_runtimes(host_id,principal.user_id) is None:
+                    self.reply(403,{"error":"host_not_owned"})
+                    return
+                try:
+                    staging=ProjectAssetStaging(host_id,Path(configured)/host_id)
+                    record=staging.stage(filename,self.rfile,int(length))
+                    self.reply(201,{"state":"staged","asset":record,"comfy_transferred":False})
+                except (StagingError,OSError,ValueError) as exc:
+                    self.reply(400,{"error":"staging_failed","detail":str(exc)[:160]})
                 return
             if path == "/api/host/comfy/upload":
                 if self.headers.get("Content-Type","").split(";")[0].strip()!="application/octet-stream":

@@ -901,7 +901,9 @@ for(const [id,path] of [
   document.getElementById(id).onclick=async()=>{
     const result=await api(path,{host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
     document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
-    if(result.status===200)document.getElementById("hostJobsRefresh").click();
+    if(result.status===200){
+    await document.getElementById("hostJobsRefresh").click();
+  }
   };
 }
 document.getElementById("hostJobEvaluate").onclick=async()=>{
@@ -954,7 +956,7 @@ document.getElementById("effectSave").onclick=async()=>{
 };
 document.getElementById("effectManual").onclick=async()=>{
   const parameters={};
-  for(const field of document.querySelectorAll("#jobParameterFields input")){
+  for(const field of document.querySelectorAll("#jobParameterFields input, #jobParameterFields select, #jobParameterFields textarea")){
     let value;
     if(field.dataset.kind==="boolean")value=field.checked;
     else if(field.dataset.kind==="integer"||field.dataset.kind==="number"){

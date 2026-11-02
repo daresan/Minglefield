@@ -49,6 +49,13 @@ This workflow describes the intended contribution model. Until licensing is fina
 
 ## Local validation (Python reference)
 
+Before running Python, read `DEVELOPMENT.local.md` if present (ignored, machine-local
+configuration) and the [local interpreter guide](docs/PRIVATE_ALPHA_LOCAL_SERVE_GUIDE.md#python-environment-preflight).
+Use the explicitly configured project interpreter; verify `sys.executable` and
+`requirements-ci.txt`. Do not assume PATH Python belongs to Minglefield or install
+packages into another project environment. On PowerShell use `& $mfPython` in place
+of `python` below.
+
 From repository root:
 
 ```sh

@@ -2,12 +2,46 @@
 
 Status: **simulation-only developer preview, NOT suitable for invited remote testers yet**. Applies to `server/private_alpha_gateway.py`. No public server or real ComfyUI action is enabled by this document.
 
+## Python environment preflight
+
+Read `DEVELOPMENT.local.md` in the checkout root when present. It is ignored by Git
+and records this machine's confirmed interpreter. The Shadow-PC uses an existing
+Conda environment named `minglefield`; its absolute path belongs only in that local
+file, not application code or a portable project default. Never fall back silently
+to PATH Python, Hermes or Conda base.
+
+For a different workstation, select an existing project environment explicitly, for
+example through a shell-local `MINGLEFIELD_PYTHON` value:
+
+```powershell
+$mfPython = $env:MINGLEFIELD_PYTHON
+if (-not $mfPython -or -not (Test-Path -LiteralPath $mfPython -PathType Leaf)) {
+    throw "Set MINGLEFIELD_PYTHON to the confirmed project interpreter first."
+}
+& $mfPython -B -c "import sys; from importlib.metadata import version; print(sys.executable); print(sys.version); print('jsonschema', version('jsonschema')); print('packaging', version('packaging'))"
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_*.py" -v
+& $mfPython -B tests/conformance/validate_map_v01.py
+git diff --check
+```
+
+Compare the installed versions with `requirements-ci.txt` before testing. If a
+package is missing or incompatible, report it and obtain authorization to change
+that selected environment; do not install into Hermes or Conda base. Node.js must
+also be available for the served-page JavaScript regression checks.
+
+All PowerShell commands below assume `$mfPython` was selected and checked first.
+Tests use isolated temporary databases/repositories and dynamic loopback ports
+(port 0). Keep temporary repositories outside any Git checkout. Do not stop,
+restart, reconfigure or reuse a running development server or its database to run
+conformance tests. Server launch examples below are separate manual operations,
+not prerequisites for tests.
+
 ## Local developer smoke test (current increment)
 
 From the repository root in PowerShell:
 
 ```powershell
-python -B server/private_alpha_gateway.py --port 8767
+& $mfPython -B server/private_alpha_gateway.py --port 8767
 ```
 
 The process binds **only** `127.0.0.1:8767`. The console prints a randomly generated **test-only** token, which expires when the process exits. Open `http://127.0.0.1:8767/`, enter the token, click Connect and Simulate action. The only allowed action is `demo.echo`, whose result is `simulated_no_effect`. There are no GPU calls, external effects, ComfyUI jobs, B2 state changes, disk-backed user accounts or persistent jobs. The prototype can show two isolated identities under tests but starts with only one ephemeral local identity.
@@ -15,10 +49,10 @@ The process binds **only** `127.0.0.1:8767`. The console prints a randomly gener
 Focused tests:
 
 ```powershell
-python -B -m unittest discover -s tests/conformance -p "test_private_alpha_gateway.py" -v
-python -B -m unittest discover -s tests/conformance -p "test_sec01_mock_game_adapter.py" -v
-python -B -m unittest discover -s tests/conformance -p "test_*.py"
-python -B tests/conformance/validate_map_v01.py
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_private_alpha_gateway.py" -v
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_sec01_mock_game_adapter.py" -v
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_*.py"
+& $mfPython -B tests/conformance/validate_map_v01.py
 git diff --check
 git status --short
 ```
@@ -75,9 +109,9 @@ From the repo root on the server computer, create a local database path **outsid
 ```powershell
 $alphaDb = "$env:LOCALAPPDATA\\Minglefield\\private-alpha.sqlite"
 New-Item -ItemType Directory -Force (Split-Path $alphaDb) | Out-Null
-python -B server/private_alpha_admin.py --db $alphaDb invite user.alice
-python -B server/private_alpha_admin.py --db $alphaDb redeem --agent agent.alice
-python -B server/private_alpha_gateway.py --auth-db $alphaDb --port 8767
+& $mfPython -B server/private_alpha_admin.py --db $alphaDb invite user.alice
+& $mfPython -B server/private_alpha_admin.py --db $alphaDb redeem --agent agent.alice
+& $mfPython -B server/private_alpha_gateway.py --auth-db $alphaDb --port 8767
 ```
 
 The first command prints a **one-time invitation secret**. The redemption command prompts for that secret (hidden input) and prints a **test-only session bearer**. Copy only the session bearer into the local webclient. A second user can be provisioned using another invite and another unique agent ID. Sessions expire after 900 seconds; user disable and HTTP `POST /api/logout` revoke sessions. Job records and identities survive process restarts, unlike the original demo mode.
@@ -87,11 +121,11 @@ The first command prints a **one-time invitation secret**. The redemption comman
 Focused tests:
 
 ```powershell
-python -B -m unittest discover -s tests/conformance -p "test_private_alpha_auth.py" -v
-python -B -m unittest discover -s tests/conformance -p "test_private_alpha_auth_gateway.py" -v
-python -B -m unittest discover -s tests/conformance -p "test_private_alpha_gateway.py" -v
-python -B -m unittest discover -s tests/conformance -p "test_*.py"
-python -B tests/conformance/validate_map_v01.py
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_private_alpha_auth.py" -v
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_private_alpha_auth_gateway.py" -v
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_private_alpha_gateway.py" -v
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_*.py"
+& $mfPython -B tests/conformance/validate_map_v01.py
 git diff --check
 git status --short
 ```
@@ -107,14 +141,14 @@ In PowerShell terminal A, launch the gateway (database path must be the same as 
 
 ```powershell
 $alphaDb = "$env:LOCALAPPDATA\Minglefield\private-alpha.sqlite"
-python -B server/private_alpha_gateway.py --auth-db $alphaDb --port 8767
+& $mfPython -B server/private_alpha_gateway.py --auth-db $alphaDb --port 8767
 ```
 
 In a **separate** PowerShell terminal B:
 
 ```powershell
 $alphaDb = "$env:LOCALAPPDATA\Minglefield\private-alpha.sqlite"
-python -B server/private_alpha_admin.py --db $alphaDb invite user.test2
+& $mfPython -B server/private_alpha_admin.py --db $alphaDb invite user.test2
 ```
 
 Open `http://127.0.0.1:8767/`; paste the **invitation** into the new **Einladungscode** input, enter a unique agent ID such as `agent.test2`, then click **Einladung einlösen**. On success the session is held **only in that browser tab's RAM**; click **Connect** to display agents and jobs. A page reload forgets it. **Logout** revokes the active session. A browser may also use the manual session-token field if one was issued by the older PowerShell `redeem` command.
@@ -124,10 +158,10 @@ The new `/api/redeem` endpoint intentionally requires loopback source and a loop
 Focused additions:
 
 ```powershell
-python -B -m unittest discover -s tests/conformance -p "test_private_alpha_browser_enrollment.py" -v
-python -B -m unittest discover -s tests/conformance -p "test_sec01_mock_admission_proof.py" -v
-python -B -m unittest discover -s tests/conformance -p "test_*.py"
-python -B tests/conformance/validate_map_v01.py
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_private_alpha_browser_enrollment.py" -v
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_sec01_mock_admission_proof.py" -v
+& $mfPython -B -m unittest discover -s tests/conformance -p "test_*.py"
+& $mfPython -B tests/conformance/validate_map_v01.py
 git diff --check
 git status --short
 ```

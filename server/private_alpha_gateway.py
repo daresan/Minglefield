@@ -274,6 +274,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <button id="gameGitInspect" type="button">Git-Status prüfen</button>
 <button id="gameCompatibilityInspect" type="button">Minglefield-Kompatibilität prüfen</button>
 <button id="gameIntegrationUpdateInspect" type="button">Integrationsupdates prüfen</button>
+<button id="gameIntegrationRegistryInspect" type="button">Integrationen anzeigen / aktualisieren</button>
 <button id="gameManifestPrepare" type="button">Minglefield-Konfiguration einrichten</button>
 <button id="gameGitInit" type="button">Git initialisieren</button>
 <button id="gameProjectPrepare" type="button">Fehlende Arbeitsverzeichnisse anlegen</button></div>
@@ -1516,6 +1517,26 @@ document.getElementById("gameManifestPrepare").onclick=async()=>{
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
+document.getElementById("gameIntegrationRegistryInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+    "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/integrations"+query);
+  const data=response.data||{};
+  const entries=data.registry?.integrations||[];
+  const summary={
+    status:response.status,project_id:data.project_id,
+    installations:data.installation_state==="installation_unknown"?"Unbekannt":
+      data.installation_state==="setup_required"?"Einrichtung erforderlich":
+      data.installation_state==="manual_review_required"?"Manuelle Prüfung erforderlich":data.installation_state,
+    registry_status:data.registry?.state,
+    integrations:entries.map(x=>({id:x.integration_id,name:x.name,
+      publisher:x.publisher,vertrauensstufe:x.trust_tier,release_source:x.release_source})),
+    hinweis:data.notes,error:data.error
+  };
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(summary,null,2);
+};
 document.getElementById("gameIntegrationUpdateInspect").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
@@ -1932,6 +1953,19 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(400,{"error":"invalid_compatibility_query"})
                 else:
                     report=policy.inspect_game_compatibility(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if report is None else 200,
+                               {"error":"project_not_found_or_forbidden"}
+                               if report is None else report)
+            elif path == "/api/game/integrations":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if (policy is None or len(hosts)!=1 or len(projects)!=1
+                        or len(query)!=2):
+                    self.reply(400,{"error":"invalid_integrations_query"})
+                else:
+                    report=policy.inspect_game_integrations(
                         hosts[0],principal.user_id,projects[0])
                     self.reply(404 if report is None else 200,
                                {"error":"project_not_found_or_forbidden"}

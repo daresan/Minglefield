@@ -568,6 +568,31 @@ class HostCommitPolicy:
                 "lockfile":lock_report,"registry":catalog,
                 "notes":"Lockfile declarations are untrusted until artifact and source verification is implemented."}
 
+    def inspect_game_integration_releases(self, host_id, owner_id, project_id, *, fetcher=None):
+        """Read-only update discovery; never accept release sources from the client."""
+        from game_integration_updates import discover_integration_update
+        report=self.inspect_game_integrations(host_id,owner_id,project_id)
+        if report is None:
+            return None
+        entries=report["installed_integrations"]
+        if entries is None:
+            return {"project_id":project_id,"installation_state":report["installation_state"],
+                    "updates":[],"state":"unknown",
+                    "reason":"no_valid_installed_declarations"}
+        if report["installation_state"]!="declarations_unverified":
+            return {"project_id":project_id,"installation_state":report["installation_state"],
+                    "updates":[],"state":"unknown","reason":"manual_review_required"}
+        updates=[]
+        for entry in entries:
+            if fetcher is None:
+                outcome=discover_integration_update(entry,report["registry"])
+            else:
+                outcome=discover_integration_update(entry,report["registry"],fetcher=fetcher)
+            updates.append({"integration_id":entry["integration_id"],**outcome})
+        return {"project_id":project_id,"installation_state":report["installation_state"],
+                "updates":updates,"state":"read_only",
+                "note":"Declared versions only; neither installed files nor release artifacts verified."}
+
     def prepare_game_manifest(self, host_id, owner_id, project_id, revision):
         """Create a minimal versioned manifest, preserving any existing manifest."""
         import json

@@ -706,7 +706,7 @@ function renderJobParameters(){
     label.style.cssText="min-width:0;display:flex;flex-direction:column;gap:4px";
     const wide=p.widget==="textarea"||p.type==="string"&&/prompt|text|description/i.test(p.input);
     if(wide)label.style.gridColumn="1 / -1";
-    const field=p.type==="enum"?document.createElement("select"):
+    const field=(p.type==="enum"||p.type==="file")?document.createElement("select"):
       (p.widget==="textarea"||p.type==="string"&&/prompt|text|description/i.test(p.input))
       ?document.createElement("textarea"):document.createElement("input");
     field.dataset.binding=p.binding;field.dataset.kind=p.type;
@@ -714,6 +714,10 @@ function renderJobParameters(){
       for(const choice of p.constraints?.choices||p.choices||[]){
         const option=document.createElement("option");option.value=choice;
         option.textContent=choice;field.append(option);
+      }
+      if(p.type==="file" && p.default!=null && ![...field.options].some(o=>o.value===String(p.default))){
+        const option=document.createElement("option");option.value=String(p.default);
+        option.textContent=String(p.default)+" (Workflow-Vorgabe)";field.append(option);
       }
       field.value=String(p.default??"");
     }else if(field.tagName==="TEXTAREA"){field.rows=5;field.value=String(p.default??"");}

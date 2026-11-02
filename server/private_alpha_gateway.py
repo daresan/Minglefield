@@ -1973,6 +1973,18 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(404 if report is None else 200,
                                {"error":"project_not_found_or_forbidden"}
                                if report is None else report)
+            elif path == "/api/game/integration/releases":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if (policy is None or len(hosts)!=1 or len(projects)!=1 or len(query)!=2):
+                    self.reply(400,{"error":"invalid_integration_releases_query"})
+                else:
+                    report=policy.inspect_game_integration_releases(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if report is None else 200,
+                               {"error":"project_not_found_or_forbidden"}
+                               if report is None else report)
             elif path == "/api/game/integration/update-status":
                 policy=getattr(service,"_host_policy",None)
                 query=parse_qs(urlsplit(self.path).query)

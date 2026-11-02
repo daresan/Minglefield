@@ -51,8 +51,11 @@ def validate_runtime(configuration):
             or "\\x00" in input_folder):
         raise RuntimeConfigurationError("invalid_input_folder")
     # Informational only: uploads use ComfyUI /upload/*, never filesystem writes.
-    return {"id": runtime_id, "type": kind, "endpoint": endpoint.rstrip("/"),
-            "enabled": enabled, "input_folder": input_folder}
+    result = {"id": runtime_id, "type": kind, "endpoint": endpoint.rstrip("/"),
+              "enabled": enabled}
+    if input_folder:
+        result["input_folder"] = input_folder
+    return result
 
 
 class HostRuntimeRegistry:

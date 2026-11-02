@@ -6,12 +6,13 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
-from game_release_metadata import fetch_releases, normalize_release
+from game_release_metadata import fetch_releases, normalize_release, fetch_compare_files
 
 
 class Response:
-    def __init__(self, data):
+    def __init__(self, data, link=""):
         self.data = data
+        self.headers = {"Link": link}
 
     def __enter__(self):
         return self
@@ -51,6 +52,19 @@ class GameReleaseMetadataTests(unittest.TestCase):
         result = fetch_releases("a/b", opener=opener)
         self.assertEqual(result["state"], "available")
         self.assertEqual([x["tag_name"] for x in result["releases"]], ["v1"])
+
+    def test_compare_requires_complete_forward_response(self):
+        payload={"status":"ahead","ahead_by":1,"total_commits":1,
+                 "files":[{"filename":"src/plugin.py","status":"modified"}]}
+        def fetch(data,link=""):
+            return fetch_compare_files("a/b","v1","v2",opener=lambda *_args,**_kw:
+                                       Response(json.dumps(data).encode(),link))
+        self.assertEqual(fetch(payload)["state"],"available")
+        self.assertEqual(fetch(payload)["files"][0]["path"],"src/plugin.py")
+        self.assertEqual(fetch(payload,'<https://api.github.com/x>; rel="next"')["state"],"unknown")
+        self.assertEqual(fetch(dict(payload,status="behind"))["state"],"unknown")
+        self.assertEqual(fetch(dict(payload,total_commits=True))["state"],"unknown")
+        self.assertEqual(fetch(dict(payload,files=[{"filename":"a","status":"modified"}]*100))["state"],"unknown")
 
     def test_invalid_repository_and_invalid_data(self):
         with self.assertRaises(ValueError):

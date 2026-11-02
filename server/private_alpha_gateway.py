@@ -236,6 +236,25 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <label>Host <select id="gameHostSelect"></select></label>
 <div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
 <button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
+<details id="gameGitSettings">
+<summary>Git-Einstellungen für diesen Host</summary>
+<p>Authentifizierungsprofile (ohne gespeicherte Zugangsdaten). Git-Operationen sind noch nicht aktiviert.</p>
+<label>Profil <select id="gameGitProfileSelect"></select></label>
+<label>Profil-ID <input id="gameGitProfileId" placeholder="git.default"></label>
+<label>Bezeichnung <input id="gameGitLabel" placeholder="Mein Git-Profil"></label>
+<label>Authentifizierung <select id="gameGitAuthMethod">
+<option value="local">Lokal / keine</option>
+<option value="ssh">SSH / SSH-Agent</option>
+<option value="credential_manager">HTTPS / Git Credential Manager</option>
+<option value="github_cli">GitHub CLI (gh)</option>
+</select></label>
+<label>Git-Executable <input id="gameGitExecutable" value="git" placeholder="git"></label>
+<label>Commit-Name <input id="gameGitAuthorName"></label>
+<label>Commit-E-Mail <input id="gameGitAuthorEmail"></label>
+<button id="gameGitSave" type="button">Git-Profil speichern</button>
+<button id="gameGitReload" type="button">Git-Profile laden</button>
+<pre id="gameGitStatus" aria-live="polite"></pre>
+</details>
 <div id="gameManagePanel">
 <h3>Bestehendes Projekt verwalten</h3>
 <label>Projekt auswählen <select id="gameProjectSelect"></select></label>
@@ -1355,7 +1374,51 @@ async function loadGameProjects(){
   }
   if([...gameHostSelect.options].some(x=>x.value===previous))gameHostSelect.value=previous;
   await refreshGameProjectList();
+  await loadGameGitProfiles();
 }
+let gameGitProfiles=[];
+async function loadGameGitProfiles(){
+  const select=document.getElementById("gameGitProfileSelect");
+  select.replaceChildren();
+  gameGitProfiles=[];
+  if(!gameHostSelect.value)return;
+  const response=await request("/api/git/profiles?host_id="+encodeURIComponent(gameHostSelect.value));
+  document.getElementById("gameGitStatus").textContent=JSON.stringify(response.data,null,2);
+  if(response.status!==200)return;
+  gameGitProfiles=response.data.profiles||[];
+  const fresh=document.createElement("option");fresh.value="";fresh.textContent="+ Neues Profil";
+  select.append(fresh);
+  for(const profile of gameGitProfiles){
+    const option=document.createElement("option");
+    option.value=profile.profile_id;option.textContent=profile.label+" ("+profile.profile_id+")";
+    select.append(option);
+  }
+}
+document.getElementById("gameGitProfileSelect").onchange=()=>{
+  const profile=gameGitProfiles.find(x=>x.profile_id===document.getElementById("gameGitProfileSelect").value);
+  for(const [id,key,defaultValue] of [
+    ["gameGitProfileId","profile_id",""],["gameGitLabel","label",""],
+    ["gameGitAuthMethod","auth_method","local"],["gameGitExecutable","git_executable","git"],
+    ["gameGitAuthorName","author_name",""],["gameGitAuthorEmail","author_email",""]]){
+    document.getElementById(id).value=profile?profile[key]:defaultValue;
+  }
+};
+document.getElementById("gameGitReload").onclick=loadGameGitProfiles;
+document.getElementById("gameGitSave").onclick=async()=>{
+  const profile={};
+  for(const [key,id] of [
+    ["profile_id","gameGitProfileId"],["label","gameGitLabel"],
+    ["auth_method","gameGitAuthMethod"],["git_executable","gameGitExecutable"],
+    ["author_name","gameGitAuthorName"],["author_email","gameGitAuthorEmail"]]){
+    profile[key]=document.getElementById(id).value.trim();
+  }
+  const response=await request("/api/git/profiles",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,profile})});
+  if(response.status===200)await loadGameGitProfiles();
+  document.getElementById("gameGitStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 let gameProjects=[];
 async function refreshGameProjectList(){
   const host=gameHostSelect.value;

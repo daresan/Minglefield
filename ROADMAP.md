@@ -67,7 +67,8 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Define publisher ownership proof, release identity/artifact integrity, and source-transfer review before admitting actual entries.
 - [ ] Add explicit, user-authorized external-source support separately; external developers need no approval to publish independently.
 - [x] Add owner-scoped read-only project/registry inspection; legacy installed integrations remain unknown and no manifest is changed. Backend method: `inspect_game_integrations`; focused regression test added (Windows verification pending).
-- [ ] Expose the read-only integration report through the Game HTTP API/UI after focused tests pass; do not add a free-text release-source field.
+- [x] Expose the owner-scoped read-only report via `GET /api/game/integrations` and the Game-tab `Integrationen anzeigen / aktualisieren` button; no release-source text field.
+- [ ] Verify new HTTP test on Windows and manually inspect the Game tab (empty curated registry and unknown legacy installs).
 - [ ] Define and validate actual installed-integration metadata before reporting installed versions.
 
 ## P1.4f.2a — Integration metadata contract

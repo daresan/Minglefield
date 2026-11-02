@@ -22,7 +22,10 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
         return {"state":"unknown","reason":"invalid_input"}
     if catalog.get("state")!="available":
         return {"state":"unknown","reason":"registry_unavailable"}
-    match=next((x for x in catalog.get("integrations",[])
+    items=catalog.get("integrations")
+    if not isinstance(items,list) or any(not isinstance(x,dict) for x in items):
+        return {"state":"unknown","reason":"invalid_registry_catalog"}
+    match=next((x for x in items
                 if x.get("integration_id")==entry.get("integration_id")),None)
     if match is None:
         return {"state":"unknown","reason":"not_in_curated_registry"}
@@ -40,10 +43,13 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
         result=fetcher(source["repository"])
     except (ValueError,KeyError,TypeError,OSError):
         return {"state":"unknown","reason":"release_source_unavailable"}
-    if result.get("state")!="available":
+    if not isinstance(result,dict) or result.get("state")!="available":
         return {"state":"unknown","reason":"release_source_unavailable"}
+    releases=result.get("releases")
+    if not isinstance(releases,list) or any(not isinstance(r,dict) for r in releases):
+        return {"state":"unknown","reason":"invalid_release_data"}
     versions=[]
-    for release in result.get("releases",[]):
+    for release in releases:
         if release.get("draft") or release.get("prerelease"):
             continue
         version=_version(release.get("tag_name"))

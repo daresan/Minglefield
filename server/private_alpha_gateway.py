@@ -228,16 +228,8 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 </div><div class="form-group"><h3>Effekte auf diesem Host</h3><div class="field-grid"><label>Effekte auf diesem Host <select id="hostEffectShortcut"></select></label>
 </div><div class="action-row"><button id="hostOpenEffect">Effekt im Effekte-Tab öffnen</button>
 
-</div><pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre></div>
-</fieldset>
-<section id="gameProjectPanel" class="alphaPanel" hidden>
-<h2>Game-Projekte (P1 Alpha)</h2>
-<p>Projektregistrierung und Einstellungen; keine Dateisystemänderungen.</p>
-<label>Host <select id="gameHostSelect"></select></label>
-<div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
-<button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
-<details id="gameGitSettings">
-<summary>Git-Einstellungen für diesen Host</summary>
+</div><details id="hostGitSettings">
+<summary>Git-Einstellungen</summary>
 <p>Authentifizierungsprofile (ohne gespeicherte Zugangsdaten). Git-Operationen sind noch nicht aktiviert.</p>
 <label>Profil <select id="gameGitProfileSelect"></select></label>
 <label>Profil-ID <input id="gameGitProfileId" placeholder="git.default"></label>
@@ -255,6 +247,15 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <button id="gameGitReload" type="button">Git-Profile laden</button>
 <pre id="gameGitStatus" aria-live="polite"></pre>
 </details>
+<pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre></div>
+</fieldset>
+<section id="gameProjectPanel" class="alphaPanel" hidden>
+<h2>Game-Projekte (P1 Alpha)</h2>
+<p>Projektregistrierung und Einstellungen; keine Dateisystemänderungen.</p>
+<label>Host <select id="gameHostSelect"></select></label>
+<div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
+<button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
+
 <div id="gameManagePanel">
 <h3>Bestehendes Projekt verwalten</h3>
 <label>Projekt auswählen <select id="gameProjectSelect"></select></label>
@@ -1451,7 +1452,7 @@ function showSelectedGameProject(){
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(project,null,2);
 }
 document.getElementById("gameProjectSelect").onchange=showSelectedGameProject;
-gameHostSelect.onchange=refreshGameProjectList;
+gameHostSelect.onchange=async()=>{await refreshGameProjectList();await loadGameGitProfiles();};
 document.getElementById("gameProjectRefresh").onclick=loadGameProjects;
 document.getElementById("gameProjectUpdate").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);

@@ -34,9 +34,11 @@ class StagedComfyAssetsTests(unittest.TestCase):
             with patch("server.staged_comfy_assets.http.client.HTTPConnection") as conn:
                 response=conn.return_value.getresponse.return_value
                 response.status=200
-                response.read.return_value=b'{"name":"model.glb","type":"input","subfolder":""}'
+                response.read.return_value=b'{"name":"model.glb","type":"input","subfolder":"3d"}'
                 name=upload_staged_asset("http://127.0.0.1:8188",root/"assets"/record["asset_id"],record)
-                self.assertEqual(name,"model.glb")
+                self.assertEqual(name,"3d/model.glb")
+                self.assertIn(b'name="subfolder"\r\n\r\n3d',
+                              b"".join(call.args[0] for call in conn.return_value.send.call_args_list))
                 self.assertEqual(conn.return_value.putrequest.call_args.args,
                                  ("POST","/upload/image"))
                 conn.return_value.send.assert_any_call(b"glb")

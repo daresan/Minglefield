@@ -586,15 +586,32 @@ class HostCommitPolicy:
                 (host_id,owner_id,project_id)).fetchone()
             if authorized is None:
                 return None
-            rows=db.execute("""SELECT integration_id,installer_run_id,recorded_at
+            rows=db.execute("""SELECT integration_id,installer_run_id,recorded_at,evidence_json
                 FROM alpha_game_installation_evidence
                 WHERE host_id=? AND project_id=?
                 ORDER BY integration_id,recorded_at DESC,installer_run_id""",
                 (host_id,project_id)).fetchall()
+        from game_integration_evidence import evaluate_trusted_installer_record
+        records=[]
+        for integration_id,installer_run_id,recorded_at,evidence_json in rows:
+            try:
+                record=json.loads(evidence_json)
+            except (ValueError,TypeError):
+                record=None
+            # The journal is not yet bound to an authenticated installer.
+            # Do not derive trusted_origin or independent_checks from stored JSON.
+            outcome=evaluate_trusted_installer_record(
+                record,trusted_origin=False,independent_checks=None,
+                expected_host_id=host_id,expected_project_id=project_id,
+                expected_integration_id=integration_id,
+                authorized_source=None,project_root=".")
+            records.append({"integration_id":integration_id,
+                            "installer_run_id":installer_run_id,
+                            "recorded_at":recorded_at,
+                            "verification_state":outcome["state"],
+                            "verification_reason":outcome["reason"]})
         return {"project_id":project_id,"state":"unverified",
-                "records":[{"integration_id":row[0],"installer_run_id":row[1],
-                            "recorded_at":row[2],"verification_state":"unknown"}
-                           for row in rows],
+                "records":records,
                 "note":"Journal entries are not proof of artifact integrity or installed bytes."}
 
     def inspect_game_integration_releases(self, host_id, owner_id, project_id, *, fetcher=None):

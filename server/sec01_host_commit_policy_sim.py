@@ -44,6 +44,12 @@ class HostCommitPolicy:
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 effect_id TEXT NOT NULL, workflow_sha256 TEXT NOT NULL,
                 parameters TEXT NOT NULL)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_projects(
+                project_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                owner_id TEXT NOT NULL, name TEXT NOT NULL,
+                repository_root TEXT NOT NULL, staging_root TEXT NOT NULL,
+                output_root TEXT NOT NULL, settings_revision INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(host_id,project_id))""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_settings(\n                host_id TEXT PRIMARY KEY, settings TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
                 host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,
@@ -74,6 +80,45 @@ class HostCommitPolicy:
                 binding TEXT NOT NULL, rule_id TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
                 effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)""")
+
+    def list_game_projects(self, host_id, owner_id):
+        """Return only projects belonging to an authorized host owner."""
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return None
+            rows=db.execute("""SELECT project_id,name,repository_root,staging_root,
+                output_root,settings_revision FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? ORDER BY name,project_id""",
+                (host_id,owner_id)).fetchall()
+            keys=("project_id","name","repository_root","staging_root",
+                  "output_root","settings_revision")
+            return [dict(zip(keys,row)) for row in rows]
+
+    def create_game_project(self, host_id, owner_id, project_id, name,
+                            repository_root, staging_root, output_root):
+        """Register project metadata without touching the filesystem or host paths."""
+        from pathlib import Path
+        import sqlite3
+        if (not ident(project_id) or type(name) is not str
+                or not 1 <= len(name.strip()) <= 120):
+            return HostDecision("denied","invalid_project_identity")
+        paths=(repository_root,staging_root,output_root)
+        if any(type(path) is not str or not path or len(path)>1024
+               or not Path(path).is_absolute() for path in paths):
+            return HostDecision("denied","invalid_project_path")
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            try:
+                db.execute("""INSERT INTO alpha_game_projects(
+                    project_id,host_id,owner_id,name,repository_root,staging_root,output_root)
+                    VALUES(?,?,?,?,?,?,?)""",
+                    (project_id,host_id,owner_id,name.strip(),*paths))
+            except sqlite3.IntegrityError:
+                return HostDecision("denied","project_id_exists")
+        return HostDecision("created","game_project_created")
 
     def host_settings(self, host_id, owner_id):
         with self.authority.store._tx() as db:

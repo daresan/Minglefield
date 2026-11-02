@@ -160,6 +160,38 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(status,200)
         self.assertEqual(data["state"],"unchanged")
 
+    def test_integration_registry_http_is_read_only_and_owner_scoped(self):
+        repo=self.root/"integration_report_repo"
+        repo.mkdir()
+        payload=dict(host_id="host.one",project_id="game.report",
+                     name="Integration Report",repository_root=str(repo),
+                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+        self.assertEqual(self.request("POST","/api/game/projects",
+                                      self.owner,payload)[0],201)
+        route="/api/game/integrations?host_id=host.one&project_id=game.report"
+        self.assertEqual(self.request("GET",route)[0],401)
+        self.assertEqual(self.request("GET",route,self.other)[0],404)
+        self.assertEqual(self.request("GET",route+"&extra=1",self.owner)[0],400)
+        self.assertEqual(self.request("GET","/api/game/integrations?host_id=host.one",
+                                      self.owner)[0],400)
+        status,data=self.request("GET",route,self.owner)
+        self.assertEqual(status,200)
+        self.assertEqual(data["installation_state"],"setup_required")
+        self.assertIsNone(data["installed_integrations"])
+        self.assertEqual(data["registry"]["state"],"available")
+        self.assertEqual(data["registry"]["integrations"],[])
+        self.assertFalse((repo/".minglefield").exists())
+        body=dict(host_id="host.one",project_id="game.report",settings_revision=1)
+        self.assertEqual(self.request("POST","/api/game/projects/manifest/prepare",
+                                      self.owner,body)[0],200)
+        manifest=repo/".minglefield"/"project.json"
+        before=manifest.read_bytes()
+        status,data=self.request("GET",route,self.owner)
+        self.assertEqual(status,200)
+        self.assertEqual(data["installation_state"],"installation_unknown")
+        self.assertIsNone(data["installed_integrations"])
+        self.assertEqual(manifest.read_bytes(),before)
+
     def test_integration_update_status_is_read_only_and_owner_scoped(self):
         repo=self.root/"update_repo"
         repo.mkdir()

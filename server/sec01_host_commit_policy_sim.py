@@ -509,6 +509,7 @@ class HostCommitPolicy:
         root=Path(row[0])
         directory=root/".minglefield"
         lock=directory/"integrations.lock.json"
+        unified=root/"minglefield.lock"
         lock_report={"state":"missing"}
         installed=None
         if root.is_symlink() or directory.is_symlink() or lock.is_symlink():

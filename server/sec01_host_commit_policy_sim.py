@@ -496,10 +496,62 @@ class HostCommitPolicy:
                                      for entry in registry["integrations"]]}
         except (OSError,ValueError,TypeError,KeyError):
             catalog={"state":"unavailable","integrations":[]}
+        # Read only after the existing host/project owner check in compatibility.
+        # Local lock data is declarative, never installer-attested verification.
+        from pathlib import Path
+        from game_integration_lock import validate_integration_lock
+        with self.authority.store._tx() as db:
+            row=db.execute("""SELECT repository_root FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+        if row is None:
+            return None
+        root=Path(row[0])
+        directory=root/".minglefield"
+        lock=directory/"integrations.lock.json"
+        lock_report={"state":"missing"}
+        installed=None
+        if root.is_symlink() or directory.is_symlink() or lock.is_symlink():
+            lock_report={"state":"unsafe_symlink"}
+        elif lock.exists():
+            if not lock.is_file():
+                lock_report={"state":"not_file"}
+            else:
+                try:
+                    import json
+                    data=validate_integration_lock(json.loads(lock.read_text(encoding="utf-8")),
+                                                   project_id=project_id)
+                    installed=[]
+                    trusted={e["integration_id"]:e for e in catalog["integrations"]}
+                    for entry in data["integrations"]:
+                        match=trusted.get(entry["integration_id"])
+                        if catalog["state"]!="available":
+                            source_state="registry_unavailable"
+                        elif match is None:
+                            source_state="not_in_curated_registry"
+                        elif (match["publisher"]!=entry["publisher"]
+                              or match["release_source"]!=entry["release_source"]):
+                            source_state="source_mismatch"
+                        else:
+                            source_state="registry_match"
+                        installed.append({
+                            "integration_id":entry["integration_id"],
+                            "declared_version":entry["installed_version"],
+                            "declared_verification_status":entry["verification_status"],
+                            "trusted_verification_status":"unknown",
+                            "source_state":source_state,
+                            "release_source":entry["release_source"]})
+                    lock_report={"state":"valid_declarations","record_count":len(installed)}
+                except (OSError,UnicodeError,ValueError,TypeError,KeyError) as exc:
+                    lock_report={"state":"invalid","reason":str(exc)[:200]}
+        if lock_report["state"]=="unsafe_symlink" or lock_report["state"]=="not_file" or lock_report["state"]=="invalid":
+            state="manual_review_required"
+        elif lock_report["state"]=="valid_declarations":
+            state="declarations_unverified"
         return {"project_id":project_id,"manifest_state":manifest_state,
-                "installation_state":state,"installed_integrations":None,
-                "registry":catalog,
-                "notes":"Installed integration metadata is not yet defined for workspace manifest v1."}
+                "installation_state":state,"installed_integrations":installed,
+                "lockfile":lock_report,"registry":catalog,
+                "notes":"Lockfile declarations are untrusted until artifact and source verification is implemented."}
 
     def prepare_game_manifest(self, host_id, owner_id, project_id, revision):
         """Create a minimal versioned manifest, preserving any existing manifest."""

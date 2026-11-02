@@ -375,13 +375,26 @@ class HostCommitPolicy:
             else:
                 try:
                     data=json.loads(manifest.read_text(encoding="utf-8"))
-                    if (not isinstance(data,dict) or
-                            data.get("project_id")!=project_id or
-                            data.get("schema_version")!=1):
-                        report["manifest"]={"state":"incompatible"}
-                        report["issues"].append("manifest_incompatible")
+                    version=data.get("schema_version") if isinstance(data,dict) else None
+                    if type(version) is not int or version<1:
+                        report["manifest"]={"state":"invalid_version",
+                                            "supported_schema_version":1}
+                        report["issues"].append("manifest_invalid_version")
+                    elif data.get("project_id")!=project_id:
+                        report["manifest"]={"state":"project_mismatch",
+                                            "schema_version":version,
+                                            "supported_schema_version":1}
+                        report["issues"].append("manifest_project_mismatch")
+                    elif version>1:
+                        report["manifest"]={"state":"newer_version",
+                                            "schema_version":version,
+                                            "supported_schema_version":1,
+                                            "migration":"unsupported_downgrade"}
+                        report["issues"].append("manifest_newer_version")
                     else:
-                        report["manifest"]={"state":"compatible","schema_version":1}
+                        report["manifest"]={"state":"compatible","schema_version":1,
+                                            "supported_schema_version":1,
+                                            "migration":"not_required"}
                 except (OSError,UnicodeError,ValueError):
                     report["manifest"]={"state":"invalid"}
                     report["issues"].append("manifest_invalid")

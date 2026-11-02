@@ -281,8 +281,7 @@ class HostCommitPolicy:
             runtime_id,raw,config=row
             metadata=json.loads(raw)
             specs=[p for p in metadata.get("parameters",[])
-                   if p.get("type")=="enum" and p.get("class_type")=="LoadImage"
-                   and p.get("input")=="image"]
+                   if p.get("type") in ("enum","file")]
             return {"runtime":json.loads(config),"parameters":specs}
 
     def manual_start_mock(self, host_id, owner_id, effect_id, parameters=None, current_file_choices=None):

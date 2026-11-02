@@ -181,6 +181,32 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(report["manifest"]["state"],"compatible")
         self.assertFalse(report["issues"])
 
+    def test_manifest_version_policy_preserves_future_and_mismatched_files(self):
+        import json
+        repo=self.root/"version_repo"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.version","Version",
+            str(repo),str(repo/"staging"),str(repo/"output")).state,"created")
+        folder=repo/".minglefield"
+        folder.mkdir()
+        target=folder/"project.json"
+        for document,expected in (
+            ({"schema_version":2,"project_id":"game.version"},"newer_version"),
+            ({"schema_version":1,"project_id":"other.game"},"project_mismatch"),
+            ({"schema_version":True,"project_id":"game.version"},"invalid_version"),
+        ):
+            content=json.dumps(document)
+            target.write_text(content,encoding="utf-8")
+            report=self.policy.inspect_game_compatibility(
+                "host.one","user.owner","game.version")
+            self.assertEqual(report["manifest"]["state"],expected)
+            self.assertFalse(report["ready"])
+            result=self.policy.prepare_game_manifest(
+                "host.one","user.owner","game.version",1)
+            self.assertEqual(result["state"],"unchanged")
+            self.assertEqual(target.read_text(encoding="utf-8"),content)
+
     def test_manifest_setup_is_owner_scoped_and_preserves_existing(self):
         import json
         repo=self.root/"manifest_repo"

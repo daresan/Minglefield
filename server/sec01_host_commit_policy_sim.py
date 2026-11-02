@@ -431,8 +431,9 @@ class HostCommitPolicy:
         report["ready"]=not report["issues"]
         return report
 
-    def inspect_game_integration_update(self, host_id, owner_id, project_id):
-        """Read-only local integration status; no remote release catalog yet."""
+    def inspect_game_integration_update(self, host_id, owner_id, project_id,
+                                        release_repository=None, release_fetcher=None):
+        """Read-only integration status; GitHub source must be explicitly selected."""
         report=self.inspect_game_compatibility(host_id,owner_id,project_id)
         if report is None:
             return None
@@ -445,14 +446,24 @@ class HostCommitPolicy:
             update_state="setup_required"
         else:
             update_state="manual_review_required"
+        release_catalog={"state":"not_configured"}
+        if release_repository is not None:
+            from game_release_metadata import fetch_releases
+            fetcher=release_fetcher or fetch_releases
+            try:
+                release_catalog=fetcher(release_repository)
+                if not isinstance(release_catalog,dict) or release_catalog.get("state") not in ("available","unavailable"):
+                    release_catalog={"state":"unavailable","reason":"invalid_adapter_response","releases":[]}
+            except (ValueError,TypeError):
+                release_catalog={"state":"unavailable","reason":"invalid_repository","releases":[]}
         return {"project_id":project_id,
                 "installed_schema_version":installed,
                 "supported_schema_version":1,
                 "integration_version":None,
                 "update_state":update_state,
-                "release_catalog":{"state":"not_configured"},
+                "release_catalog":release_catalog,
                 "update_available":None,
-                "notes":"GitHub Releases source and installed integration version are not configured; availability cannot be determined.",
+                "notes":"Installed integration version is unknown; release metadata does not establish update availability.",
                 "manifest_state":state}
 
     def prepare_game_manifest(self, host_id, owner_id, project_id, revision):

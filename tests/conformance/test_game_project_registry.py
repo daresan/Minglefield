@@ -37,6 +37,23 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(projects[0]["project_id"], "game.one")
         self.assertEqual(projects[0]["settings_revision"], 1)
 
+    def test_update_revision_and_owner_isolation(self):
+        paths = tuple(str(self.root / part) for part in ("game", "stage", "output"))
+        self.assertEqual(self.policy.create_game_project(
+            "host.one", "user.owner", "game.one", "Original", *paths).state, "created")
+        self.assertEqual(self.policy.update_game_project(
+            "host.one", "user.other", "game.one", 1, "Unauthorized", *paths).state, "denied")
+        self.assertEqual(self.policy.update_game_project(
+            "host.one", "user.owner", "game.one", 1, "Updated", *paths).state, "saved")
+        self.assertEqual(self.policy.update_game_project(
+            "host.one", "user.owner", "game.one", 1, "Stale", *paths).reason, "revision_conflict")
+        project = self.policy.list_game_projects("host.one", "user.owner")[0]
+        self.assertEqual((project["name"], project["settings_revision"]), ("Updated", 2))
+        self.assertEqual(self.policy.update_game_project(
+            "host.one", "user.owner", "game.one", 2, "Invalid",
+            "relative", paths[1], paths[2]).state, "denied")
+        self.assertEqual(self.policy.list_game_projects("host.one", "user.owner")[0], project)
+
     def test_rejects_invalid_paths_and_preserves_host_settings(self):
         original = self.policy.host_settings("host.one", "user.owner")
         self.assertEqual(self.policy.create_game_project(

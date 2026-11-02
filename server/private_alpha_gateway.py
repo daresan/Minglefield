@@ -1855,7 +1855,18 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     workflow=context["workflow"]
                     if type(workflow) is not dict:
                         raise ValueError("invalid_workflow")
+                    from staged_comfy_assets import ASSET_PREFIX, staged_record, upload_staged_asset
+                    from game_asset_staging import StagingError
+                    settings=policy.host_settings(body["host_id"],principal.user_id)
+                    root=(settings or {}).get("staging_root","")
+                    file_bindings={p["binding"] for p in context["metadata"].get("parameters",[])
+                                   if p.get("type")=="file"}
                     for binding,value in context["parameters"].items():
+                        if type(value) is str and value.startswith(ASSET_PREFIX):
+                            if binding not in file_bindings or not root:
+                                raise ValueError("invalid_staged_asset_binding")
+                            asset_path,record=staged_record(body["host_id"],root,value)
+                            value=upload_staged_asset(context["runtime"]["endpoint"],asset_path,record)
                         node_id,field=binding.split(".",1)
                         if node_id not in workflow or field not in workflow[node_id].get("inputs",{}):
                             raise ValueError("missing_workflow_binding")
@@ -2037,7 +2048,26 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     context=policy.comfy_file_parameter_context(
                         body["host_id"],principal.user_id,body["effect_id"])
                     current_choices={}
-                    if context and context["parameters"]:
+                    supplied=body.get("parameters") or {}
+                    from staged_comfy_assets import ASSET_PREFIX, staged_record
+                    from game_asset_staging import StagingError
+                    file_bindings={p["binding"] for p in (context or {}).get("parameters",[])
+                                   if p.get("type")=="file"}
+                    staged_bindings={k for k,v in supplied.items()
+                                     if type(v) is str and v.startswith(ASSET_PREFIX)}
+                    if staged_bindings:
+                        settings=policy.host_settings(body["host_id"],principal.user_id)
+                        root=(settings or {}).get("staging_root","")
+                        if not root or not staged_bindings.issubset(file_bindings):
+                            self.reply(400,{"error":"invalid_staged_asset_binding"})
+                            return
+                        try:
+                            for binding in staged_bindings:
+                                staged_record(body["host_id"],root,supplied[binding])
+                        except (StagingError,OSError,ValueError):
+                            self.reply(400,{"error":"staged_asset_unavailable"})
+                            return
+                    if context and context["parameters"] and not staged_bindings:
                         if not context["runtime"].get("enabled"):
                             self.reply(403,{"error":"runtime_unavailable"})
                             return

@@ -983,7 +983,10 @@ document.getElementById("hostJobExecute").onclick=async()=>{
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
+let artifactObjectUrls=[];
 async function loadJobArtifacts(){
+  for(const url of artifactObjectUrls)URL.revokeObjectURL(url);
+  artifactObjectUrls=[];
   const target=document.getElementById("jobArtifacts");
   target.replaceChildren();
   const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
@@ -1010,13 +1013,24 @@ async function loadJobArtifacts(){
           const url="/api/host/jobs/artifact?"+query.toString();
           if(kind==="images"){
             const img=document.createElement("img");img.alt=item.filename;
-            img.src=url;img.loading="lazy";card.append(img);
+            img.loading="lazy";card.append(img);
+            fetch(url,{headers:{Authorization:"Bearer "+credential},cache:"no-store"})
+              .then(r=>{if(!r.ok)throw Error("image_unavailable");return r.blob();})
+              .then(blob=>{const objectUrl=URL.createObjectURL(blob);artifactObjectUrls.push(objectUrl);img.src=objectUrl;})
+              .catch(()=>{img.alt="Vorschau nicht verfügbar: "+item.filename;});
           }else if(kind==="3d"){
             const note=document.createElement("small");note.textContent="3D-Modell (GLB) – Download; interaktiver Viewer folgt.";
             card.append(note);
           }
           const link=document.createElement("a");link.href=url;
-          link.textContent="Herunterladen";link.download=item.filename;card.append(link);
+          link.textContent="Herunterladen";link.download=item.filename;link.href="#";
+          link.onclick=async event=>{event.preventDefault();
+            const response=await fetch(url,{headers:{Authorization:"Bearer "+credential},cache:"no-store"});
+            if(!response.ok){alert("Download fehlgeschlagen: "+response.status);return;}
+            const blob=await response.blob(),objectUrl=URL.createObjectURL(blob);
+            const a=document.createElement("a");a.href=objectUrl;a.download=item.filename;a.click();
+            setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
+          };card.append(link);
         }else{
           const pre=document.createElement("pre");pre.textContent=typeof item==="string"?item:JSON.stringify(item,null,2);
           card.append(pre);

@@ -174,6 +174,43 @@ class HostCommitPolicy:
                 result[key]={"path":raw,"state":"unavailable"}
         return result
 
+    def prepare_game_project_directories(self, host_id, owner_id, project_id, revision):
+        """Explicitly create only missing staging/output directories for a current project."""
+        from pathlib import Path
+        if not ident(project_id) or type(revision) is not int or revision < 1:
+            return {"state":"denied","reason":"invalid_project_prepare"}
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return {"state":"denied","reason":"not_host_owner"}
+            row=db.execute("""SELECT repository_root,staging_root,output_root,settings_revision
+                FROM alpha_game_projects WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+        if row is None:
+            return {"state":"denied","reason":"project_not_found"}
+        repo,staging,output,current_revision=row
+        if revision!=current_revision:
+            return {"state":"denied","reason":"revision_conflict"}
+        roots=[Path(repo),Path(staging),Path(output)]
+        try:
+            resolved=[p.resolve(strict=False) for p in roots]
+            if (not roots[0].is_dir() or
+                    resolved[0] in resolved[1:] or resolved[1]==resolved[2] or
+                    any(resolved[i].is_relative_to(resolved[j])
+                        for i,j in ((0,1),(0,2)))):
+                return {"state":"denied","reason":"unsafe_project_paths"}
+            for path in roots[1:]:
+                if path.exists() and not path.is_dir():
+                    return {"state":"denied","reason":"path_not_directory"}
+            created=[]
+            for path in roots[1:]:
+                if not path.is_dir():
+                    path.mkdir(parents=True,exist_ok=True)
+                    created.append(str(path))
+            return {"state":"prepared","reason":"project_directories_ready","created":created}
+        except (OSError,ValueError):
+            return {"state":"denied","reason":"filesystem_error"}
+
     def delete_game_project(self, host_id, owner_id, project_id, revision):
         """Remove only a registry row, never project directories or files."""
         if not ident(project_id) or type(revision) is not int or revision < 1:

@@ -639,6 +639,7 @@ async function refreshHosts(){
   }
   if(hostCache.some(h=>h.host_id===previous))hostSelect.value=previous;
   renderHost();
+  await loadHostStorageSettings();
   await refreshRuntimes();
   jobHost.value=hostSelect.value;
   effectHost.value=hostSelect.value;
@@ -1021,9 +1022,9 @@ document.getElementById("runtimeDelete").onclick=async()=>{
   document.getElementById("runtimeOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)await refreshRuntimes();
 };
-hostSelect.onchange=()=>{renderHost();refreshRuntimes();};
+hostSelect.onchange=async()=>{renderHost();await loadHostStorageSettings();await refreshRuntimes();};
 document.getElementById("effectHostSelect").onchange=()=>{
-  hostSelect.value=hv("effectHostSelect");renderHost();refreshComfyImportRuntimes();
+  hostSelect.value=hv("effectHostSelect");renderHost();loadHostStorageSettings();refreshComfyImportRuntimes();
 };
 document.getElementById("hostOpenEffect").onclick=()=>{
   document.getElementById("effectHostSelect").value=hostSelect.value;
@@ -1229,13 +1230,33 @@ document.getElementById("effectManual").onclick=async()=>{
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
+let hostSettingsRequestId=0;
 async function loadHostStorageSettings(){
   const host_id=hv("hostSelect");
-  const result=await request("/api/host/settings?host_id="+encodeURIComponent(host_id));
-  document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
-  if(result.status===200){
-    document.getElementById("hostStagingRoot").value=result.data.settings.staging_root||"";
-    document.getElementById("hostOutputRoot").value=result.data.settings.output_root||"";
+  const requestId=++hostSettingsRequestId;
+  const save=document.getElementById("hostSettingsSave");
+  const staging=document.getElementById("hostStagingRoot");
+  const output=document.getElementById("hostOutputRoot");
+  save.disabled=true;
+  staging.disabled=true;output.disabled=true;
+  staging.value="";output.value="";
+  if(!host_id){
+    document.getElementById("hostSettingsStatus").textContent="Kein Host ausgewählt.";
+    return;
+  }
+  document.getElementById("hostSettingsStatus").textContent="Einstellungen werden geladen…";
+  try{
+    const result=await request("/api/host/settings?host_id="+encodeURIComponent(host_id));
+    if(requestId!==hostSettingsRequestId||host_id!==hv("hostSelect"))return;
+    document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
+    if(result.status===200){
+      staging.value=result.data.settings.staging_root||"";
+      output.value=result.data.settings.output_root||"";
+      save.disabled=false;staging.disabled=false;output.disabled=false;
+    }
+  }catch(error){
+    if(requestId===hostSettingsRequestId)
+      document.getElementById("hostSettingsStatus").textContent="Laden fehlgeschlagen: "+String(error);
   }
 }
 document.getElementById("hostSettingsLoad").onclick=loadHostStorageSettings;

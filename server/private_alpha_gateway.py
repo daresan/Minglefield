@@ -1321,6 +1321,64 @@ document.getElementById("hostToggle").onclick=async()=>{
 hostOut.onclick=e=>{
   if(!e.target)return;
 };
+const gameHostSelect=document.getElementById("gameHostSelect");
+async function loadGameProjects(){
+  const response=await request("/api/hosts");
+  const previous=gameHostSelect.value;
+  gameHostSelect.replaceChildren();
+  if(response.status!==200){
+    document.getElementById("gameProjectStatus").textContent="Hosts konnten nicht geladen werden ("+response.status+").";
+    return;
+  }
+  for(const host of response.data.hosts||[]){
+    const option=document.createElement("option");
+    option.value=host.host_id;option.textContent=host.host_id;
+    gameHostSelect.append(option);
+  }
+  if([...gameHostSelect.options].some(x=>x.value===previous))gameHostSelect.value=previous;
+  await refreshGameProjectList();
+}
+async function refreshGameProjectList(){
+  const host=gameHostSelect.value;
+  const select=document.getElementById("gameProjectSelect");
+  select.replaceChildren();
+  if(!host){
+    document.getElementById("gameProjectStatus").textContent="Kein eigener Host verfügbar.";
+    return;
+  }
+  const response=await request("/api/game/projects?host_id="+encodeURIComponent(host));
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(response.data,null,2);
+  if(response.status!==200)return;
+  for(const project of response.data.projects){
+    const option=document.createElement("option");
+    option.value=project.project_id;
+    option.textContent=project.name+" ("+project.project_id+")";
+    select.append(option);
+  }
+}
+gameHostSelect.onchange=refreshGameProjectList;
+document.getElementById("gameProjectRefresh").onclick=loadGameProjects;
+document.getElementById("gameProjectCreate").onclick=async()=>{
+  const host=gameHostSelect.value;
+  if(!host){
+    document.getElementById("gameProjectStatus").textContent="Bitte zuerst einen Host wählen.";
+    return;
+  }
+  const payload={
+    host_id:host,
+    project_id:document.getElementById("gameProjectId").value.trim(),
+    name:document.getElementById("gameProjectName").value.trim(),
+    repository_root:document.getElementById("gameRepositoryRoot").value.trim(),
+    staging_root:document.getElementById("gameStagingRoot").value.trim(),
+    output_root:document.getElementById("gameOutputRoot").value.trim()
+  };
+  const response=await request("/api/game/projects",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)});
+  if(response.status===201)await refreshGameProjectList();
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("logout").onclick=async()=>{
   const result=credential?await request("/api/logout",{method:"POST"}):{status:401};
   credential="";expiresAt=0;updateStatus();

@@ -1,0 +1,62 @@
+"""Read-only update discovery for registry-authorized integration sources.
+
+Version comparison uses packaging.version (PEP 440), pending a SemVer-specific
+dependency decision. This module never claims artifact integrity or installation.
+"""
+from packaging.version import Version, InvalidVersion
+from game_release_metadata import fetch_releases
+
+
+def _version(value):
+    if not isinstance(value,str) or not value.strip():
+        return None
+    try:
+        return Version(value.strip())
+    except InvalidVersion:
+        return None
+
+
+def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
+    """Compare a declared version against stable releases from a matching curated source."""
+    if not isinstance(entry,dict) or not isinstance(catalog,dict):
+        return {"state":"unknown","reason":"invalid_input"}
+    if catalog.get("state")!="available":
+        return {"state":"unknown","reason":"registry_unavailable"}
+    match=next((x for x in catalog.get("integrations",[])
+                if x.get("integration_id")==entry.get("integration_id")),None)
+    if match is None:
+        return {"state":"unknown","reason":"not_in_curated_registry"}
+    source=match.get("release_source")
+    if (entry.get("source_state")!="registry_match"
+            or source!=entry.get("release_source")
+            or match.get("publisher") is None):
+        return {"state":"unknown","reason":"untrusted_source"}
+    installed=_version(entry.get("declared_version"))
+    if installed is None:
+        return {"state":"unknown","reason":"invalid_installed_version"}
+    if not isinstance(source,dict) or source.get("provider")!="github":
+        return {"state":"unknown","reason":"unsupported_release_provider"}
+    try:
+        result=fetcher(source["repository"])
+    except (ValueError,KeyError,TypeError,OSError):
+        return {"state":"unknown","reason":"release_source_unavailable"}
+    if result.get("state")!="available":
+        return {"state":"unknown","reason":"release_source_unavailable"}
+    versions=[]
+    for release in result.get("releases",[]):
+        if release.get("draft") or release.get("prerelease"):
+            continue
+        version=_version(release.get("tag_name"))
+        if version is not None and not version.is_prerelease and not version.is_devrelease:
+            versions.append((version,release))
+    if not versions:
+        return {"state":"unknown","reason":"no_comparable_releases"}
+    latest,release=max(versions,key=lambda item:item[0])
+    return {"state":"update_available" if latest>installed else "up_to_date",
+            "installed_version":entry["declared_version"],
+            "available_version":release["tag_name"],
+            "release_notes":release.get("release_notes",""),
+            "release_url":release.get("release_url"),
+            "published_at":release.get("published_at"),
+            "verification_state":"unknown",
+            "note":"Version comparison only; installation and artifact integrity unverified."}

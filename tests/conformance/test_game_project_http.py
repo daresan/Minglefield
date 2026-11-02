@@ -83,10 +83,27 @@ class GameProjectHttpTests(unittest.TestCase):
         finally:
             connection.close()
         for fragment in ('id="gameProjectPanel"', 'id="gameHostSelect"',
-                         'id="gameProjectCreate"', 'id="gameProjectSelect"',
+                         'id="gameProjectCreate"', 'id="gameProjectUpdate"', 'id="gameProjectSelect"',
                          '"/api/game/projects"', '["game","Game"]'):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, html)
+
+    def test_project_update_http_contract(self):
+        payload = dict(host_id="host.one", project_id="game.one", name="Original",
+                       repository_root=str(self.root / "repo"),
+                       staging_root=str(self.root / "stage"),
+                       output_root=str(self.root / "output"))
+        self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
+        update = dict(payload, name="Updated", settings_revision=1)
+        path = "/api/game/projects/update"
+        self.assertEqual(self.request("POST", path, payload=update)[0], 401)
+        self.assertEqual(self.request("POST", path, self.other, update)[0], 403)
+        self.assertEqual(self.request("POST", path, self.owner, update)[0], 200)
+        self.assertEqual(self.request("POST", path, self.owner, update)[0], 409)
+        status, data = self.request("GET", "/api/game/projects?host_id=host.one", self.owner)
+        self.assertEqual(status, 200)
+        self.assertEqual((data["projects"][0]["name"], data["projects"][0]["settings_revision"]),
+                         ("Updated", 2))
 
     def test_invalid_requests_are_rejected(self):
         self.assertEqual(self.request("GET", "/api/game/projects", self.owner)[0], 400)

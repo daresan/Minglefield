@@ -183,6 +183,89 @@ class HostCommitPolicy:
                 (host_id,effect_id,description,int(enabled)))
             return HostDecision("saved","effect_metadata_only")
 
+    def claim_comfy_execution(self, host_id, owner_id, job_id):
+        """Atomically claim one reserved job for one explicit local submission."""
+        with self.authority.store._tx() as db:
+            row=db.execute("""SELECT j.effect_id,j.state,w.workflow,w.metadata,r.config,
+                p.workflow_sha256,p.parameters
+                FROM sec01_host_jobs j
+                JOIN sec01_host_comfy_workflows w ON w.host_id=j.host_id
+                    AND w.effect_id=j.effect_id
+                JOIN sec01_host_runtimes r ON r.host_id=w.host_id
+                    AND r.runtime_id=w.runtime_id
+                JOIN sec01_host_job_parameters p ON p.job_id=j.job_id
+                WHERE j.host_id=? AND j.job_id=? AND EXISTS
+                (SELECT 1 FROM sec01_host_owners o WHERE o.host_id=j.host_id
+                 AND o.owner_id=?)""",(host_id,job_id,owner_id)).fetchone()
+            if row is None or row[1]!="reserved":
+                return None
+            effect_id,state,workflow,metadata,runtime,sha,parameters=row
+            runtime=json.loads(runtime)
+            if not runtime.get("enabled") or runtime.get("type")!="comfyui":
+                return None
+            if db.execute("""SELECT enabled FROM sec01_host_effect_definitions
+                WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()!=(1,):
+                return None
+            if db.execute("""SELECT active FROM alpha_executor_hosts
+                WHERE host_id=?""",(host_id,)).fetchone()!=(1,):
+                return None
+            if db.execute("""SELECT 1 FROM sec01_host_active_slots
+                WHERE host_id=? AND effect_key=?""",(host_id,job_id)).fetchone() is None:
+                return None
+            if db.execute("""UPDATE sec01_host_jobs SET state='submitting'
+                WHERE host_id=? AND job_id=? AND state='reserved'""",
+                (host_id,job_id)).rowcount!=1:
+                return None
+            return {"workflow":json.loads(workflow),"metadata":json.loads(metadata),
+                    "runtime":runtime,"workflow_sha256":sha,
+                    "parameters":json.loads(parameters)}
+
+    def record_comfy_submission(self, host_id, job_id, prompt_id, error=None):
+        """Keep uncertain submissions distinct; never automatically resubmit."""
+        with self.authority.store._tx() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_comfy_executions(
+                job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                prompt_id TEXT, error TEXT)""")
+            db.execute("""INSERT INTO sec01_host_comfy_executions
+                (job_id,host_id,prompt_id,error) VALUES(?,?,?,?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                prompt_id=excluded.prompt_id,error=excluded.error""",
+                (job_id,host_id,prompt_id,error))
+            db.execute("""UPDATE sec01_host_jobs SET state=?
+                WHERE host_id=? AND job_id=? AND state='submitting'""",
+                ("submitted" if prompt_id else "submission_unknown",host_id,job_id))
+
+    def comfy_execution_context(self, host_id, owner_id, job_id):
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+                return None
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_comfy_executions(
+                job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                prompt_id TEXT, error TEXT)""")
+            row=db.execute("""SELECT j.state,e.prompt_id,e.error,r.config
+                FROM sec01_host_jobs j
+                JOIN sec01_host_comfy_workflows w ON w.host_id=j.host_id
+                    AND w.effect_id=j.effect_id
+                JOIN sec01_host_runtimes r ON r.host_id=w.host_id
+                    AND r.runtime_id=w.runtime_id
+                LEFT JOIN sec01_host_comfy_executions e ON e.job_id=j.job_id
+                WHERE j.host_id=? AND j.job_id=?""",(host_id,job_id)).fetchone()
+            return ({"state":row[0],"prompt_id":row[1],"error":row[2],
+                     "runtime":json.loads(row[3])} if row else None)
+
+    def finish_comfy_execution(self, host_id, job_id, state):
+        if state not in ("completed","failed"):
+            return False
+        with self.authority.store._tx() as db:
+            updated=db.execute("""UPDATE sec01_host_jobs SET state=?
+                WHERE host_id=? AND job_id=? AND state='submitted'""",
+                (state,host_id,job_id)).rowcount
+            if updated:
+                db.execute("""DELETE FROM sec01_host_active_slots
+                    WHERE host_id=? AND effect_key=?""",(host_id,job_id))
+            return bool(updated)
+
     def comfy_file_parameter_context(self, host_id, owner_id, effect_id):
         """Owner-scoped file enum bindings and configured ComfyUI runtime."""
         with self.authority.store._tx() as db:

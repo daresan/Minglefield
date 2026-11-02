@@ -61,11 +61,13 @@ Staging on selection is **local persistence**, not transfer to ComfyUI. A cancel
 
 ## Implementation sequence and acceptance gates
 
-### P0 — restore and protect working baseline
-- [ ] Run complete conformance suite after the `verified` initialization fix; record exact results.
-- [ ] Re-run first successful ComfyUI workflow and SkinTokens workflow; record fixture and expected behavior.
-- [x] Preserve a fallback branch: `backup/comfy-first-working-runtime-2026-11-02`. Note: backup is a Git snapshot, not a proof of green tests.
-- [ ] Add regression tests for metadata-verified/unverified input classification and file widget rendering.
+### P0 — mandatory verification and user acceptance gate (blocks P1)
+- [ ] **P0.1 Automated regression:** pull the `verified` fix; execute the full conformance suite (425 tests in the last reported run) and confirm **zero failures and zero errors**. Record command, commit SHA, and results. Add or adjust regression tests where needed.
+- [ ] **P0.2 Parameter functional check:** inspect/import the actual ComfyUI API workflow, verify authoritative versus unverified parameter classification, `Load3D.model_file` file classification, selection, defaults, persistence and correct job binding. Record any deviations.
+- [ ] **P0.3 User-led visual acceptance:** the user personally checks the alpha UI, rendered parameter controls and actual workflow behavior. Correct any defects and repeat this acceptance check until the user reports success.
+- [ ] **P0.4 Explicit user sign-off:** P0 is complete **only after the user explicitly approves the visual/functional result**. Do not begin P1 implementation before this approval, even if automated tests are green.
+- [ ] Re-run first successful ComfyUI workflow and SkinTokens workflow; record fixture and expected behavior as part of P0.2/P0.3.
+- [x] Preserve a fallback branch: `backup/comfy-first-working-runtime-2026-11-02`. This is a Git snapshot, not evidence of passing tests.
 
 ### P1 — project model and Game tab skeleton
 - [ ] Define versioned GameProject schema, local repo binding and persistence/migration.

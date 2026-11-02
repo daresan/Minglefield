@@ -135,7 +135,7 @@ class HostCommitPolicy:
 
     def import_comfy_workflow(self, host_id, owner_id, runtime_id, effect_id,
                               description, workflow, object_info, bindings):
-        """Persist a validated workflow under an existing host effect, never execute it."""
+        """Create a new disabled effect with a validated workflow; never overwrite."""
         if (not all(ident(v) for v in (host_id, owner_id, runtime_id, effect_id))
                 or type(description) is not str or len(description)>256
                 or type(workflow) is not dict or type(object_info) is not dict):
@@ -153,15 +153,15 @@ class HostCommitPolicy:
                              (host_id, runtime_id)).fetchone()
             if row is None or json.loads(row[0])["type"] != "comfyui":
                 return HostDecision("denied", "runtime_unavailable")
+            if db.execute("""SELECT 1 FROM sec01_host_effect_definitions
+                WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone():
+                return HostDecision("denied", "effect_id_already_exists")
             db.execute("""INSERT INTO sec01_host_effect_definitions
-                (host_id,effect_id,description,enabled) VALUES(?,?,?,0)
-                ON CONFLICT(host_id,effect_id) DO UPDATE SET description=excluded.description,
-                enabled=0""", (host_id, effect_id, description))
+                (host_id,effect_id,description,enabled) VALUES(?,?,?,0)""",
+                (host_id,effect_id,description))
             db.execute("""INSERT INTO sec01_host_comfy_workflows
-                (host_id,effect_id,runtime_id,workflow,metadata) VALUES(?,?,?,?,?)
-                ON CONFLICT(host_id,effect_id) DO UPDATE SET runtime_id=excluded.runtime_id,
-                workflow=excluded.workflow,metadata=excluded.metadata""",
-                (host_id, effect_id, runtime_id, raw, json.dumps(prepared, sort_keys=True)))
+                (host_id,effect_id,runtime_id,workflow,metadata) VALUES(?,?,?,?,?)""",
+                (host_id,effect_id,runtime_id,raw,json.dumps(prepared,sort_keys=True)))
         return HostDecision("saved", "comfy_workflow_saved_disabled_no_execution")
 
     def define_effect(self, host_id, owner_id, effect_id, description, enabled):
@@ -594,8 +594,16 @@ class HostCommitPolicy:
                 effects=db.execute("""SELECT effect_id,description,enabled
                     FROM sec01_host_effect_definitions WHERE host_id=?
                     ORDER BY effect_id""",(host_id,)).fetchall()
+                workflows=db.execute("""SELECT effect_id,runtime_id,metadata
+                    FROM sec01_host_comfy_workflows WHERE host_id=?""",(host_id,)).fetchall()
+                workflow_info={eid:dict(runtime_id=rid,
+                    parameters=json.loads(meta).get("parameters",[]),
+                    selected_bindings=json.loads(meta).get("selected_bindings",[]),
+                    workflow_sha256=json.loads(meta).get("workflow_sha256"))
+                    for eid,rid,meta in workflows}
                 result.append(dict(host_id=host_id,active=bool(active),
-                    effects=[dict(effect_id=e,description=d,enabled=bool(on))
+                    effects=[dict(effect_id=e,description=d,enabled=bool(on),
+                                  comfy_workflow=workflow_info.get(e))
                              for e,d,on in effects],
                     active_effects=len(slots),slots=[x[0] for x in slots],
                     rules=[dict(rule_id=rid,priority=priority,enabled=bool(enabled),

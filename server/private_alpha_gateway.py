@@ -2067,19 +2067,31 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         except (StagingError,OSError,ValueError):
                             self.reply(400,{"error":"staged_asset_unavailable"})
                             return
-                    if context and context["parameters"] and not staged_bindings:
+                    if context and context["parameters"]:
                         if not context["runtime"].get("enabled"):
                             self.reply(403,{"error":"runtime_unavailable"})
                             return
                         from urllib.request import Request,urlopen
+                        from urllib.parse import quote
                         try:
-                            with urlopen(Request(context["runtime"]["endpoint"]+"/object_info/LoadImage",
-                                                 headers={"Accept":"application/json"}),timeout=5) as response:
-                                metadata=json.loads(response.read(4*1024*1024+1))
-                            options=metadata["LoadImage"]["input"]["required"]["image"][0]
-                            if type(options) is not list or any(type(v) is not str for v in options):
-                                raise ValueError("invalid_file_choices")
-                            current_choices={p["binding"]:options for p in context["parameters"]}
+                            needed=[p for p in context["parameters"]
+                                    if p["binding"] not in staged_bindings and p.get("type")=="enum"]
+                            for class_type in {p["class_type"] for p in needed}:
+                                with urlopen(Request(context["runtime"]["endpoint"]+
+                                        "/object_info/"+quote(class_type,safe=""),
+                                        headers={"Accept":"application/json"}),timeout=5) as response:
+                                    info=json.loads(response.read(4*1024*1024+1)).get(class_type,{})
+                                for spec in needed:
+                                    if spec["class_type"]!=class_type:continue
+                                    inputs=info.get("input",{})
+                                    definition=inputs.get("required",{}).get(spec["input"])
+                                    if definition is None:
+                                        definition=inputs.get("optional",{}).get(spec["input"])
+                                    options=(definition[0] if isinstance(definition,(list,tuple))
+                                             and definition and isinstance(definition[0],list) else None)
+                                    if options is None or any(type(v) is not str for v in options):
+                                        raise ValueError("invalid_file_choices")
+                                    current_choices[spec["binding"]]=options
                         except (OSError,ValueError,KeyError,TypeError,IndexError):
                             self.reply(502,{"error":"file_choices_unavailable"})
                             return

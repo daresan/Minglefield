@@ -340,7 +340,7 @@ function showAllJob(){
   document.getElementById("allJobDetails").textContent=job
     ?[kind,job.job_id,job.state,job.user_id||job.requested_by||"",job.agent_id||job.effect_id||""].join(" · ")
     :"Job auswählen.";
-  document.getElementById("allJobResultsButton").hidden=!(job&&kind==="host"&&["completed","submitted","failed"].includes(job.state));
+  document.getElementById("allJobResultsButton").hidden=!(job&&kind==="host");
   if(job&&kind==="demo"){demoJobSelect.value=id;showSelectedJob();}
   if(job&&kind==="host"){
     document.getElementById("hostJobSelect").value=id;
@@ -1004,7 +1004,7 @@ async function loadJobArtifacts(host_id,job_id){
   if(!host_id||!job_id)return;
   const result=await request("/api/host/jobs/execution?host_id="+
     encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
-  if(result.status!==200){target.textContent="Ergebnisse nicht verfügbar.";return;}
+  if(result.status!==200){target.textContent="Ergebnisse nicht verfügbar (HTTP "+result.status+").";return;}
   const outputs=result.data.outputs||{};
   let count=0;
   for(const [node,groups] of Object.entries(outputs)){
@@ -1080,6 +1080,8 @@ document.getElementById("hostJobRetry").onclick=async()=>{
 };
 document.getElementById("hostJobSelect").onchange=()=>{
   document.getElementById("hostJobId").value=hv("hostJobSelect");
+  const id=hv("hostJobSelect");
+  if(id){allJobsSelect.value="host:"+id;showAllJob();}
 };
 document.getElementById("hostJobsRefresh").onclick=async()=>{
   const requestedHost=hv("jobHostSelect");
@@ -1099,6 +1101,7 @@ document.getElementById("hostJobsRefresh").onclick=async()=>{
     if(result.data.jobs.some(j=>j.job_id===old))select.value=old;
     document.getElementById("hostJobId").value=select.value;
     showSelectedJob();renderAllJobs();
+    if(select.value){allJobsSelect.value="host:"+select.value;showAllJob();}
   }
 };
 document.getElementById("effectSave").onclick=async()=>{

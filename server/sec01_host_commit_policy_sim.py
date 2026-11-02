@@ -431,6 +431,30 @@ class HostCommitPolicy:
         report["ready"]=not report["issues"]
         return report
 
+    def inspect_game_integration_update(self, host_id, owner_id, project_id):
+        """Read-only local integration status; no remote release catalog yet."""
+        report=self.inspect_game_compatibility(host_id,owner_id,project_id)
+        if report is None:
+            return None
+        manifest=report["manifest"]
+        state=manifest["state"]
+        installed=manifest.get("schema_version")
+        if state=="compatible":
+            update_state="no_known_update"
+        elif state=="missing":
+            update_state="setup_required"
+        else:
+            update_state="manual_review_required"
+        return {"project_id":project_id,
+                "installed_schema_version":installed,
+                "supported_schema_version":1,
+                "integration_version":None,
+                "update_state":update_state,
+                "release_catalog":{"state":"not_configured"},
+                "update_available":None,
+                "notes":"No release catalog is configured; availability cannot be determined.",
+                "manifest_state":state}
+
     def prepare_game_manifest(self, host_id, owner_id, project_id, revision):
         """Create a minimal versioned manifest, preserving any existing manifest."""
         import json

@@ -125,7 +125,13 @@ Effekt importiert, nicht als Runtime. Exportiere ihn in ComfyUI im API-Format.</
 <fieldset><legend>Workflow-Datei auswählen (lokale Vorschau)</legend>
 <label>ComfyUI API-JSON <input type="file" id="comfyWorkflowFile" accept=".json,application/json"></label>
 <label>ComfyUI-Runtime <select id="comfyImportRuntime"></select></label>
+<label>Neue Effekt-ID (Pflicht, bestehende IDs werden abgelehnt) <input id="comfyNewEffectId" placeholder="comfy.mein-workflow"></label>
+<label>Beschreibung <input id="comfyNewEffectDescription" placeholder="3D-Modell aus Bild"></label>
 <button id="comfyWorkflowInspect">Parameter prüfen</button>
+<label>Node-Filter <input id="comfyNodeFilter" placeholder="Node-ID, Typ oder Parametername"></label>
+<div class="action-row"><button id="comfySelectVisibleAll" type="button">Alle sichtbaren auswählen</button>
+<button id="comfySelectVisibleNone" type="button">Keine sichtbaren auswählen</button>
+<span id="comfySelectionCount"></span></div>
 <div id="comfyBindings" style="display:grid;gap:6px;max-height:340px;overflow:auto"></div>
 <button id="comfyWorkflowSave" disabled>Ausgewählte Parameter und Workflow als Effekt speichern</button>
 <pre id="comfyWorkflowOutput" aria-live="polite">Noch keine Datei ausgewählt.</pre>
@@ -144,6 +150,7 @@ Effekt importiert, nicht als Runtime. Exportiere ihn in ComfyUI im API-Format.</
 beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></p>
 </fieldset>
 <pre id="effectOutput" aria-live="polite">Effekt auswählen oder anlegen.</pre>
+<pre id="effectWorkflowDetails" aria-live="polite">Kein Effekt ausgewählt.</pre>
 </fieldset>
 <fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
 <p>Eigene Hosts werden deinem angemeldeten Minglefield-Benutzer zugeordnet.
@@ -628,6 +635,7 @@ function renderHost(){
   refreshComfyImportRuntimes();
   if(effects.value)loadSelectedEffect();
   else {
+    document.getElementById("effectWorkflowDetails").textContent="Kein Effekt ausgewählt.";
     document.getElementById("effectId").value="";
     document.getElementById("effectDescription").value="";
     document.getElementById("effectEnabled").checked=true;
@@ -656,6 +664,12 @@ function loadSelectedEffect(){
   document.getElementById("effectId").value=effect.effect_id;
   document.getElementById("effectDescription").value=effect.description;
   document.getElementById("effectEnabled").checked=effect.enabled;
+  document.getElementById("effectWorkflowDetails").textContent=effect.comfy_workflow
+    ?JSON.stringify({workflow_attached:true,runtime_id:effect.comfy_workflow.runtime_id,
+       workflow_sha256:effect.comfy_workflow.workflow_sha256,
+       selected_bindings:effect.comfy_workflow.selected_bindings,
+       parameters:effect.comfy_workflow.parameters},null,2)
+    :"Kein ComfyUI-Workflow mit diesem Effekt verknüpft.";
 }
 document.getElementById("effectSelect").onchange=loadSelectedEffect;
 document.getElementById("hostRuleSelect").onchange=()=>{
@@ -664,6 +678,26 @@ document.getElementById("hostRuleSelect").onchange=()=>{
   if(rule)loadRule(rule);
 };
 let inspectedComfy=null;
+function filterComfyBindings(){
+  const q=hv("comfyNodeFilter").trim().toLowerCase();
+  for(const label of document.querySelectorAll("#comfyBindings label"))
+    label.hidden=!label.dataset.search.includes(q);
+  updateComfySelectionCount();
+}
+function updateComfySelectionCount(){
+  const labels=[...document.querySelectorAll("#comfyBindings label")];
+  document.getElementById("comfySelectionCount").textContent=
+    labels.filter(l=>l.querySelector("input").checked).length+" / "+labels.length+
+    " gewählt · "+labels.filter(l=>!l.hidden).length+" sichtbar";
+}
+document.getElementById("comfyNodeFilter").oninput=filterComfyBindings;
+for(const [id,checked] of [["comfySelectVisibleAll",true],["comfySelectVisibleNone",false]]){
+  document.getElementById(id).onclick=()=>{
+    for(const label of document.querySelectorAll("#comfyBindings label:not([hidden])"))
+      label.querySelector("input").checked=checked;
+    updateComfySelectionCount();
+  };
+}
 async function refreshComfyImportRuntimes(){
   const host=hv("effectHostSelect");
   const select=document.getElementById("comfyImportRuntime");
@@ -696,10 +730,13 @@ document.getElementById("comfyWorkflowInspect").onclick=async()=>{
     for(const c of verified){
       const label=document.createElement("label");
       const check=document.createElement("input");check.type="checkbox";check.value=c.binding;
+      label.dataset.search=(c.binding+" "+c.class_type+" "+c.type).toLowerCase();
+      check.onchange=updateComfySelectionCount;
       label.append(check,document.createTextNode(" "+c.binding+" · "+c.class_type+
         " · "+c.type+" · "+JSON.stringify(c.default)));
       bindings.append(label);
     }
+    filterComfyBindings();
     output.textContent="API-JSON: "+result.data.node_count+" Nodes, "+
       verified.length+" geprüfte Parameter. "+result.data.warnings.length+
       " Hinweise. Parameter auswählen und Effekt-ID vergeben.";
@@ -709,8 +746,9 @@ document.getElementById("comfyWorkflowInspect").onclick=async()=>{
 document.getElementById("comfyWorkflowSave").onclick=async()=>{
   const output=document.getElementById("comfyWorkflowOutput");
   if(!inspectedComfy)return;
-  const effect_id=hv("effectId"),description=hv("effectDescription");
-  if(!effect_id){output.textContent="Bitte zuerst eine Effekt-ID eingeben.";return;}
+  const effect_id=hv("comfyNewEffectId").trim(),description=hv("comfyNewEffectDescription");
+  if(!effect_id){output.textContent="Bitte eine NEUE Effekt-ID für den Import eingeben.";return;}
+  if(hostCache.some(h=>h.host_id===inspectedComfy.host&&h.effects.some(e=>e.effect_id===effect_id))){output.textContent="Diese Effekt-ID existiert bereits. Import abgebrochen, nichts überschrieben.";return;}
   const bindings=[...document.querySelectorAll("#comfyBindings input:checked")].map(x=>x.value);
   const result=await request("/api/host/comfy/import",{
     method:"POST",headers:{"Content-Type":"application/json"},

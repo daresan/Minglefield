@@ -986,16 +986,14 @@ document.getElementById("jobComfyUpload").onclick=async()=>{
   if(!files.length||!host_id||!runtime_id){output.textContent="Host, Runtime und Dateien wählen.";return;}
   const uploaded=[];
   for(const file of files){
-    if(file.size>8*1024*1024||file.size===0){output.textContent="Dateigröße 1 Byte bis 8 MiB: "+file.name;return;}
     if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(file.name)){
       output.textContent="Dateiname bitte auf ASCII-Buchstaben, Zahlen, Punkt, Bindestrich und Unterstrich begrenzen: "+file.name;return;
     }
-    const bytes=new Uint8Array(await file.arrayBuffer());
-    let binary="";
-    for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+    output.textContent="Upload läuft: "+file.name+" ("+file.size+" Bytes)";
     const result=await request("/api/host/comfy/upload",{
-      method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({host_id,runtime_id,filename:file.name,data:btoa(binary)})});
+      method:"POST",headers:{"Content-Type":"application/octet-stream",
+        "X-Minglefield-Host":host_id,"X-Minglefield-Runtime":runtime_id,
+        "X-Minglefield-Filename":file.name},body:file});
     if(result.status!==200){output.textContent=JSON.stringify({uploaded,error:result.data},null,2);return;}
     uploaded.push(result.data);
     output.textContent=JSON.stringify({uploaded,note:"Dateien liegen in ComfyUI. Noch keine automatische Workflow-/Job-Bindung."},null,2);

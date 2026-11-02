@@ -16,6 +16,24 @@ Test successful updates, source mismatch, artifact tampering, unavailable releas
 
 P1.4f.2g.1 unified-lock contract was confirmed on the Windows host: 4 package-lock, 8 integration and 26 Game-project tests passed (38 total). Later steps: 2g.2 verification evidence, 2g.3 read-only unified lock inspection, then complete preview, approved installation and end-to-end testing.
 
+## P1.4f.3 implementation and contract alignment (2026-11-02)
+
+Current read-only behavior:
+- Curated registry identity and release source are checked before remote release discovery.
+- The comparison uses a *declared* lock version, not a verified installed version. Results remain `state: unknown` / `installation_not_verified`; `version_comparison` is informational only.
+- Missing or invalid installation declarations produce an unknown status, not a verified empty installation or a green up-to-date signal.
+- Release notes and changed-file comparison are advisory; compatibility, migration and artifact integrity remain unknown, and `installation_allowed` is false.
+- The Alpha UI displays these limitations; a JavaScript syntax regression test now checks the served page. A real browser interaction test is still pending.
+
+Remaining gates before claiming update availability or enabling installation:
+1. Define and implement independently verified installed-version evidence, consistent with `GAME-INTEGRATION-VERIFICATION-v0.1-DRAFT.md` and the authoritative unified-lock design. Do not promote legacy lock declarations to evidence.
+2. Resolve the SemVer versus PEP 440 version comparison decision and define stable/prerelease/tag handling; do not silently equate MAP versions with package versions.
+3. Provide trustworthy compatibility and migration assessments, including conflict checks and explicit manual-review paths.
+4. Require explicit approval, authorized source and artifact digest verification, auditable installation, rollback/recovery and post-install reinspection.
+5. Add negative and end-to-end tests for source mismatch, tampering, offline metadata, local changes, partial failure and recovery; add browser-level tab/overlay interaction coverage.
+
+Signal contract until verified evidence exists: grey for unknown/unverified; yellow may mean a newer release than a *declaration* or required manual review, never a proven installable update; red for confirmed invalid/conflicting evidence; green requires independently verified installation plus reliable current release comparison. Do not introduce a parallel package, lock or installer contract.
+
 ## P1.5 next: Game workspace and asset management
 
 Extend the existing Game tab and project registration rather than rebuild them:

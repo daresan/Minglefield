@@ -64,8 +64,9 @@ small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left
 #jobResultsDialog{width:min(1100px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);padding:22px}#jobResultsDialog::backdrop{background:rgba(0,0,0,.75)}.results-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.results-dialog-head h2{margin:0}
 .job-table-scroll{width:100%;overflow-x:auto}.job-table-scroll table{width:100%;border-collapse:collapse;min-width:650px}.job-table-scroll th,.job-table-scroll td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:middle}.job-table-scroll td:first-child{overflow-wrap:anywhere;max-width:280px}.job-table-scroll td button{min-height:34px;padding:5px 9px;font-size:13px;margin:2px}.job-table-scroll tr[aria-selected=true]{background:var(--raised)}.job-toolbar,.job-actions{display:flex;flex-wrap:wrap;gap:8px;width:100%}.legacy-job-select{display:none!important}.job-diagnostics,#jobParametersDetails{width:100%;flex-basis:100%;border:1px solid var(--line);padding:12px;border-radius:10px}.job-diagnostics>summary,#jobParametersDetails>summary{cursor:pointer;font-weight:700;padding:8px}.job-diagnostics>fieldset{margin-top:16px}#jobParameterFields{margin-top:14px}#unifiedJobsPanel>pre{width:100%}
 dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:min(760px,92vw);width:100%}dialog::backdrop{background:#000a}dialog .action-row{margin:12px 0}#gameUpdateStatus{max-height:55vh;overflow:auto}
+.app-heading,.game-project-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.app-heading h1{margin-bottom:0}.game-project-heading{margin:12px 0}.game-project-heading label{flex:1;min-width:200px}.signal-indicator{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);padding:7px 12px;font-weight:600;font-size:13px;white-space:nowrap;cursor:pointer}.signal-indicator:hover{border-color:var(--accent)}.signal-indicator:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.signal-lamp{width:17px;height:17px;border-radius:50%;flex:none;background:#8792a5;border:2px solid #c3cad5;box-shadow:0 0 0 3px #8792a522,inset 0 1px 2px #0007}.signal-indicator[data-signal="green"] .signal-lamp{background:#28b86b;border-color:#8af5b6;box-shadow:0 0 9px #28b86b99}.signal-indicator[data-signal="yellow"] .signal-lamp{background:#e8b33b;border-color:#ffe29a;box-shadow:0 0 9px #e8b33b99}.signal-indicator[data-signal="red"] .signal-lamp{background:#e45b61;border-color:#ffb6ba;box-shadow:0 0 9px #e45b6199}
 </style>
-<h1>Minglefield Private Alpha</h1>
+<header class="app-heading"><h1>Minglefield Private Alpha</h1><button id="platformUpdateIndicator" class="signal-indicator" data-signal="unknown" type="button" aria-haspopup="dialog" title="Minglefield-Update: Status unbekannt"><span class="signal-lamp" aria-hidden="true"></span><span>Minglefield-Update</span></button></header>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
 <p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
 <fieldset><legend>1. Einladung einlösen (nur Auth-v2-Test)</legend>
@@ -261,12 +262,11 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
 <button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
 
-<div class="action-row" aria-label="Update-Status"><button id="platformUpdateIndicator" type="button" aria-haspopup="dialog">⚪ Minglefield-Update · ungeprüft</button><button id="gameUpdateIndicator" type="button" aria-haspopup="dialog">⚪ Game-Update · ungeprüft</button></div>
 <dialog id="platformUpdateDialog" aria-labelledby="platformUpdateTitle"><h3 id="platformUpdateTitle">Minglefield-Update</h3><p>Derzeit ist keine verifizierte Plattform-Updatequelle angebunden. Status: unbekannt. Es wird kein Update gestartet.</p><form method="dialog"><button>Schließen</button></form></dialog>
 <dialog id="gameUpdateDialog" aria-labelledby="gameUpdateTitle"><h3 id="gameUpdateTitle">Game-Projekt: Updates</h3><p>Release-Vergleiche mit deklarierten Versionen sind keine Installationsnachweise.</p><div class="action-row"><button id="gameIntegrationUpdateInspect" type="button">Integrationsupdates prüfen</button><button id="gameIntegrationRegistryInspect" type="button">Integrationen anzeigen / aktualisieren</button></div><pre id="gameUpdateStatus" aria-live="polite">Noch nicht geprüft.</pre><form method="dialog"><button>Schließen</button></form></dialog>
 <div id="gameManagePanel">
 <h3>Bestehendes Projekt verwalten</h3>
-<label>Projekt auswählen <select id="gameProjectSelect"></select></label>
+<div class="game-project-heading"><label>Projekt auswählen <select id="gameProjectSelect"></select></label><button id="gameUpdateIndicator" class="signal-indicator" data-signal="unknown" type="button" aria-haspopup="dialog" title="Game-Update: Status unbekannt"><span class="signal-lamp" aria-hidden="true"></span><span>Game-Update</span></button></div>
 <label>Projekt-ID (nicht änderbar) <input id="gameProjectId" readonly></label>
 <label>Name <input id="gameProjectName"></label>
 <label>Repository-Pfad (absolut) <input id="gameRepositoryRoot"></label>
@@ -1550,6 +1550,13 @@ document.getElementById("gameIntegrationUpdateInspect").onclick=async()=>{
   const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
     "&project_id="+encodeURIComponent(project.project_id);
   const response=await request("/api/game/integration/releases"+query);
+  const indicator=document.getElementById("gameUpdateIndicator");
+  const updates=Array.isArray(response.data?.updates)?response.data.updates:[];
+  const invalid=updates.some(x=>x.verification_state==="invalid"||x.state==="invalid");
+  const newer=updates.some(x=>x.version_comparison==="newer_release_than_declared");
+  const signal=response.status!==200?"unknown":invalid?"red":newer?"yellow":"unknown";
+  indicator.dataset.signal=signal;
+  indicator.title=signal==="yellow"?"Neuere Release als deklarierte Version; Installation nicht verifiziert":signal==="red"?"Integrationskonflikt":"Game-Update: Status unbekannt oder nicht verifiziert";
   document.getElementById("gameUpdateStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };

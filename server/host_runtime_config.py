@@ -78,10 +78,25 @@ class HostRuntimeRegistry:
         return copy.deepcopy(runtime)
 
 
+def parameter_definition(candidate):
+    """Runtime-neutral presentation metadata; asset inputs require explicit binding adapters."""
+    c = copy.deepcopy(candidate)
+    kind = c["type"]
+    opts = c.get("choices", [])
+    name = c.get("input", "").lower()
+    multiline = kind == "string" and any(x in name for x in ("prompt", "text", "description", "system_message"))
+    widget = {"integer": "number", "number": "number", "boolean": "checkbox",
+              "enum": "select", "string": "textarea" if multiline else "text"}[kind]
+    c.update({"schema_version": 1, "widget": widget, "constraints": {
+        **c.get("limits", {}), **({"choices": opts} if kind == "enum" else {})},
+        "asset_type": None})
+    return c
+
+
 def prepare_comfy_effect(raw, metadata, selected_bindings):
     """Prepare a versioned effect payload; caller persists via existing effect API.
 
-    Only metadata-verified, scalar or enum inputs can be selected.
+    Only metadata-verified scalar or enum inputs can be selected. Asset bindings require a separate, explicit adapter.
     """
     result = inspect_api_workflow(raw, metadata)
     if type(selected_bindings) is not list or any(type(b) is not str for b in selected_bindings):
@@ -94,5 +109,5 @@ def prepare_comfy_effect(raw, metadata, selected_bindings):
     return {"adapter": "comfyui", "format": "api_prompt",
             "workflow_sha256": result["sha256"],
             "selected_bindings": list(selected_bindings),
-            "parameters": [copy.deepcopy(verified[b]) for b in selected_bindings],
+            "parameters": [parameter_definition(verified[b]) for b in selected_bindings],
             "warnings": result["warnings"]}

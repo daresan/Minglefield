@@ -62,6 +62,7 @@ small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left
 @media(max-width:700px){.field-grid{grid-template-columns:minmax(0,1fr)}.form-group{padding:14px}}
 .artifact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;margin:12px 0}.artifact-card{border:1px solid var(--line);border-radius:9px;padding:12px;min-width:0;overflow-wrap:anywhere}.artifact-card img{display:block;max-width:100%;height:170px;object-fit:contain;background:#0b1020}.artifact-card a{display:inline-block;margin:8px 8px 0 0}.artifact-card small{display:block;color:var(--muted)}
 #jobResultsDialog{width:min(1100px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);padding:22px}#jobResultsDialog::backdrop{background:rgba(0,0,0,.75)}.results-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.results-dialog-head h2{margin:0}
+.job-table-scroll{width:100%;overflow-x:auto}.job-table-scroll table{width:100%;border-collapse:collapse;min-width:650px}.job-table-scroll th,.job-table-scroll td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:middle}.job-table-scroll td:first-child{overflow-wrap:anywhere;max-width:280px}.job-table-scroll td button{min-height:34px;padding:5px 9px;font-size:13px;margin:2px}.job-table-scroll tr[aria-selected=true]{background:var(--raised)}.job-toolbar,.job-actions{display:flex;flex-wrap:wrap;gap:8px;width:100%}.legacy-job-select{display:none!important}.job-diagnostics,#jobParametersDetails{width:100%;flex-basis:100%;border:1px solid var(--line);padding:12px;border-radius:10px}.job-diagnostics>summary,#jobParametersDetails>summary{cursor:pointer;font-weight:700;padding:8px}.job-diagnostics>fieldset{margin-top:16px}#jobParameterFields{margin-top:14px}#unifiedJobsPanel>pre{width:100%}
 </style>
 <h1>Minglefield Private Alpha</h1>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
@@ -95,42 +96,37 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <div id="agentJobList"><p>Keine Agentenjobs geladen.</p></div>
 <pre id="agentOutput" aria-live="polite">Noch keine Agenten geladen.</pre>
 </fieldset>
-<fieldset><legend>Jobs — einheitliche Übersicht (lokale Alpha)</legend>
-<label>Alle Jobs <select id="allJobsSelect"></select></label>
-<button id="allJobDelete">Ausgewählten Testjob endgültig löschen</button>
-<div id="allJobDetails" role="status">Job auswählen.</div><button id="allJobResultsButton" type="button" hidden>Ergebnisse</button>
-<p><small>Nur lokale Testdaten. Reservierte Jobs müssen zuerst freigegeben werden.</small></p>
-<fieldset><legend>Demo-Jobs</legend>
+<fieldset id="unifiedJobsPanel"><legend>Jobs — Übersicht</legend>
+<div class="job-toolbar"><button id="hostJobsRefresh">Jobs aktualisieren</button><button id="refresh">Demo-Jobs aktualisieren</button></div>
+<div class="job-table-scroll"><table id="allJobsTable"><thead><tr><th>Job-ID</th><th>Typ / Effekt</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="allJobsRows"></tbody></table></div>
+<label class="legacy-job-select">Alle Jobs <select id="allJobsSelect"></select></label>
+<div id="allJobDetails" role="status">Job auswählen.</div>
+<button id="allJobResultsButton" type="button" hidden>Ergebnisse</button>
+<div class="job-actions"><button id="hostJobCancel">Abbrechen</button><button id="hostJobRetry">Erneut einreihen</button><button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button><button id="hostJobReserve">Slot reservieren (Mock)</button><button id="hostJobExecute">Jetzt ausführen (ComfyUI)</button><button id="hostJobExecutionStatus">Ausführungsstatus abrufen</button><button id="hostJobRelease">Reservierung aufheben (Mock)</button><button id="allJobDelete">Ausgewählten Testjob löschen</button></div>
+<details class="job-diagnostics"><summary>Jobdiagnose und Testdaten</summary>
+<label>Bestehenden Host-Job auswählen <select id="hostJobSelect"></select></label>
+<label>Job-ID <select id="hostJobId" aria-label="Host-Job auswählen"></select></label>
+<pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
+<fieldset><legend>Demo-Jobs (Alpha-Testwerkzeuge)</legend>
 <label>Agent für Demo-Job <select id="jobAgentSelect"></select></label>
-<button id="create">Demo-Job erstellen</button><button id="refresh">Jobs aktualisieren</button>
+<button id="create">Demo-Job erstellen</button>
 <label>Demo-Job auswählen <select id="demoJobSelect"></select></label>
 <div id="selectedJobDetails" role="status">Job auswählen.</div>
-<pre id="demoJobsOutput" aria-live="polite">Noch keine Demo-Jobs geladen.</pre></fieldset></fieldset>
-<fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und steuern (Simulation)</legend>
+<pre id="demoJobsOutput" aria-live="polite">Noch keine Demo-Jobs geladen.</pre></fieldset></details>
+<pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre>
+</fieldset>
+<fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und konfigurieren</legend>
 <label>Host für Job <select id="jobHostSelect"></select></label>
 <label>Effekt für Job <select id="jobEffectSelect"></select></label>
-<div id="jobParameterFields" style="display:grid;gap:6px"></div>
 <fieldset><legend>ComfyUI-Eingabedateien (auch ohne Upload-Node)</legend>
 <label>Runtime <select id="jobComfyRuntime"></select></label>
 <label>Dateien auswählen <input id="jobComfyFiles" type="file" multiple accept="image/*,video/*,audio/*,.glb,.gltf,.obj,.ply"></label>
 <button id="jobComfyUpload" type="button">Dateien in ComfyUI hochladen</button>
 <pre id="jobComfyUploadOutput" aria-live="polite">Noch keine Dateien hochgeladen.</pre>
 </fieldset>
+<details id="jobParametersDetails"><summary>Workflowparameter konfigurieren</summary><div id="jobParameterFields" style="display:grid;gap:6px"></div></details>
 <button id="effectManual">Job in Warteschlange einreihen</button>
-
-<button id="hostJobsRefresh">Host-Jobs laden</button>
-<label>Bestehenden Job auswählen <select id="hostJobSelect"></select></label>
-<label>Job-ID <select id="hostJobId" aria-label="Host-Job auswählen"></select></label>
-<button id="hostJobCancel">Eingereihten Job abbrechen</button>
-<button id="hostJobRetry">Abgebrochenen Job erneut einreihen</button>
-<button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button>
-<button id="hostJobReserve">Slot reservieren (Mock)</button>
-<button id="hostJobExecute">Jetzt ausführen (ComfyUI)</button>
-<button id="hostJobExecutionStatus">Ausführungsstatus abrufen</button>
-<button id="hostJobRelease">Reservierung aufheben (Mock)</button>
-<pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
-
-<pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre></fieldset>
+</fieldset>
 <dialog id="jobResultsDialog" aria-labelledby="jobResultsTitle"><div class="results-dialog-head"><h2 id="jobResultsTitle">Job-Ergebnisse</h2><button type="button" id="jobResultsClose">Schließen</button></div><p id="jobResultsContext"></p><p>Temporäre ComfyUI-Dateien können später entfernt werden.</p><div id="jobArtifacts" class="artifact-grid" aria-live="polite"></div></dialog>
 <fieldset id="effectPanel"><legend>Effekte konfigurieren</legend>
 <p><strong>Workflow = ComfyUI API-JSON-Datei.</strong> Ein Workflow wird als
@@ -333,6 +329,30 @@ function renderAllJobs(){
   }
   if([...allJobsSelect.options].some(o=>o.value===previous))allJobsSelect.value=previous;
   showAllJob();
+  const tbody=document.getElementById("allJobsRows");tbody.replaceChildren();
+  for(const [kind,jobs] of [["host",cachedHostJobs],["demo",cachedDemoJobs]]){
+    for(const job of jobs){
+      const row=document.createElement("tr"),id=kind+":"+job.job_id;
+      row.dataset.jobKey=id;row.setAttribute("aria-selected",String(id===allJobsSelect.value));
+      for(const value of [job.job_id,kind==="host"?(job.effect_id||"Host"):(job.agent_id||"Demo"),job.state||""]){
+        const td=document.createElement("td");td.textContent=value;row.append(td);
+      }
+      const actions=document.createElement("td");
+      const select=document.createElement("button");select.type="button";select.textContent="Auswählen";
+      select.onclick=()=>{allJobsSelect.value=id;showAllJob();};actions.append(select);
+      if(kind==="host"){
+        const results=document.createElement("button");results.type="button";results.textContent="Ergebnisse";
+        results.onclick=()=>{allJobsSelect.value=id;showAllJob();document.getElementById("allJobResultsButton").click();};
+        actions.append(results);
+        for(const [label,buttonId] of [["Ausführen","hostJobExecute"],["Status","hostJobExecutionStatus"],["Abbrechen","hostJobCancel"]]){
+          const action=document.createElement("button");action.type="button";action.textContent=label;
+          action.onclick=()=>{allJobsSelect.value=id;showAllJob();document.getElementById(buttonId).click();};
+          actions.append(action);
+        }
+      }
+      row.append(actions);tbody.append(row);
+    }
+  }
 }
 function showAllJob(){
   const [kind,...parts]=allJobsSelect.value.split(":");const id=parts.join(":");
@@ -341,6 +361,7 @@ function showAllJob(){
     ?[kind,job.job_id,job.state,job.user_id||job.requested_by||"",job.agent_id||job.effect_id||""].join(" · ")
     :"Job auswählen.";
   document.getElementById("allJobResultsButton").hidden=!(job&&kind==="host");
+  for(const row of document.querySelectorAll("#allJobsRows tr"))row.setAttribute("aria-selected",String(row.dataset.jobKey===allJobsSelect.value));
   if(job&&kind==="demo"){demoJobSelect.value=id;showSelectedJob();}
   if(job&&kind==="host"){
     document.getElementById("hostJobSelect").value=id;
@@ -671,11 +692,11 @@ function renderJobParameters(){
     groups.get(key).push(p);
   }
   for(const [nodeId,items] of groups){
-    const section=document.createElement("fieldset");
-    section.style.cssText="display:block;min-width:0;width:100%;margin:4px 0 10px;padding:12px;border:1px solid var(--line);border-radius:10px";
-    const legend=document.createElement("legend");
-    legend.textContent="Node "+nodeId+" · "+items[0].class_type;
-    section.append(legend);
+    const section=document.createElement("details");
+    section.style.cssText="min-width:0;width:100%;margin:4px 0 10px;padding:12px;border:1px solid var(--line);border-radius:10px";
+    const legend=document.createElement("summary");
+    legend.textContent="Node "+nodeId+" · "+items[0].class_type+" ("+items.length+" Parameter)";
+    legend.style.cursor="pointer";section.append(legend);
     const grid=document.createElement("div");
     grid.style.cssText="display:grid;flex-basis:auto;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,170px),1fr));gap:10px;align-items:start";
     section.append(grid);

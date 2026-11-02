@@ -22,6 +22,47 @@ class GameProjectRegistryTests(unittest.TestCase):
             db.execute("INSERT INTO sec01_host_owners(host_id,owner_id) VALUES(?,?)",
                        ("host.one", "user.owner"))
 
+    def test_integration_inspection_is_owner_scoped_and_preserves_legacy_manifest(self):
+        import json
+        repo=self.root/"integrations-game"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.integrations","Integrations",
+            str(repo),str(repo/"stage"),str(repo/"output")).state,"created")
+        calls=[]
+        def registry():
+            calls.append(True)
+            return {"registry_version":"0.1","integrations":[{
+                "integration_id":"community.alice.godot","name":"Godot",
+                "publisher":"alice","trust_tier":"community",
+                "release_source":{"provider":"github","repository":"alice/godot"}}]}
+        self.assertIsNone(self.policy.inspect_game_integrations(
+            "host.one","user.other","game.integrations",registry_loader=registry))
+        self.assertEqual(calls,[])
+        missing=self.policy.inspect_game_integrations(
+            "host.one","user.owner","game.integrations",registry_loader=registry)
+        self.assertEqual(missing["installation_state"],"setup_required")
+        self.assertIsNone(missing["installed_integrations"])
+        self.assertEqual(missing["registry"]["integrations"][0]["trust_tier"],"community")
+        config=repo/".minglefield"
+        config.mkdir()
+        manifest=config/"project.json"
+        manifest.write_text(json.dumps({"schema_version":1,"project_id":"game.integrations",
+                                        "integrations":[{"id":"untrusted","version":"9.9.9"}]}),
+                            encoding="utf-8")
+        before=manifest.read_bytes()
+        legacy=self.policy.inspect_game_integrations(
+            "host.one","user.owner","game.integrations",registry_loader=registry)
+        self.assertEqual(legacy["installation_state"],"installation_unknown")
+        self.assertIsNone(legacy["installed_integrations"])
+        self.assertEqual(manifest.read_bytes(),before)
+        self.assertFalse((repo/".minglefield"/"integrations.lock").exists())
+        invalid=self.policy.inspect_game_integrations(
+            "host.one","user.owner","game.integrations",
+            registry_loader=lambda: {"registry_version":"0.1","integrations":[{},{}]})
+        self.assertEqual(invalid["registry"]["state"],"unavailable")
+        self.assertIsNone(invalid["installed_integrations"])
+
     def test_persistence_and_owner_isolation(self):
         args = ("host.one", "user.owner", "game.one", "My Game",
                 str(self.root / "game"), str(self.root / "stage"), str(self.root / "output"))

@@ -37,6 +37,25 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(projects[0]["project_id"], "game.one")
         self.assertEqual(projects[0]["settings_revision"], 1)
 
+    def test_git_profile_persistence_and_owner_isolation(self):
+        profile = dict(profile_id="git.default", label="Local Git",
+                       auth_method="local", git_executable="git",
+                       author_name="Tester", author_email="tester@example.invalid")
+        self.assertIsNone(self.policy.list_git_profiles("host.one", "user.other"))
+        self.assertEqual(self.policy.save_git_profile(
+            "host.one", "user.other", profile).reason, "not_host_owner")
+        self.assertEqual(self.policy.save_git_profile(
+            "host.one", "user.owner", profile).state, "saved")
+        profile["auth_method"] = "ssh"
+        self.assertEqual(self.policy.save_git_profile(
+            "host.one", "user.owner", profile).state, "saved")
+        restored = HostCommitPolicy(self.authority)
+        profiles = restored.list_git_profiles("host.one", "user.owner")
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0]["auth_method"], "ssh")
+        self.assertEqual(self.policy.save_git_profile(
+            "host.one", "user.owner", dict(profile, auth_method="token")).state, "denied")
+
     def test_explicit_directory_preparation(self):
         repo=self.root / "repo"
         repo.mkdir()

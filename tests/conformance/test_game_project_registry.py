@@ -56,6 +56,35 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(self.policy.save_git_profile(
             "host.one", "user.owner", dict(profile, auth_method="token")).state, "denied")
 
+    def test_git_inspection_and_explicit_initialization(self):
+        import shutil
+        if not shutil.which("git"):
+            self.skipTest("git executable unavailable")
+        repo=self.root / "new-repo"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.git","Git Game",
+            str(repo),str(repo/"staging"),str(repo/"output")).state,"created")
+        profile=dict(profile_id="git.local",label="Local",auth_method="local",
+                     git_executable="git",author_name="Tester",
+                     author_email="tester@example.invalid")
+        self.assertEqual(self.policy.save_git_profile(
+            "host.one","user.owner",profile).state,"saved")
+        self.assertEqual(self.policy.inspect_game_git(
+            "host.one","user.owner","game.git")["state"],"not_initialized")
+        self.assertFalse((repo/".git").exists())
+        self.assertEqual(self.policy.initialize_game_git(
+            "host.one","user.other","game.git",1,"git.local")["state"],"denied")
+        self.assertEqual(self.policy.initialize_game_git(
+            "host.one","user.owner","game.git",2,"git.local")["reason"],"revision_conflict")
+        self.assertEqual(self.policy.initialize_game_git(
+            "host.one","user.owner","game.git",1,"git.local")["state"],"initialized")
+        self.assertTrue((repo/".git").is_dir())
+        self.assertEqual(self.policy.inspect_game_git(
+            "host.one","user.owner","game.git")["state"],"initialized")
+        self.assertEqual(self.policy.initialize_game_git(
+            "host.one","user.owner","game.git",1,"git.local")["state"],"denied")
+
     def test_explicit_directory_preparation(self):
         repo=self.root / "repo"
         repo.mkdir()

@@ -127,7 +127,7 @@ Code audit (2026-11-02):
 - Existing owner-scoped `alpha_game_projects` registry identifies games and repository roots; do not duplicate it.
 - Existing `.minglefield/project.json` schema v1 currently records only `schema_version` and `project_id`. Compatibility inspection accepts additional keys but does **not** validate an integrations collection. No installed integration versions can be inferred from schema v1.
 - Existing `server/game_release_metadata.py` reads GitHub Releases metadata. It does **not** establish whether any GitHub release belongs to a Minglefield integration.
-- Existing update-status API accepts an optional `release_repository` query parameter; the Game tab no longer exposes that field. Do not treat arbitrary client-provided repository names as trusted integration sources.
+- Historical audit: update-status accepted an optional `release_repository` query parameter. P1.4f.2 now rejects client-selected sources at HTTP and policy boundaries; the Game tab has no source field.
 
 Agreed design:
 - A game MAY have **zero, one, or multiple** independently versioned Minglefield integrations.
@@ -142,10 +142,10 @@ Agreed design:
 ## P1.4f — Game integration update management (in progress)
 
 - [x] P1.4f.1: Read-only project integration status; report unknown update availability when no release source is configured (22 focused tests passed on Windows).
-- [ ] P1.4f.2 first slice (Windows tests pending): `server/game_integration_updates.py` performs registry-bound, read-only GitHub Release version comparison with `packaging.version`; offline/mismatched sources remain unknown. This is not yet wired to Game HTTP/UI, and PEP 440 versus strict SemVer policy needs explicit review before update installation.
+- [ ] P1.4f.2 acceptance in the designated Minglefield Python environment: existing registry-bound discovery is wired to Game HTTP/UI, with explicit declaration-only comparison states, PEP 440 stable-channel policy, source restrictions and failure handling. 501 conformance tests, the final 3-test JavaScript module and MAP validation passed using PATH Python (Hermes venv); repeat in the confirmed Minglefield environment before closing. See [implementation, decisions and remaining gates](docs/GAME-INTEGRATION-UPDATE-DISCOVERY.md).
 - [ ] P1.4f.2: Read-only release discovery and version comparison, based on **GitHub Releases and Git tags**, not a proprietary release catalog. Use the existing release `tag_name`, `body` (release notes), `html_url`, and published timestamp; link commits via GitHub's existing comparison URLs. Treat untrusted release text as display data only.
 - [ ] Define the first published **game integration** version independently from the Minglefield platform version and `.minglefield/project.json` schema version. Do not infer an installed integration version from `schema_version: 1`; currently it is unknown.
-- [ ] Use a standard SemVer implementation or an existing project dependency, rather than implementing a custom version parser. Do not guess release tags, repository origins, or available updates.
+- [x] Use the existing `packaging.version` dependency with an explicit PEP 440 stable public-version policy for read-only discovery; no custom parser or inferred tags. Strict SemVer is not claimed. See [version decision](docs/GAME-INTEGRATION-UPDATE-DISCOVERY.md).
 - [ ] P1.4f.3: Preview release notes, changed files, compatibility requirements and migration steps before modifying a game repository.
 - [ ] P1.4f.4: Explicit user-approved installation with conflict detection, rollback/recovery and audit trail; preserve independent game Git remotes, branches and history.
 - [ ] For offline or inaccessible release sources, distinguish `unknown` from `up_to_date`. A missing or invalid release is not proof that no update exists.

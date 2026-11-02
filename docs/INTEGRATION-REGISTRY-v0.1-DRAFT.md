@@ -27,3 +27,9 @@ JSON Schema checks document shape. Additional cross-record rules are required: u
 3. Implement read-only, owner-scoped installed-integration discovery; unknown legacy installations stay unknown.
 4. Compare verified installed versions against verified integration releases with a standard SemVer dependency.
 5. Add explicit opt-in external sources, preview, confirmation, integrity checks and audited installation; never execute code merely by loading registry metadata.
+
+## P1.4f.2 version-policy clarification (2026-11-03)
+
+The provisional SemVer wording above is superseded for read-only discovery by the
+[PEP 440 stable-channel and separate comparison-state contract](GAME-INTEGRATION-UPDATE-DISCOVERY.md).
+Declaration comparison never promotes installation or artifact verification.

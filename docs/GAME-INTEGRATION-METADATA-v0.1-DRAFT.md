@@ -52,3 +52,9 @@ These are **illustrative placeholders**, not claims that the package or release 
 - Confirm source definitions and version metadata against the eventual portable package/lockfile format before persisting anything.
 - Preserve existing Game projects, MAP schemas, repository remotes and files.
 - Add release comparison, UI display and opt-in installation only in later stages.
+
+## P1.4f.2 version-policy clarification (2026-11-03)
+
+The provisional SemVer wording above is superseded for read-only discovery by the
+[PEP 440 stable-channel and separate comparison-state contract](GAME-INTEGRATION-UPDATE-DISCOVERY.md).
+Declaration comparison never promotes installation or artifact verification.

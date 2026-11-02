@@ -54,3 +54,10 @@ Define user-facing acceptance tests before closing P1.5.
 - Cross-cutting: Developer Teams and Game Teams, explicit agent delegation, per-action authorization and isolation.
 
 Keep ROADMAP.md as the main milestone index. This note defines acceptance gates and does not claim these features have shipped.
+
+## P1.4f.2 clarification (2026-11-03)
+
+[Read-only discovery](GAME-INTEGRATION-UPDATE-DISCOVERY.md) now defines the PEP 440
+stable-channel decision and explicit declaration-only comparison states. This resolves
+the version-policy question above for discovery; verified installation and the complete
+P1.4f.3/P1.4f.4 acceptance gates remain open. No Game data migration is performed.

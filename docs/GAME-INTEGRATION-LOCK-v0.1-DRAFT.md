@@ -29,3 +29,9 @@ This is a **proposed local game-project lockfile contract**, not a migration, in
 2. Add owner-scoped, symlink-safe, read-only lockfile inspection with explicit legacy unknown state.
 3. Specify installer-attested verification evidence and reconcile with portable package lockfile before any writes.
 4. Only then expose reliable installed-version comparisons and opt-in update installation.
+
+## P1.4f.2 version-policy clarification (2026-11-03)
+
+The provisional SemVer wording above is superseded for read-only discovery by the
+[PEP 440 stable-channel and separate comparison-state contract](GAME-INTEGRATION-UPDATE-DISCOVERY.md).
+Declaration comparison never promotes installation or artifact verification.

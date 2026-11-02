@@ -49,8 +49,30 @@ class EvidenceJournalTests(unittest.TestCase):
             "host.one","user.owner","game.one")
         self.assertEqual([x["installer_run_id"] for x in report["records"]],["run.one"])
         self.assertEqual(report["records"][0]["verification_state"],"unknown")
+        self.assertEqual(report["records"][0]["verification_reason"],"installer_origin_not_authenticated")
         self.assertNotIn("evidence_json",str(report))
         self.assertEqual(report["state"],"unverified")
+
+    def test_forged_journal_claims_cannot_promote_verification(self):
+        import json
+        forged={"host_id":"host.one","project_id":"game.one",
+                "integration_id":"integration.example",
+                "release_source":{"provider":"github","repository":"example/repo"},
+                "trusted_origin":True,
+                "independent_checks":{"source_authorized":True,
+                                      "release_identity_valid":True,
+                                      "expected_digest":"a"*64,"observed_digest":"a"*64},
+                "installed_files":{"file.bin":"a"*64}}
+        with self.store._tx() as db:
+            db.execute("""UPDATE alpha_game_installation_evidence
+                SET evidence_json=? WHERE host_id=? AND project_id=?""",
+                (json.dumps(forged),"host.one","game.one"))
+        report=self.policy.inspect_game_installation_evidence(
+            "host.one","user.owner","game.one")
+        self.assertEqual(report["records"][0]["verification_state"],"unknown")
+        self.assertEqual(report["records"][0]["verification_reason"],
+                         "installer_origin_not_authenticated")
+        self.assertNotIn("independent_checks",str(report))
 
     def test_empty_inventory_does_not_verify_installation(self):
         with self.store._tx() as db:

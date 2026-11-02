@@ -117,12 +117,9 @@ class GameProjectRegistryTests(unittest.TestCase):
             str(repo),str(repo/"staging"),str(repo/"output")).state,"created")
         result=self.policy.prepare_game_project_directories(
             "host.one","user.owner","game.missing",1)
-        self.assertEqual(result["reason"],"repository_directory_missing_or_invalid")
-        self.assertFalse(repo.exists())
-        repo.mkdir()
-        result=self.policy.prepare_game_project_directories(
-            "host.one","user.owner","game.missing",1)
         self.assertEqual(result["state"],"prepared")
+        self.assertTrue(repo.is_dir())
+        self.assertIn(str(repo),result["created"])
         self.assertTrue((repo/"staging").is_dir())
         self.assertTrue((repo/"output").is_dir())
 

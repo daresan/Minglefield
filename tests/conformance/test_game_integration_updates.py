@@ -38,6 +38,19 @@ class GameIntegrationUpdateTests(unittest.TestCase):
         self.assertEqual(discover_integration_update(ENTRY,{"state":"unavailable"},fetcher=releases)["state"],"unknown")
         self.assertEqual(discover_integration_update(ENTRY,{"state":"available","integrations":[]},fetcher=releases)["state"],"unknown")
 
+    def test_malformed_adapter_and_registry_data_fail_closed(self):
+        for payload in (None, [], "invalid", {"state":"available"},
+                        {"state":"available","releases":None},
+                        {"state":"available","releases":[None]}):
+            with self.subTest(payload=payload):
+                result=discover_integration_update(ENTRY,CATALOG,fetcher=lambda _,p=payload:p)
+                self.assertEqual(result["state"],"unknown")
+        for integrations in (None, {}, [None]):
+            with self.subTest(integrations=integrations):
+                catalog={"state":"available","integrations":integrations}
+                result=discover_integration_update(ENTRY,catalog,fetcher=releases)
+                self.assertEqual(result["state"],"unknown")
+
     def test_offline_and_invalid_versions_remain_unknown(self):
         self.assertEqual(discover_integration_update(ENTRY,CATALOG,fetcher=lambda _:{"state":"unavailable"})["state"],"unknown")
         self.assertEqual(discover_integration_update(dict(ENTRY,declared_version="n/a"),CATALOG,fetcher=releases)["state"],"unknown")

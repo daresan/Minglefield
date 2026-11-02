@@ -1531,6 +1531,8 @@ document.getElementById("gameIntegrationRegistryInspect").onclick=async()=>{
       data.installation_state==="setup_required"?"Einrichtung erforderlich":
       data.installation_state==="manual_review_required"?"Manuelle Prüfung erforderlich":data.installation_state,
     registry_status:data.registry?.state,
+    lockfile:data.lockfile,
+    deklarierte_installationen:data.installed_integrations,
     integrations:entries.map(x=>({id:x.integration_id,name:x.name,
       publisher:x.publisher,vertrauensstufe:x.trust_tier,release_source:x.release_source})),
     hinweis:data.notes,error:data.error

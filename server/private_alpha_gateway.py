@@ -1490,9 +1490,9 @@ document.getElementById("gameProjectCancel").onclick=()=>setGameCreateMode(false
 document.getElementById("gameProjectPrepare").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
-  const message="Für "+project.project_id+" nur fehlende Staging-/Output-Verzeichnisse anlegen?\\n"+
-    "Staging: "+project.staging_root+"\\nOutput: "+project.output_root+
-    "\\nRepository bleibt unverändert.";
+  const message="Für "+project.project_id+" fehlende Projektverzeichnisse anlegen?\\n"+
+    "Repository: "+project.repository_root+"\\nStaging: "+project.staging_root+"\\nOutput: "+project.output_root+
+    "\\nBereits vorhandene Verzeichnisse bleiben erhalten.";
   if(!window.confirm(message))return;
   const response=await request("/api/game/projects/prepare",{
     method:"POST",headers:{"Content-Type":"application/json"},

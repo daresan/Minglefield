@@ -53,7 +53,7 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Persistent local asset staging via native file dialog; store asset IDs and job bindings without premature ComfyUI transfer.
 - [ ] Transfer staged inputs to ComfyUI **only when the job starts**, using generic file-input capabilities rather than node-specific UI functions.
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
-- [ ] Re-run full conformance suite and first-workflow regression tests before expanding execution behavior.
+- [ ] **P0 release gate before Game tab (P1):** verify the parameter fix with a fully passing conformance suite; check real workflow parameter recognition/binding; obtain the user's successful visual acceptance test and explicit approval. No P1 implementation until sign-off.
 
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.

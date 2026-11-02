@@ -91,3 +91,35 @@ def evaluate_trusted_installer_record(record, *, trusted_origin=False, independe
         observed_digest=checks.get("observed_digest"),
         installation_matches=True)
     return result
+
+
+def verify_artifact_bytes(artifact_path, *, authorized_source, selected_source,
+                          release_identity_verified=False, expected_digest=None):
+    """Read-only artifact preflight; independent digest supplied by trusted caller.
+
+    Does not download, extract, install, or authenticate the caller. The caller
+    must establish release identity and obtain the digest independently.
+    """
+    import hashlib
+    from pathlib import Path
+
+    if authorized_source != selected_source or not isinstance(authorized_source,dict):
+        return {"state":"invalid","reason":"unauthorized_release_source"}
+    if release_identity_verified is not True:
+        return {"state":"unknown","reason":"release_identity_not_verified"}
+    if not isinstance(expected_digest,str) or not _SHA.fullmatch(expected_digest):
+        return {"state":"unknown","reason":"missing_independent_artifact_digest"}
+    artifact=Path(artifact_path)
+    if artifact.is_symlink() or not artifact.is_file():
+        return {"state":"invalid","reason":"missing_or_unsafe_artifact"}
+    try:
+        digest=hashlib.sha256()
+        with artifact.open("rb") as stream:
+            for chunk in iter(lambda:stream.read(1024*1024),b""):
+                digest.update(chunk)
+    except OSError:
+        return {"state":"invalid","reason":"artifact_unreadable"}
+    result=evaluate_evidence(
+        source_authorized=True,release_identity_valid=True,
+        expected_digest=expected_digest,observed_digest=digest.hexdigest())
+    return {**result,"observed_sha256":digest.hexdigest()}

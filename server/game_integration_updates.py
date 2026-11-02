@@ -5,7 +5,7 @@ dependency decision. This module never claims artifact integrity or installation
 """
 from packaging.version import Version, InvalidVersion
 from urllib.parse import quote
-from game_release_metadata import fetch_releases
+from game_release_metadata import fetch_releases, fetch_compare_files
 
 
 def _version(value):
@@ -17,7 +17,8 @@ def _version(value):
         return None
 
 
-def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
+def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
+                                compare_fetcher=fetch_compare_files):
     """Compare a declared version against stable releases from a matching curated source."""
     if not isinstance(entry,dict) or not isinstance(catalog,dict):
         return {"state":"unknown","reason":"invalid_input"}
@@ -69,6 +70,16 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
                 and isinstance(new_tag,str) and old_tag and new_tag):
             comparison_url=("https://github.com/"+repository+"/compare/"
                             +quote(old_tag,safe="")+"..."+quote(new_tag,safe=""))
+    changed={"state":"unknown","files":[],"comparison_url":comparison_url}
+    if comparison_url is not None:
+        try:
+            comparison=compare_fetcher(source["repository"],entry["declared_version"],release["tag_name"])
+            if (isinstance(comparison,dict) and comparison.get("state")=="available"
+                    and isinstance(comparison.get("files"),list)):
+                changed={"state":"available","files":comparison["files"],
+                         "comparison_url":comparison_url}
+        except (ValueError,TypeError,KeyError,OSError):
+            pass
     return {"state":"update_available" if latest>installed else "up_to_date",
             "installed_version":entry["declared_version"],
             "available_version":release["tag_name"],
@@ -77,8 +88,7 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
             "published_at":release.get("published_at"),
             "verification_state":"unknown",
             "preview":{"state":"incomplete","release_notes":release.get("release_notes",""),
-                       "changed_files":{"state":"unknown","files":[],
-                                        "comparison_url":comparison_url},
+                       "changed_files":changed,
                        "compatibility":{"state":"unknown"},
                        "migration":{"state":"unknown"},
                        "artifact_integrity":{"state":"unknown"},

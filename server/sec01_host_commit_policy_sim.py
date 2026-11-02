@@ -341,6 +341,83 @@ class HostCommitPolicy:
         except (OSError,subprocess.TimeoutExpired,ValueError):
             return {"state":"git_unavailable"}
 
+    def inspect_game_compatibility(self, host_id, owner_id, project_id):
+        """Read-only compatibility report for existing or new game repositories."""
+        import json
+        import subprocess
+        from pathlib import Path
+        if not ident(project_id):
+            return None
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return None
+            row=db.execute("""SELECT repository_root,staging_root,output_root
+                FROM alpha_game_projects WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+        if row is None:
+            return None
+        root=Path(row[0])
+        git=self.inspect_game_git(host_id,owner_id,project_id)
+        report={"project_id":project_id,"git":git,"manifest":{"state":"missing"},
+                "assets":{},"issues":[],"ready":False}
+        if not root.is_dir():
+            report["issues"].append("repository_directory_missing")
+            return report
+        manifest=root/".minglefield"/"project.json"
+        if manifest.is_symlink():
+            report["manifest"]={"state":"unsafe_symlink"}
+            report["issues"].append("manifest_unsafe")
+        elif manifest.exists():
+            if not manifest.is_file():
+                report["manifest"]={"state":"not_file"}
+                report["issues"].append("manifest_invalid")
+            else:
+                try:
+                    data=json.loads(manifest.read_text(encoding="utf-8"))
+                    if (not isinstance(data,dict) or
+                            data.get("project_id")!=project_id or
+                            data.get("schema_version")!=1):
+                        report["manifest"]={"state":"incompatible"}
+                        report["issues"].append("manifest_incompatible")
+                    else:
+                        report["manifest"]={"state":"compatible","schema_version":1}
+                except (OSError,UnicodeError,ValueError):
+                    report["manifest"]={"state":"invalid"}
+                    report["issues"].append("manifest_invalid")
+        else:
+            report["issues"].append("manifest_missing")
+        for name,raw in (("staging",row[1]),("output",row[2])):
+            path=Path(raw)
+            resolved=path.resolve(strict=False)
+            inside=resolved.is_relative_to(root.resolve())
+            info={"path":raw,"inside_repository":inside,
+                  "directory_exists":path.is_dir(),"ignored":None,"tracked":None}
+            if inside and git and git.get("state")=="initialized":
+                rel=resolved.relative_to(root.resolve()).as_posix()
+                try:
+                    ignored=subprocess.run(["git","-C",str(root),"check-ignore","-q",
+                                            "--no-index","--",rel+"/"],
+                                           timeout=8,stdin=subprocess.DEVNULL,
+                                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                    info["ignored"]=ignored.returncode==0
+                    tracked=subprocess.run(["git","-C",str(root),"ls-files","-z","--",rel],
+                                           timeout=8,stdin=subprocess.DEVNULL,
+                                           capture_output=True)
+                    if tracked.returncode==0:
+                        info["tracked"]=len([x for x in tracked.stdout.split(b"\0") if x])
+                except (OSError,subprocess.TimeoutExpired):
+                    report["issues"].append(name+"_git_check_unavailable")
+                if info["ignored"] is False:
+                    report["issues"].append(name+"_not_ignored")
+                if info["tracked"]:
+                    report["issues"].append(name+"_has_tracked_files")
+            report["assets"][name]=info
+        if git and git.get("state") not in ("initialized","not_initialized"):
+            report["issues"].append("git_"+git.get("state","unknown"))
+        report["ready"]=not report["issues"]
+        return report
+
     def initialize_game_git(self, host_id, owner_id, project_id, revision, profile_id):
         """Explicit, owner-scoped git init; never commits or changes remotes."""
         import subprocess

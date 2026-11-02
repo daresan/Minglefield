@@ -44,7 +44,12 @@ class HostCommitPolicy:
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 effect_id TEXT NOT NULL, workflow_sha256 TEXT NOT NULL,
                 parameters TEXT NOT NULL)""")
-            db.execute("""CREATE TABLE IF NOT EXISTS alpha_git_profiles(\n                host_id TEXT NOT NULL, profile_id TEXT NOT NULL, owner_id TEXT NOT NULL,\n                auth_method TEXT NOT NULL, label TEXT NOT NULL,\n                git_executable TEXT NOT NULL, author_name TEXT NOT NULL,\n                author_email TEXT NOT NULL, PRIMARY KEY(host_id,profile_id))""")\n            db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_projects(
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_git_profiles(
+                host_id TEXT NOT NULL, profile_id TEXT NOT NULL, owner_id TEXT NOT NULL,
+                auth_method TEXT NOT NULL, label TEXT NOT NULL,
+                git_executable TEXT NOT NULL, author_name TEXT NOT NULL,
+                author_email TEXT NOT NULL, PRIMARY KEY(host_id,profile_id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_projects(
                 project_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 owner_id TEXT NOT NULL, name TEXT NOT NULL,
                 repository_root TEXT NOT NULL, staging_root TEXT NOT NULL,

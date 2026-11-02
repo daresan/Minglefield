@@ -26,6 +26,14 @@ class GameIntegrationUpdateTests(unittest.TestCase):
         self.assertEqual(report["available_version"],"v1.3.0")
         self.assertEqual(report["release_notes"],"Upgrade")
         self.assertEqual(report["verification_state"],"unknown")
+        preview=report["preview"]
+        self.assertEqual(preview["state"],"incomplete")
+        self.assertEqual(preview["release_notes"],"Upgrade")
+        self.assertEqual(preview["changed_files"],{"state":"unknown","files":[]})
+        self.assertEqual(preview["compatibility"]["state"],"unknown")
+        self.assertEqual(preview["migration"]["state"],"unknown")
+        self.assertEqual(preview["artifact_integrity"]["state"],"unknown")
+        self.assertIs(preview["installation_allowed"],False)
 
     def test_up_to_date_and_no_comparable_releases(self):
         entry=dict(ENTRY,declared_version="1.3.0")

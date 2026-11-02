@@ -230,6 +230,20 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 
 </div><pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre></div>
 </fieldset>
+<section id="gameProjectPanel" class="alphaPanel" hidden>
+<h2>Game-Projekte (P1 Alpha)</h2>
+<p>Projektregistrierung ohne automatischen Git-Import, Dateitransfer oder Jobstart.</p>
+<label>Host <select id="gameHostSelect"></select></label>
+<label>Projekt-ID <input id="gameProjectId" placeholder="game.demo"></label>
+<label>Name <input id="gameProjectName" placeholder="Mein Spiel"></label>
+<label>Repository-Pfad (absolut) <input id="gameRepositoryRoot"></label>
+<label>Staging-Pfad (absolut) <input id="gameStagingRoot"></label>
+<label>Output-Pfad (absolut) <input id="gameOutputRoot"></label>
+<button id="gameProjectCreate" type="button">Projekt registrieren</button>
+<button id="gameProjectRefresh" type="button">Projekte laden</button>
+<label>Registrierte Projekte <select id="gameProjectSelect"></select></label>
+<pre id="gameProjectStatus" aria-live="polite">Host wählen und Projekte laden.</pre>
+</section>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
 
 <p id="deleteStatus" role="status" aria-live="polite"></p>
@@ -246,14 +260,15 @@ const alphaPanels={
   agents:[alphaSections[3]],
   jobs:[alphaSections[4],document.getElementById("hostJobPanel")],
   hosts:[alphaSections[7]],
-  effects:[document.getElementById("effectPanel")]
+  effects:[document.getElementById("effectPanel")],
+  game:[document.getElementById("gameProjectPanel")]
 };
 let alphaTab="login";
 for(const [key,label] of [["login","Anmeldung"],["hosts","Hosts"],
-                           ["effects","Effekte"],["jobs","Jobs"],["agents","Agenten"]]){
+                           ["effects","Effekte"],["jobs","Jobs"],["game","Game"],["agents","Agenten"]]){
   const button=document.createElement("button");
   button.textContent=label;button.type="button";button.dataset.tab=key;
-  button.onclick=()=>{alphaTab=key;renderAlphaTabs();};
+  button.onclick=()=>{alphaTab=key;renderAlphaTabs();if(key==="game")loadGameProjects();};
   alphaNav.append(button);
 }
 function renderAlphaTabs(){
@@ -262,7 +277,7 @@ function renderAlphaTabs(){
     button.disabled=!credential&&button.dataset.tab!=="login";
     button.setAttribute("aria-current",button.dataset.tab===alphaTab?"page":"false");
   }
-  for(const section of alphaSections){
+  for(const section of [...alphaSections,document.getElementById("gameProjectPanel")]){
     section.classList.add("alphaPanel");
     section.hidden=!(alphaPanels[alphaTab]||[]).includes(section);
   }

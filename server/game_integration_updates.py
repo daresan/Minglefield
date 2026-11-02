@@ -65,4 +65,10 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
             "release_url":release.get("release_url"),
             "published_at":release.get("published_at"),
             "verification_state":"unknown",
+            "preview":{"state":"incomplete","release_notes":release.get("release_notes",""),
+                       "changed_files":{"state":"unknown","files":[]},
+                       "compatibility":{"state":"unknown"},
+                       "migration":{"state":"unknown"},
+                       "artifact_integrity":{"state":"unknown"},
+                       "installation_allowed":False},
             "note":"Version comparison only; installation and artifact integrity unverified."}

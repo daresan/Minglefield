@@ -157,6 +157,30 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(result["state"],"prepared")
         self.assertFalse((repo/".gitignore").exists())
 
+    def test_compatibility_report_is_read_only(self):
+        import json
+        repo=self.root/"compat_repo"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.compat","Compatibility",
+            str(repo),str(repo/"staging"),str(repo/"output")).state,"created")
+        self.assertIsNone(self.policy.inspect_game_compatibility(
+            "host.one","user.other","game.compat"))
+        report=self.policy.inspect_game_compatibility(
+            "host.one","user.owner","game.compat")
+        self.assertEqual(report["git"]["state"],"not_initialized")
+        self.assertEqual(report["manifest"]["state"],"missing")
+        self.assertFalse((repo/".minglefield").exists())
+        self.assertFalse((repo/".gitignore").exists())
+        config=repo/".minglefield"
+        config.mkdir()
+        (config/"project.json").write_text(json.dumps({
+            "schema_version":1,"project_id":"game.compat"}),encoding="utf-8")
+        report=self.policy.inspect_game_compatibility(
+            "host.one","user.owner","game.compat")
+        self.assertEqual(report["manifest"]["state"],"compatible")
+        self.assertFalse(report["issues"])
+
     def test_directory_preparation_rejects_unsafe_paths(self):
         repo=self.root / "repo"
         repo.mkdir()

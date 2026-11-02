@@ -61,6 +61,7 @@ small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left
 #grantStatus{flex-basis:100%;font-size:15px;color:var(--muted)}
 @media(max-width:700px){.field-grid{grid-template-columns:minmax(0,1fr)}.form-group{padding:14px}}
 .artifact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;margin:12px 0}.artifact-card{border:1px solid var(--line);border-radius:9px;padding:12px;min-width:0;overflow-wrap:anywhere}.artifact-card img{display:block;max-width:100%;height:170px;object-fit:contain;background:#0b1020}.artifact-card a{display:inline-block;margin:8px 8px 0 0}.artifact-card small{display:block;color:var(--muted)}
+#jobResultsDialog{width:min(1100px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);padding:22px}#jobResultsDialog::backdrop{background:rgba(0,0,0,.75)}.results-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.results-dialog-head h2{margin:0}
 </style>
 <h1>Minglefield Private Alpha</h1>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
@@ -97,7 +98,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <fieldset><legend>Jobs — einheitliche Übersicht (lokale Alpha)</legend>
 <label>Alle Jobs <select id="allJobsSelect"></select></label>
 <button id="allJobDelete">Ausgewählten Testjob endgültig löschen</button>
-<div id="allJobDetails" role="status">Job auswählen.</div>
+<div id="allJobDetails" role="status">Job auswählen.</div><button id="allJobResultsButton" type="button" hidden>Ergebnisse</button>
 <p><small>Nur lokale Testdaten. Reservierte Jobs müssen zuerst freigegeben werden.</small></p>
 <fieldset><legend>Demo-Jobs</legend>
 <label>Agent für Demo-Job <select id="jobAgentSelect"></select></label>
@@ -128,8 +129,9 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="hostJobExecutionStatus">Ausführungsstatus abrufen</button>
 <button id="hostJobRelease">Reservierung aufheben (Mock)</button>
 <pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
-<section id="jobArtifactsPanel"><h3>ComfyUI-Ergebnisse</h3><p>Artefakte des ausgewählten Jobs. Temporäre Dateien können von ComfyUI entfernt werden.</p><div id="jobArtifacts" class="artifact-grid" aria-live="polite"></div></section>
+
 <pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre></fieldset>
+<dialog id="jobResultsDialog" aria-labelledby="jobResultsTitle"><div class="results-dialog-head"><h2 id="jobResultsTitle">Job-Ergebnisse</h2><button type="button" id="jobResultsClose">Schließen</button></div><p id="jobResultsContext"></p><p>Temporäre ComfyUI-Dateien können später entfernt werden.</p><div id="jobArtifacts" class="artifact-grid" aria-live="polite"></div></dialog>
 <fieldset id="effectPanel"><legend>Effekte konfigurieren</legend>
 <p><strong>Workflow = ComfyUI API-JSON-Datei.</strong> Ein Workflow wird als
 Effekt importiert, nicht als Runtime. Exportiere ihn in ComfyUI im API-Format.</p>
@@ -338,6 +340,7 @@ function showAllJob(){
   document.getElementById("allJobDetails").textContent=job
     ?[kind,job.job_id,job.state,job.user_id||job.requested_by||"",job.agent_id||job.effect_id||""].join(" · ")
     :"Job auswählen.";
+  document.getElementById("allJobResultsButton").hidden=!(job&&kind==="host"&&["completed","submitted","failed"].includes(job.state));
   if(job&&kind==="demo"){demoJobSelect.value=id;showSelectedJob();}
   if(job&&kind==="host"){
     document.getElementById("hostJobSelect").value=id;
@@ -983,13 +986,21 @@ document.getElementById("hostJobExecute").onclick=async()=>{
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
+document.getElementById("allJobResultsButton").onclick=async()=>{
+  const selected=allJobsSelect.value;
+  if(!selected.startsWith("host:"))return;
+  const job_id=selected.slice(5),host_id=hv("jobHostSelect");
+  document.getElementById("jobResultsContext").textContent=job_id;
+  document.getElementById("jobResultsDialog").showModal();
+  await loadJobArtifacts(host_id,job_id);
+};
+document.getElementById("jobResultsClose").onclick=()=>document.getElementById("jobResultsDialog").close();
 let artifactObjectUrls=[];
-async function loadJobArtifacts(){
+async function loadJobArtifacts(host_id,job_id){
   for(const url of artifactObjectUrls)URL.revokeObjectURL(url);
   artifactObjectUrls=[];
   const target=document.getElementById("jobArtifacts");
   target.replaceChildren();
-  const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
   if(!host_id||!job_id)return;
   const result=await request("/api/host/jobs/execution?host_id="+
     encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
@@ -1047,7 +1058,7 @@ document.getElementById("hostJobExecutionStatus").onclick=async()=>{
   const result=await request("/api/host/jobs/execution?host_id="+
     encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
-  if(result.status===200){document.getElementById("hostJobsRefresh").click();await loadJobArtifacts();}
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
 document.getElementById("hostJobEvaluate").onclick=async()=>{
   const result=await api("/api/host/jobs/evaluate",

@@ -1373,9 +1373,9 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     if not data or len(data)>8*1024*1024:
                         raise ValueError("file_size_out_of_range")
                     boundary="minglefield"+uuid.uuid4().hex
-                    prefix=("--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"image\"; filename=\""+
-                            filename+"\"\\r\\nContent-Type: application/octet-stream\\r\\n\\r\\n").encode()
-                    payload=prefix+data+("\\r\\n--"+boundary+"--\\r\\n").encode()
+                    prefix=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"image\"; filename=\""+
+                            filename+"\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode()
+                    payload=prefix+data+("\r\n--"+boundary+"--\r\n").encode()
                     class NoRedirect(HTTPRedirectHandler):
                         def redirect_request(self,req,fp,code,msg,headers,newurl):
                             return None

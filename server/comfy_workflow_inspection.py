@@ -85,6 +85,13 @@ def inspect_api_workflow(raw, object_info=None):
                     limits = {k: v for k, v in spec[1].items()
                               if k in ("min", "max", "step") and
                               type(v) in (int, float) and math.isfinite(v)}
+            # ComfyUI Load3D uses a custom file widget for model_file.
+            # Some versions expose a non-scalar type in /object_info; the
+            # workflow value itself remains a string path under input/3d/.
+            if (cls == "Load3D" and name == "model_file"
+                    and type(value) is str and type(info) is dict
+                    and name in fields):
+                kind = "file"
             if kind is None:
                 kind = {str: "string", int: "integer", float: "number",
                         bool: "boolean"}[type(value)]

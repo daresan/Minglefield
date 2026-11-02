@@ -40,6 +40,10 @@ class HostCommitPolicy:
                 host_id TEXT NOT NULL, effect_id TEXT NOT NULL,
                 runtime_id TEXT NOT NULL, workflow TEXT NOT NULL,
                 metadata TEXT NOT NULL, PRIMARY KEY(host_id,effect_id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_job_parameters(
+                job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                effect_id TEXT NOT NULL, workflow_sha256 TEXT NOT NULL,
+                parameters TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
                 host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,
                 config TEXT NOT NULL, PRIMARY KEY(host_id,runtime_id))""")
@@ -179,9 +183,11 @@ class HostCommitPolicy:
                 (host_id,effect_id,description,int(enabled)))
             return HostDecision("saved","effect_metadata_only")
 
-    def manual_start_mock(self, host_id, owner_id, effect_id):
-        """Persist a manual intent, not a commit or executable reservation."""
+    def manual_start_mock(self, host_id, owner_id, effect_id, parameters=None):
+        """Persist validated parameter snapshot as a queued mock intent; never execute."""
         import secrets
+        if type(parameters) is not dict and parameters is not None:
+            return HostDecision("denied","invalid_job_parameters")
         with self.authority.store._tx() as db:
             if db.execute("""SELECT 1 FROM sec01_host_owners
                 WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
@@ -190,12 +196,42 @@ class HostCommitPolicy:
                 WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()
             if row!=(1,):
                 return HostDecision("denied","effect_unavailable")
+            workflow=db.execute("""SELECT metadata FROM sec01_host_comfy_workflows
+                WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()
+            values=parameters if parameters is not None else {}
+            snapshot=None
+            if workflow:
+                metadata=json.loads(workflow[0])
+                specs={p["binding"]:p for p in metadata.get("parameters",[])}
+                if set(values)!=set(specs):
+                    return HostDecision("denied","parameter_keys_mismatch")
+                for key,value in values.items():
+                    spec=specs[key]
+                    kind=spec["type"]
+                    if kind=="integer" and (type(value) is not int):
+                        return HostDecision("denied","invalid_parameter_type")
+                    if kind=="number" and (type(value) not in (int,float) or not -1e100<float(value)<1e100):
+                        return HostDecision("denied","invalid_parameter_type")
+                    if kind=="boolean" and type(value) is not bool:
+                        return HostDecision("denied","invalid_parameter_type")
+                    if kind in ("string","enum") and type(value) is not str:
+                        return HostDecision("denied","invalid_parameter_type")
+                    if kind not in ("integer","number","boolean","string","enum"):
+                        return HostDecision("denied","invalid_parameter_type")
+                snapshot=(metadata["workflow_sha256"],json.dumps(values,allow_nan=False,sort_keys=True))
+            elif values:
+                return HostDecision("denied","effect_has_no_parameters")
             job_id="hostjob."+secrets.token_hex(12)
             db.execute("""INSERT INTO sec01_host_jobs
                 (job_id,host_id,effect_id,requested_by,state,created_at)
                 VALUES(?,?,?,?,?,?)""",
                 (job_id,host_id,effect_id,owner_id,"queued",
                  datetime.now(timezone.utc).isoformat()))
+            if snapshot:
+                db.execute("""INSERT INTO sec01_host_job_parameters
+                    (job_id,host_id,effect_id,workflow_sha256,parameters)
+                    VALUES(?,?,?,?,?)""",
+                    (job_id,host_id,effect_id,snapshot[0],snapshot[1]))
             return HostDecision("queued_mock",job_id)
 
     def retry_cancelled_host_job(self, host_id, actor_id, job_id):
@@ -227,8 +263,14 @@ class HostCommitPolicy:
                 FROM sec01_host_jobs WHERE host_id=?
                 ORDER BY created_at DESC,job_id DESC LIMIT 200""",
                 (host_id,)).fetchall()
-            return [dict(job_id=job,effect_id=effect,state=state,created_at=created)
-                    for job,effect,state,created in rows]
+            result=[]
+            for job,effect,state,created in rows:
+                param=db.execute("""SELECT workflow_sha256,parameters
+                    FROM sec01_host_job_parameters WHERE job_id=?""",(job,)).fetchone()
+                result.append(dict(job_id=job,effect_id=effect,state=state,
+                    created_at=created,workflow_sha256=param[0] if param else None,
+                    parameters=json.loads(param[1]) if param else {}))
+            return result
 
     def cancel_queued_host_job(self, host_id, owner_id, job_id):
         """Atomic owner cancellation. A queued intent never reserves a slot."""

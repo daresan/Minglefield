@@ -136,6 +136,11 @@ Agreed design:
 - [ ] P1.4f.4: Explicit user-approved installation with conflict detection, rollback/recovery and audit trail; preserve independent game Git remotes, branches and history.
 - [ ] For offline or inaccessible release sources, distinguish `unknown` from `up_to_date`. A missing or invalid release is not proof that no update exists.
 
+## Post-P1.5 — Development continuity and chat handover (deferred)
+- [ ] After P1.5 acceptance, introduce a maintained development-state handover document (e.g. `docs/DEVELOPMENT-STATE.md`) and update the agent onboarding instructions. Record the last confirmed branch/commit, active milestone, completed work, verified tests, next task, open risks and source/date of confirmation.
+- [ ] Before resuming development in a new chat or agent session, read the handover and verify it against current repository state; never infer an active branch or task from stale conversation context. Keep confidential operational details in Minglefield-Internal rather than the public handover.
+- [ ] Do not implement this continuity workflow during P1.4f or P1.5; preserve the existing delivery sequence.
+
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.
 - [ ] Accept implementations from independent human or AI contributors and mixed teams.

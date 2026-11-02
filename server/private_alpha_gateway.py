@@ -271,6 +271,8 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <div class="action-row"><button id="gameProjectUpdate" type="button">Änderungen speichern</button>
 <button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button>
 <button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button>
+<button id="gameGitInspect" type="button">Git-Status prüfen</button>
+<button id="gameGitInit" type="button">Git initialisieren</button>
 <button id="gameProjectPrepare" type="button">Fehlende Arbeitsverzeichnisse anlegen</button></div>
 <p><small>Entfernen löscht nur die Registrierung, niemals lokale Dateien oder Ordner.</small></p>
 </div>
@@ -1499,6 +1501,32 @@ document.getElementById("gameProjectPrepare").onclick=async()=>{
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
+document.getElementById("gameGitInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+    "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/git/status"+query);
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameGitInit").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  await loadGameGitProfiles();
+  const options=gameGitProfiles.map(p=>p.profile_id).join(", ");
+  const profileId=window.prompt("Git-Profil-ID für Initialisierung wählen: "+options,
+                                gameGitProfiles[0]?.profile_id||"");
+  if(!profileId||!gameGitProfiles.some(p=>p.profile_id===profileId))return;
+  if(!window.confirm("Git-Repository in diesem Verzeichnis initialisieren?\\n"+
+                     project.repository_root+"\\nEs wird git init ausgeführt. Kein Commit, kein Remote."))return;
+  const response=await request("/api/game/git/init",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+      settings_revision:project.settings_revision,profile_id:profileId})});
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("gameProjectInspect").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
@@ -1863,6 +1891,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(404 if paths is None else 200,
                                {"error":"project_not_found_or_forbidden"} if paths is None
                                else {"paths":paths})
+            elif path == "/api/game/git/status":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if policy is None or len(hosts)!=1 or len(projects)!=1:
+                    self.reply(400,{"error":"invalid_git_status_query"})
+                else:
+                    status=policy.inspect_game_git(hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if status is None else 200,
+                               {"error":"project_not_found_or_forbidden"} if status is None else status)
             elif path == "/api/git/profiles":
                 policy=getattr(service,"_host_policy",None)
                 hosts=parse_qs(urlsplit(self.path).query).get("host_id",[])
@@ -1913,7 +1951,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/game/projects", "/api/game/projects/update", "/api/game/projects/delete", "/api/game/projects/prepare", "/api/git/profiles"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/game/projects", "/api/game/projects/update", "/api/game/projects/delete", "/api/game/projects/prepare", "/api/git/profiles", "/api/game/git/init"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -2099,6 +2137,17 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 body = json.loads(self.rfile.read(int(length)))
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
+                return
+            if path=="/api/game/git/init":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision","profile_id"}
+                if policy is None or type(body) is not dict or set(body)!=fields:
+                    self.reply(400,{"error":"invalid_git_init_request"})
+                    return
+                decision=policy.initialize_game_git(body["host_id"],principal.user_id,
+                    body["project_id"],body["settings_revision"],body["profile_id"])
+                self.reply(200 if decision["state"]=="initialized" else 409,
+                           decision)
                 return
             if path=="/api/git/profiles":
                 policy=getattr(service,"_host_policy",None)

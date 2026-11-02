@@ -59,6 +59,13 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
 - [x] **P0 release gate before Game tab (P1):** 431 conformance tests passed; Load3D GLB binding confirmed; user reported successful SkinTokens execution and approved continuation. See [P0 acceptance](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
 
+## P1.4f.2e — Local integration installation metadata (draft)
+
+- [x] Define draft `.minglefield/integrations.lock.json` contract, JSON Schema, offline validator and focused negative tests. See [Game Integration Lock v0.1](docs/GAME-INTEGRATION-LOCK-v0.1-DRAFT.md).
+- [ ] Verify tests on Windows; no game files are written.
+- [ ] Reconcile draft path/format with the portable `minglefield.lock` package architecture before any persistent write path.
+- [ ] Implement owner-scoped, symlink-safe, read-only lock inspection; verify artifact bytes and source identity before treating any local status as trusted.
+
 ## P1.4f.2b — Federated integration registry (implementation in progress)
 
 - [x] Add a public, initially empty curated registry, JSON Schema and offline cross-entry validation. See [Integration Registry v0.1 draft](docs/INTEGRATION-REGISTRY-v0.1-DRAFT.md).

@@ -120,6 +120,34 @@ class HostCommitPolicy:
                 return HostDecision("denied","project_id_exists")
         return HostDecision("created","game_project_created")
 
+    def update_game_project(self, host_id, owner_id, project_id, revision,
+                            name, repository_root, staging_root, output_root):
+        """Optimistic, owner-scoped metadata update; never modifies files."""
+        from pathlib import Path
+        if (not ident(project_id) or type(revision) is not int or revision < 1
+                or type(name) is not str or not 1 <= len(name.strip()) <= 120):
+            return HostDecision("denied","invalid_project_update")
+        paths=(repository_root,staging_root,output_root)
+        if any(type(p) is not str or not p or len(p)>1024
+               or not Path(p).is_absolute() for p in paths):
+            return HostDecision("denied","invalid_project_path")
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            row=db.execute("""SELECT settings_revision FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+            if row is None:
+                return HostDecision("denied","project_not_found")
+            if row[0]!=revision:
+                return HostDecision("denied","revision_conflict")
+            db.execute("""UPDATE alpha_game_projects SET name=?,repository_root=?,
+                staging_root=?,output_root=?,settings_revision=settings_revision+1
+                WHERE host_id=? AND owner_id=? AND project_id=? AND settings_revision=?""",
+                (name.strip(),*paths,host_id,owner_id,project_id,revision))
+        return HostDecision("saved","game_project_updated")
+
     def host_settings(self, host_id, owner_id):
         with self.authority.store._tx() as db:
             if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",

@@ -1479,14 +1479,27 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     else:
                         from urllib.request import Request,urlopen
                         try:
-                            with urlopen(Request(context["runtime"]["endpoint"]+"/object_info/LoadImage",
-                                                 headers={"Accept":"application/json"}),timeout=5) as response:
-                                metadata=json.loads(response.read(4*1024*1024+1))
-                            choices=metadata["LoadImage"]["input"]["required"]["image"][0]
-                            if (type(choices) is not list or len(choices)>10000
-                                    or any(type(x) is not str for x in choices)):
-                                raise ValueError("invalid_file_choices")
-                            self.reply(200,{"choices":{p["binding"]:choices for p in context["parameters"]}})
+                            classes={p["class_type"] for p in context["parameters"]}
+                            discovered={}
+                            for class_type in classes:
+                                from urllib.parse import quote
+                                with urlopen(Request(context["runtime"]["endpoint"]+"/object_info/"+
+                                                     quote(class_type,safe=""),
+                                                     headers={"Accept":"application/json"}),timeout=5) as response:
+                                    info=json.loads(response.read(4*1024*1024+1))
+                                discovered[class_type]=info.get(class_type,{})
+                            result={}
+                            for p in context["parameters"]:
+                                info=discovered.get(p["class_type"],{})
+                                inputs=info.get("input",{})
+                                spec=inputs.get("required",{}).get(p["input"])
+                                if spec is None:
+                                    spec=inputs.get("optional",{}).get(p["input"])
+                                choices=spec[0] if isinstance(spec,(list,tuple)) and spec and isinstance(spec[0],list) else None
+                                if (choices is not None and len(choices)<=10000
+                                        and all(type(v) is str for v in choices)):
+                                    result[p["binding"]]=choices
+                            self.reply(200,{"choices":result})
                         except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
                             self.reply(502,{"error":"file_choices_unavailable"})
             elif path == "/api/host/runtimes":

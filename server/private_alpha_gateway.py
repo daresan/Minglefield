@@ -657,9 +657,27 @@ function renderJobParameters(){
   const area=document.getElementById("jobParameterFields");
   area.replaceChildren();
   const specs=effect?.comfy_workflow?.parameters||[];
+  const groups=new Map();
   for(const p of specs){
+    const key=String(p.node_id||p.binding.split(".")[0]);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(p);
+  }
+  for(const [nodeId,items] of groups){
+    const section=document.createElement("fieldset");
+    section.style.cssText="min-width:0;margin:4px 0 10px;padding:12px;border:1px solid var(--line);border-radius:10px";
+    const legend=document.createElement("legend");
+    legend.textContent="Node "+nodeId+" · "+items[0].class_type;
+    section.append(legend);
+    const grid=document.createElement("div");
+    grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px;align-items:start";
+    section.append(grid);
+    for(const p of items){
     const label=document.createElement("label");
-    label.textContent=p.binding+" · "+p.class_type+" ("+p.type+")";
+    label.textContent=p.input+" ("+p.type+")";
+    label.style.cssText="min-width:0;display:flex;flex-direction:column;gap:4px";
+    const wide=p.widget==="textarea"||p.type==="string"&&/prompt|text|description/i.test(p.input);
+    if(wide)label.style.gridColumn="1 / -1";
     const field=p.type==="enum"?document.createElement("select"):
       (p.widget==="textarea"||p.type==="string"&&/prompt|text|description/i.test(p.input))
       ?document.createElement("textarea"):document.createElement("input");
@@ -679,7 +697,10 @@ function renderJobParameters(){
         if(Number.isFinite(p.constraints?.max))field.max=String(p.constraints.max);
       }
       field.value=String(p.default??"");}
-    label.append(field);area.append(label);
+    field.style.maxWidth="100%";
+    label.append(field);grid.append(label);
+    }
+    area.append(section);
   }
 }
 function renderJobEffects(){

@@ -59,7 +59,7 @@ def recheck_installed_files(project_root, installed_files):
     return {"state":"installation_files_match","reason":"trusted_file_hashes_match"}
 
 
-def evaluate_trusted_installer_record(record, *, trusted_origin=False,
+def evaluate_trusted_installer_record(record, *, trusted_origin=False, independent_checks=None,
                                       expected_host_id, expected_project_id,
                                       expected_integration_id, authorized_source,
                                       project_root):
@@ -67,7 +67,7 @@ def evaluate_trusted_installer_record(record, *, trusted_origin=False,
 
     trusted_origin must be established by the calling runtime's protected
     installer transaction, not inferred from record fields or lockfiles.
-    Independent release identity and artifact digest checks remain mandatory.
+    Independent release identity and artifact digest checks must be passed by\n    the trusted caller, never copied from the journal record.
     """
     if trusted_origin is not True:
         return {"state":"unknown","reason":"installer_origin_not_authenticated"}
@@ -78,7 +78,7 @@ def evaluate_trusted_installer_record(record, *, trusted_origin=False,
            ("release_source",authorized_source))
     if any(record.get(key)!=expected for key,expected in scope):
         return {"state":"invalid","reason":"installer_scope_or_source_mismatch"}
-    checks=record.get("independent_checks")
+    checks=independent_checks
     if not isinstance(checks,dict):
         return {"state":"unknown","reason":"missing_independent_checks"}
     file_result=recheck_installed_files(project_root,record.get("installed_files"))

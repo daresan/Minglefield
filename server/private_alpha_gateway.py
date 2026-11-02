@@ -107,6 +107,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und steuern (Simulation)</legend>
 <label>Host für Job <select id="jobHostSelect"></select></label>
 <label>Effekt für Job <select id="jobEffectSelect"></select></label>
+<div id="jobParameterFields" style="display:grid;gap:6px"></div>
 <button id="effectManual">Job in Warteschlange einreihen</button>
 
 <button id="hostJobsRefresh">Host-Jobs laden</button>
@@ -643,6 +644,24 @@ function renderHost(){
   hostOut.textContent=host?JSON.stringify(host,null,2):
     "Noch kein eigener Host vorhanden. Oben Host-ID und lokalen Bestätigungscode eingeben und Host übernehmen.";
 }
+function renderJobParameters(){
+  const host=hostCache.find(h=>h.host_id===hv("jobHostSelect"));
+  const effect=host?.effects.find(e=>e.effect_id===hv("jobEffectSelect"));
+  const area=document.getElementById("jobParameterFields");
+  area.replaceChildren();
+  const specs=effect?.comfy_workflow?.parameters||[];
+  for(const p of specs){
+    const label=document.createElement("label");
+    label.textContent=p.binding+" · "+p.class_type+" ("+p.type+")";
+    const field=document.createElement("input");
+    field.dataset.binding=p.binding;field.dataset.kind=p.type;
+    if(p.type==="boolean"){field.type="checkbox";field.checked=p.default===true;}
+    else {field.type=p.type==="integer"||p.type==="number"?"number":"text";
+      if(field.type==="number")field.step=p.type==="integer"?"1":"any";
+      field.value=String(p.default??"");}
+    label.append(field);area.append(label);
+  }
+}
 function renderJobEffects(){
   const host=hostCache.find(h=>h.host_id===hv("jobHostSelect"));
   const select=document.getElementById("jobEffectSelect");
@@ -653,7 +672,9 @@ function renderJobEffects(){
     opt.textContent=effect.effect_id;select.append(opt);
   }
   if([...select.options].some(o=>o.value===previous))select.value=previous;
+  renderJobParameters();
 }
+document.getElementById("jobEffectSelect").onchange=renderJobParameters;
 document.getElementById("jobHostSelect").onchange=()=>{
   hostSelect.value=hv("jobHostSelect");renderHost();renderJobEffects();
 };
@@ -919,8 +940,22 @@ document.getElementById("effectSave").onclick=async()=>{
   if(result.status===200)await refreshHosts();
 };
 document.getElementById("effectManual").onclick=async()=>{
+  const parameters={};
+  for(const field of document.querySelectorAll("#jobParameterFields input")){
+    let value;
+    if(field.dataset.kind==="boolean")value=field.checked;
+    else if(field.dataset.kind==="integer"||field.dataset.kind==="number"){
+      if(!field.value.trim()){document.getElementById("jobActionOutput").textContent=
+        "Pflichtparameter fehlt: "+field.dataset.binding;return;}
+      value=Number(field.value);
+      if(!Number.isFinite(value)||(field.dataset.kind==="integer"&&!Number.isInteger(value))){
+        document.getElementById("jobActionOutput").textContent="Ungültige Zahl: "+field.dataset.binding;return;
+      }
+    }else value=field.value;
+    parameters[field.dataset.binding]=value;
+  }
   const result=await api("/api/host/effects/manual",
-    {host_id:hv("jobHostSelect"),effect_id:hv("jobEffectSelect")});
+    {host_id:hv("jobHostSelect"),effect_id:hv("jobEffectSelect"),parameters});
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
@@ -1394,11 +1429,11 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     result=policy.define_effect(body["host_id"],principal.user_id,
                         body["effect_id"],body["description"],body["enabled"])
                 else:
-                    if set(body)!={"host_id","effect_id"}:
+                    if set(body) not in ({"host_id","effect_id"},{"host_id","effect_id","parameters"}):
                         self.reply(400,{"error":"invalid_manual_intent"})
                         return
                     result=policy.manual_start_mock(body["host_id"],principal.user_id,
-                        body["effect_id"])
+                        body["effect_id"],body.get("parameters"))
                 self.reply(200 if result.state in ("claimed","saved","requested_mock","queued_mock")
                            else 403,{"state":result.state,"reason":result.reason,
                                     "simulation_only":True})

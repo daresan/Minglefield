@@ -139,6 +139,27 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(self.request("GET", "/api/game/projects?host_id=host.one",
                                       self.owner)[1]["projects"], [])
 
+    def test_manifest_prepare_http_route(self):
+        repo=self.root/"manifest_http_repo"
+        repo.mkdir()
+        payload=dict(host_id="host.one",project_id="game.manifest.http",
+                     name="Manifest HTTP",repository_root=str(repo),
+                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+        self.assertEqual(self.request("POST","/api/game/projects",
+                                      self.owner,payload)[0],201)
+        body=dict(host_id="host.one",project_id="game.manifest.http",
+                  settings_revision=1)
+        path="/api/game/projects/manifest/prepare"
+        self.assertEqual(self.request("POST",path,payload=body)[0],401)
+        self.assertEqual(self.request("POST",path,self.other,body)[0],403)
+        status,data=self.request("POST",path,self.owner,body)
+        self.assertEqual(status,200)
+        self.assertEqual(data["state"],"created")
+        self.assertTrue((repo/".minglefield"/"project.json").is_file())
+        status,data=self.request("POST",path,self.owner,body)
+        self.assertEqual(status,200)
+        self.assertEqual(data["state"],"unchanged")
+
     def test_invalid_requests_are_rejected(self):
         self.assertEqual(self.request("GET", "/api/game/projects", self.owner)[0], 400)
         self.assertEqual(self.request("GET", "/api/game/projects?host_id=a&host_id=b",

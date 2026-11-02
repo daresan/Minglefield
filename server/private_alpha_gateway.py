@@ -273,6 +273,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button>
 <button id="gameGitInspect" type="button">Git-Status prüfen</button>
 <button id="gameCompatibilityInspect" type="button">Minglefield-Kompatibilität prüfen</button>
+<button id="gameManifestPrepare" type="button">Minglefield-Konfiguration einrichten</button>
 <button id="gameGitInit" type="button">Git initialisieren</button>
 <button id="gameProjectPrepare" type="button">Fehlende Arbeitsverzeichnisse anlegen</button></div>
 <p><small>Entfernen löscht nur die Registrierung, niemals lokale Dateien oder Ordner.</small></p>
@@ -1502,6 +1503,18 @@ document.getElementById("gameProjectPrepare").onclick=async()=>{
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
+document.getElementById("gameManifestPrepare").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  if(!window.confirm("Minglefield-Projektkonfiguration für "+project.project_id+
+    " einrichten?\\nEs wird nur eine fehlende .minglefield/project.json erstellt; vorhandene Dateien bleiben erhalten."))return;
+  const response=await request("/api/game/projects/manifest/prepare",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+                         settings_revision:project.settings_revision})});
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("gameCompatibilityInspect").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
@@ -2181,6 +2194,23 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 self.reply(200 if decision.state=="saved" else
                            403 if decision.reason=="not_host_owner" else 400,
                            {"state":decision.state,"reason":decision.reason})
+                return
+            if path=="/api/game/projects/manifest/prepare":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or type(body["host_id"]) is not str
+                        or type(body["project_id"]) is not str
+                        or type(body["settings_revision"]) is not int):
+                    self.reply(400,{"error":"invalid_manifest_prepare"})
+                    return
+                result=policy.prepare_game_manifest(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["settings_revision"])
+                status=200 if result["state"] in ("created","unchanged") else (
+                    403 if result["reason"]=="not_host_owner" else
+                    409 if result["reason"] in ("revision_conflict","project_not_found") else 400)
+                self.reply(status,result)
                 return
             if path=="/api/game/projects/prepare":
                 policy=getattr(service,"_host_policy",None)

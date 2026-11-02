@@ -246,7 +246,8 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <label>Output-Pfad (absolut) <input id="gameOutputRoot"></label>
 <div class="action-row"><button id="gameProjectUpdate" type="button">Änderungen speichern</button>
 <button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button>
-<button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button></div>
+<button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button>
+<button id="gameProjectPrepare" type="button">Fehlende Arbeitsverzeichnisse anlegen</button></div>
 <p><small>Entfernen löscht nur die Registrierung, niemals lokale Dateien oder Ordner.</small></p>
 </div>
 <div id="gameCreatePanel" hidden>
@@ -1416,6 +1417,20 @@ document.getElementById("gameProjectNew").onclick=()=>{
   setGameCreateMode(true);
 };
 document.getElementById("gameProjectCancel").onclick=()=>setGameCreateMode(false);
+document.getElementById("gameProjectPrepare").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const message="Für "+project.project_id+" nur fehlende Staging-/Output-Verzeichnisse anlegen?\\n"+
+    "Staging: "+project.staging_root+"\\nOutput: "+project.output_root+
+    "\\nRepository bleibt unverändert.";
+  if(!window.confirm(message))return;
+  const response=await request("/api/game/projects/prepare",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+                         settings_revision:project.settings_revision})});
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("gameProjectInspect").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;

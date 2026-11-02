@@ -440,7 +440,7 @@ class HostCommitPolicy:
         state=manifest["state"]
         installed=manifest.get("schema_version")
         if state=="compatible":
-            update_state="no_known_update"
+            update_state="availability_unknown"
         elif state=="missing":
             update_state="setup_required"
         else:
@@ -452,7 +452,7 @@ class HostCommitPolicy:
                 "update_state":update_state,
                 "release_catalog":{"state":"not_configured"},
                 "update_available":None,
-                "notes":"No release catalog is configured; availability cannot be determined.",
+                "notes":"GitHub Releases source and installed integration version are not configured; availability cannot be determined.",
                 "manifest_state":state}
 
     def prepare_game_manifest(self, host_id, owner_id, project_id, revision):

@@ -241,6 +241,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <label>Output-Pfad (absolut) <input id="gameOutputRoot"></label>
 <button id="gameProjectCreate" type="button">Projekt registrieren</button>
 <button id="gameProjectRefresh" type="button">Projekte laden</button>
+<button id="gameProjectUpdate" type="button">Ausgewähltes Projekt speichern</button>
 <label>Registrierte Projekte <select id="gameProjectSelect"></select></label>
 <pre id="gameProjectStatus" aria-live="polite">Host wählen und Projekte laden.</pre>
 </section>
@@ -1338,10 +1339,12 @@ async function loadGameProjects(){
   if([...gameHostSelect.options].some(x=>x.value===previous))gameHostSelect.value=previous;
   await refreshGameProjectList();
 }
+let gameProjects=[];
 async function refreshGameProjectList(){
   const host=gameHostSelect.value;
   const select=document.getElementById("gameProjectSelect");
-  select.replaceChildren();
+  const previous=select.value;
+  select.replaceChildren();gameProjects=[];
   if(!host){
     document.getElementById("gameProjectStatus").textContent="Kein eigener Host verfügbar.";
     return;
@@ -1349,15 +1352,44 @@ async function refreshGameProjectList(){
   const response=await request("/api/game/projects?host_id="+encodeURIComponent(host));
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(response.data,null,2);
   if(response.status!==200)return;
-  for(const project of response.data.projects){
+  gameProjects=response.data.projects;
+  for(const project of gameProjects){
     const option=document.createElement("option");
     option.value=project.project_id;
     option.textContent=project.name+" ("+project.project_id+")";
     select.append(option);
   }
+  if([...select.options].some(x=>x.value===previous))select.value=previous;
+  showSelectedGameProject();
 }
+function showSelectedGameProject(){
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  for(const [id,value] of [["gameProjectId",project.project_id],["gameProjectName",project.name],
+      ["gameRepositoryRoot",project.repository_root],["gameStagingRoot",project.staging_root],
+      ["gameOutputRoot",project.output_root]])document.getElementById(id).value=value;
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(project,null,2);
+}
+document.getElementById("gameProjectSelect").onchange=showSelectedGameProject;
 gameHostSelect.onchange=refreshGameProjectList;
 document.getElementById("gameProjectRefresh").onclick=loadGameProjects;
+document.getElementById("gameProjectUpdate").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project){document.getElementById("gameProjectStatus").textContent="Kein Projekt ausgewählt.";return;}
+  const payload={
+    host_id:gameHostSelect.value,project_id:project.project_id,
+    settings_revision:project.settings_revision,
+    name:document.getElementById("gameProjectName").value.trim(),
+    repository_root:document.getElementById("gameRepositoryRoot").value.trim(),
+    staging_root:document.getElementById("gameStagingRoot").value.trim(),
+    output_root:document.getElementById("gameOutputRoot").value.trim()
+  };
+  const response=await request("/api/game/projects/update",{
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  if(response.status===200)await refreshGameProjectList();
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("gameProjectCreate").onclick=async()=>{
   const host=gameHostSelect.value;
   if(!host){

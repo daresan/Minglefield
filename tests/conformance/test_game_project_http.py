@@ -72,6 +72,22 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(data["projects"][0]["project_id"], "game.one")
         self.assertEqual(self.request("GET", path, self.other)[0], 403)
 
+    def test_game_tab_markup_and_api_wiring(self):
+        status, _ = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        connection = http.client.HTTPConnection("127.0.0.1", self.http.server_port, timeout=5)
+        try:
+            connection.request("GET", "/")
+            response = connection.getresponse()
+            html = response.read().decode("utf-8")
+        finally:
+            connection.close()
+        for fragment in ('id="gameProjectPanel"', 'id="gameHostSelect"',
+                         'id="gameProjectCreate"', 'id="gameProjectSelect"',
+                         '"/api/game/projects"', '["game","Game"]'):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, html)
+
     def test_invalid_requests_are_rejected(self):
         self.assertEqual(self.request("GET", "/api/game/projects", self.owner)[0], 400)
         self.assertEqual(self.request("GET", "/api/game/projects?host_id=a&host_id=b",

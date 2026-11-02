@@ -44,6 +44,7 @@ class HostCommitPolicy:
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 effect_id TEXT NOT NULL, workflow_sha256 TEXT NOT NULL,
                 parameters TEXT NOT NULL)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_settings(\n                host_id TEXT PRIMARY KEY, settings TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
                 host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,
                 config TEXT NOT NULL, PRIMARY KEY(host_id,runtime_id))""")
@@ -73,6 +74,31 @@ class HostCommitPolicy:
                 binding TEXT NOT NULL, rule_id TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
                 effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)""")
+
+    def host_settings(self, host_id, owner_id):
+        with self.authority.store._tx() as db:
+            if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                              (host_id,owner_id)).fetchone():
+                return None
+            row=db.execute("SELECT settings FROM sec01_host_settings WHERE host_id=?",
+                           (host_id,)).fetchone()
+            return json.loads(row[0]) if row else {"staging_root":"","output_root":""}
+
+    def save_host_settings(self, host_id, owner_id, settings):
+        from pathlib import Path
+        if type(settings) is not dict or set(settings)!={"staging_root","output_root"}:
+            return HostDecision("denied","invalid_settings")
+        for value in settings.values():
+            if type(value) is not str or (value and
+                    (not Path(value).is_absolute() or len(value)>1024)):
+                return HostDecision("denied","invalid_host_path")
+        with self.authority.store._tx() as db:
+            if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                              (host_id,owner_id)).fetchone():
+                return HostDecision("denied","not_host_owner")
+            db.execute("INSERT INTO sec01_host_settings(host_id,settings) VALUES(?,?) ON CONFLICT(host_id) DO UPDATE SET settings=excluded.settings",
+                       (host_id,json.dumps(settings,sort_keys=True)))
+        return HostDecision("saved","host_settings_saved")
 
     def upsert_runtime(self, host_id, owner_id, config):
         """Store host-owned runtime settings without starting execution."""

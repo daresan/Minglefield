@@ -1540,7 +1540,7 @@ document.getElementById("gameIntegrationRegistryInspect").onclick=async()=>{
       publisher:x.publisher,vertrauensstufe:x.trust_tier,release_source:x.release_source})),
     hinweis:data.notes,error:data.error
   };
-  document.getElementById("gameProjectStatus").textContent=JSON.stringify(summary,null,2);
+  document.getElementById("gameUpdateStatus").textContent=JSON.stringify(summary,null,2);
 };
 document.getElementById("platformUpdateIndicator").onclick=()=>document.getElementById("platformUpdateDialog").showModal();
 document.getElementById("gameUpdateIndicator").onclick=()=>document.getElementById("gameUpdateDialog").showModal();

@@ -717,7 +717,20 @@ document.getElementById("comfyWorkflowSave").onclick=async()=>{
     body:JSON.stringify({host_id:inspectedComfy.host,runtime_id:inspectedComfy.runtime,
       effect_id,description,workflow:inspectedComfy.workflow,bindings})});
   output.textContent=JSON.stringify(result.data,null,2);
-  if(result.status===200)await refreshHosts();
+  if(result.status===200){
+    await refreshHosts();
+    hostSelect.value=inspectedComfy.host;
+    document.getElementById("effectHostSelect").value=inspectedComfy.host;
+    renderHost();
+    document.getElementById("effectSelect").value=effect_id;
+    loadSelectedEffect();
+    const present=hostCache.some(h=>h.host_id===inspectedComfy.host&&
+      h.effects.some(e=>e.effect_id===effect_id));
+    output.textContent=present
+      ?"Workflow gespeichert und Effekt "+effect_id+" in der Liste ausgewählt (zunächst deaktiviert)."
+      :"Speichern bestätigt, aber Effekt "+effect_id+
+        " fehlt in /api/hosts. Bitte diese Meldung melden; Datenbank und Host-Zuordnung prüfen.";
+  }
 };
 function setRuntimeLamp(state,message){
   const colors={online:"#36ce83",offline:"#f16e72",unknown:"#8792a4"};

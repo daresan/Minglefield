@@ -44,7 +44,7 @@ class HostCommitPolicy:
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 effect_id TEXT NOT NULL, workflow_sha256 TEXT NOT NULL,
                 parameters TEXT NOT NULL)""")
-            db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_projects(
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_git_profiles(\n                host_id TEXT NOT NULL, profile_id TEXT NOT NULL, owner_id TEXT NOT NULL,\n                auth_method TEXT NOT NULL, label TEXT NOT NULL,\n                git_executable TEXT NOT NULL, author_name TEXT NOT NULL,\n                author_email TEXT NOT NULL, PRIMARY KEY(host_id,profile_id))""")\n            db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_projects(
                 project_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 owner_id TEXT NOT NULL, name TEXT NOT NULL,
                 repository_root TEXT NOT NULL, staging_root TEXT NOT NULL,
@@ -80,6 +80,47 @@ class HostCommitPolicy:
                 binding TEXT NOT NULL, rule_id TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
                 effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)""")
+
+    def list_git_profiles(self, host_id, owner_id):
+        """List credential-free Git configuration metadata for an owned host."""
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return None
+            rows=db.execute("""SELECT profile_id,label,auth_method,git_executable,
+                author_name,author_email FROM alpha_git_profiles
+                WHERE host_id=? AND owner_id=? ORDER BY label,profile_id""",
+                (host_id,owner_id)).fetchall()
+        return [dict(zip(("profile_id","label","auth_method","git_executable",
+                          "author_name","author_email"),row)) for row in rows]
+
+    def save_git_profile(self, host_id, owner_id, profile):
+        """Store only non-secret settings; no tokens, passwords or private keys."""
+        fields={"profile_id","label","auth_method","git_executable","author_name","author_email"}
+        if type(profile) is not dict or set(profile)!=fields:
+            return HostDecision("denied","invalid_git_profile")
+        if (not ident(profile["profile_id"]) or
+                profile["auth_method"] not in ("local","ssh","credential_manager","github_cli") or
+                any(type(profile[k]) is not str or len(profile[k])>256
+                    for k in fields) or
+                not 1<=len(profile["label"].strip())<=120 or
+                not profile["git_executable"].strip()):
+            return HostDecision("denied","invalid_git_profile")
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            db.execute("""INSERT INTO alpha_git_profiles(
+                host_id,profile_id,owner_id,label,auth_method,git_executable,author_name,author_email)
+                VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(host_id,profile_id) DO UPDATE SET
+                label=excluded.label,auth_method=excluded.auth_method,
+                git_executable=excluded.git_executable,author_name=excluded.author_name,
+                author_email=excluded.author_email""",
+                (host_id,profile["profile_id"],owner_id,profile["label"].strip(),
+                 profile["auth_method"],profile["git_executable"].strip(),
+                 profile["author_name"],profile["author_email"]))
+        return HostDecision("saved","git_profile_saved")
 
     def list_game_projects(self, host_id, owner_id):
         """Return only projects belonging to an authorized host owner."""

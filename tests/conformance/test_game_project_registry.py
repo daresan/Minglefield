@@ -123,6 +123,40 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertTrue((repo/"staging").is_dir())
         self.assertTrue((repo/"output").is_dir())
 
+    def test_prepare_gitignore_preserves_existing_and_is_idempotent(self):
+        repo=self.root/"ignore_repo"
+        repo.mkdir()
+        ignore=repo/".gitignore"
+        ignore.write_text("*.tmp\n",encoding="utf-8")
+        stage=repo/"staging"
+        output=repo/"output"
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.ignore","Ignore",
+            str(repo),str(stage),str(output)).state,"created")
+        first=self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.ignore",1)
+        self.assertEqual(first["gitignore"]["rules_added"],["/staging/","/output/"])
+        self.assertEqual(ignore.read_text(encoding="utf-8"),
+                         "*.tmp\n/staging/\n/output/\n")
+        second=self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.ignore",1)
+        self.assertEqual(second["gitignore"]["rules_added"],[])
+        self.assertEqual(ignore.read_text(encoding="utf-8"),
+                         "*.tmp\n/staging/\n/output/\n")
+
+    def test_prepare_gitignore_skips_external_asset_directories(self):
+        repo=self.root/"external_repo"
+        repo.mkdir()
+        stage=self.root/"external_staging"
+        output=self.root/"external_output"
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.external","External",
+            str(repo),str(stage),str(output)).state,"created")
+        result=self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.external",1)
+        self.assertEqual(result["state"],"prepared")
+        self.assertFalse((repo/".gitignore").exists())
+
     def test_directory_preparation_rejects_unsafe_paths(self):
         repo=self.root / "repo"
         repo.mkdir()

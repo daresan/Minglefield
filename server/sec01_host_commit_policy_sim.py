@@ -418,6 +418,49 @@ class HostCommitPolicy:
         report["ready"]=not report["issues"]
         return report
 
+    def prepare_game_manifest(self, host_id, owner_id, project_id, revision):
+        """Create a minimal versioned manifest, preserving any existing manifest."""
+        import json
+        from pathlib import Path
+        if not ident(project_id) or type(revision) is not int or revision<1:
+            return {"state":"denied","reason":"invalid_manifest_prepare"}
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return {"state":"denied","reason":"not_host_owner"}
+            row=db.execute("""SELECT repository_root,settings_revision FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+        if row is None:
+            return {"state":"denied","reason":"project_not_found"}
+        root,actual_revision=row
+        if revision!=actual_revision:
+            return {"state":"denied","reason":"revision_conflict"}
+        repo=Path(root)
+        if not repo.is_dir():
+            return {"state":"denied","reason":"repository_directory_missing"}
+        directory=repo/".minglefield"
+        target=directory/"project.json"
+        try:
+            if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+                return {"state":"denied","reason":"manifest_directory_unsafe"}
+            if target.is_symlink():
+                return {"state":"denied","reason":"manifest_target_unsafe"}
+            if target.exists():
+                report=self.inspect_game_compatibility(host_id,owner_id,project_id)
+                return {"state":"unchanged","reason":"manifest_already_exists",
+                        "manifest":report["manifest"]}
+            directory.mkdir(exist_ok=True)
+            content=json.dumps({"schema_version":1,"project_id":project_id},
+                               indent=2,ensure_ascii=False)+"\n"
+            with target.open("x",encoding="utf-8",newline="\n") as stream:
+                stream.write(content)
+            return {"state":"created","path":str(target),"schema_version":1}
+        except FileExistsError:
+            return {"state":"unchanged","reason":"manifest_already_exists"}
+        except (OSError,ValueError):
+            return {"state":"denied","reason":"manifest_filesystem_error"}
+
     def initialize_game_git(self, host_id, owner_id, project_id, revision, profile_id):
         """Explicit, owner-scoped git init; never commits or changes remotes."""
         import subprocess

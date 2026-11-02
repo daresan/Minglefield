@@ -1529,7 +1529,8 @@ document.getElementById("gameIntegrationRegistryInspect").onclick=async()=>{
     status:response.status,project_id:data.project_id,
     installations:data.installation_state==="installation_unknown"?"Unbekannt":
       data.installation_state==="setup_required"?"Einrichtung erforderlich":
-      data.installation_state==="manual_review_required"?"Manuelle Prüfung erforderlich":data.installation_state,
+      data.installation_state==="manual_review_required"?"Manuelle Prüfung erforderlich":
+      data.installation_state==="declarations_unverified"?"Installationsangaben nicht verifiziert":data.installation_state,
     registry_status:data.registry?.state,
     lockfile:data.lockfile,
     deklarierte_installationen:data.installed_integrations,

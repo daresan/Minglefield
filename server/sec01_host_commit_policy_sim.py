@@ -466,6 +466,41 @@ class HostCommitPolicy:
                 "notes":"Installed integration version is unknown; release metadata does not establish update availability.",
                 "manifest_state":state}
 
+    def inspect_game_integrations(self, host_id, owner_id, project_id, registry_loader=None):
+        """Read-only registry cross-reference; legacy installation state is unknown.
+
+        No installation metadata format has been approved yet. Do not interpret
+        arbitrary extra fields in project.json as verified installations.
+        """
+        from game_integration_registry import load_registry
+        report=self.inspect_game_compatibility(host_id,owner_id,project_id)
+        if report is None:
+            return None
+        manifest_state=report["manifest"]["state"]
+        if manifest_state == "compatible":
+            state="installation_unknown"
+        elif manifest_state == "missing":
+            state="setup_required"
+        else:
+            state="manual_review_required"
+        try:
+            registry=(registry_loader or load_registry)()
+            from game_integration_registry import validate_registry
+            validate_registry(registry)
+            catalog={"state":"available",
+                     "integrations":[{"integration_id":entry["integration_id"],
+                                      "name":entry["name"],
+                                      "publisher":entry["publisher"],
+                                      "trust_tier":entry["trust_tier"],
+                                      "release_source":entry["release_source"]}
+                                     for entry in registry["integrations"]]}
+        except (OSError,ValueError,TypeError,KeyError):
+            catalog={"state":"unavailable","integrations":[]}
+        return {"project_id":project_id,"manifest_state":manifest_state,
+                "installation_state":state,"installed_integrations":None,
+                "registry":catalog,
+                "notes":"Installed integration metadata is not yet defined for workspace manifest v1."}
+
     def prepare_game_manifest(self, host_id, owner_id, project_id, revision):
         """Create a minimal versioned manifest, preserving any existing manifest."""
         import json

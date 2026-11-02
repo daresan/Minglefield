@@ -89,6 +89,13 @@ def inspect_api_workflow(raw, object_info=None):
                 kind = {str: "string", int: "integer", float: "number",
                         bool: "boolean"}[type(value)]
                 verified = False
+            # File picker widgets often publish STRING metadata with file-oriented
+            # options; do not infer file permissions from the input name alone.
+            if (kind == "string" and verified and type(spec) in (list, tuple)
+                    and len(spec) >= 2 and type(spec[1]) is dict
+                    and (spec[1].get("image_upload") or spec[1].get("file_upload")
+                         or spec[1].get("upload") or spec[1].get("folder_paths"))):
+                kind = "file"
             else:
                 verified = True
             candidate = {"binding": f"{node_id}.{name}", "node_id": node_id,

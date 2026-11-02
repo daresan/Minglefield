@@ -60,6 +60,7 @@ small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left
 .form-group p{color:var(--muted)}.form-group pre{width:100%}
 #grantStatus{flex-basis:100%;font-size:15px;color:var(--muted)}
 @media(max-width:700px){.field-grid{grid-template-columns:minmax(0,1fr)}.form-group{padding:14px}}
+.artifact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;margin:12px 0}.artifact-card{border:1px solid var(--line);border-radius:9px;padding:12px;min-width:0;overflow-wrap:anywhere}.artifact-card img{display:block;max-width:100%;height:170px;object-fit:contain;background:#0b1020}.artifact-card a{display:inline-block;margin:8px 8px 0 0}.artifact-card small{display:block;color:var(--muted)}
 </style>
 <h1>Minglefield Private Alpha</h1>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
@@ -127,6 +128,7 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="hostJobExecutionStatus">Ausführungsstatus abrufen</button>
 <button id="hostJobRelease">Reservierung aufheben (Mock)</button>
 <pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
+<section id="jobArtifactsPanel"><h3>ComfyUI-Ergebnisse</h3><p>Artefakte des ausgewählten Jobs. Temporäre Dateien können von ComfyUI entfernt werden.</p><div id="jobArtifacts" class="artifact-grid" aria-live="polite"></div></section>
 <pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre></fieldset>
 <fieldset id="effectPanel"><legend>Effekte konfigurieren</legend>
 <p><strong>Workflow = ComfyUI API-JSON-Datei.</strong> Ein Workflow wird als
@@ -981,13 +983,57 @@ document.getElementById("hostJobExecute").onclick=async()=>{
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
   if(result.status===200)document.getElementById("hostJobsRefresh").click();
 };
+async function loadJobArtifacts(){
+  const target=document.getElementById("jobArtifacts");
+  target.replaceChildren();
+  const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
+  if(!host_id||!job_id)return;
+  const result=await request("/api/host/jobs/execution?host_id="+
+    encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
+  if(result.status!==200){target.textContent="Ergebnisse nicht verfügbar.";return;}
+  const outputs=result.data.outputs||{};
+  let count=0;
+  for(const [node,groups] of Object.entries(outputs)){
+    for(const [kind,items] of Object.entries(groups)){
+      if(!Array.isArray(items))continue;
+      for(let index=0;index<items.length;index++){
+        const item=items[index];
+        const card=document.createElement("article");card.className="artifact-card";
+        const title=document.createElement("strong");
+        title.textContent="Node "+node+" · "+kind+" #"+(index+1);card.append(title);
+        if(item&&typeof item==="object"&&typeof item.filename==="string"){
+          count++;
+          const detail=document.createElement("small");
+          detail.textContent=item.filename+" · "+(item.type||"")+" · "+(item.metadata?.width?item.metadata.width+"×"+item.metadata.height:"");
+          card.append(detail);
+          const query=new URLSearchParams({host_id,job_id,node_id:node,kind,index:String(index)});
+          const url="/api/host/jobs/artifact?"+query.toString();
+          if(kind==="images"){
+            const img=document.createElement("img");img.alt=item.filename;
+            img.src=url;img.loading="lazy";card.append(img);
+          }else if(kind==="3d"){
+            const note=document.createElement("small");note.textContent="3D-Modell (GLB) – Download; interaktiver Viewer folgt.";
+            card.append(note);
+          }
+          const link=document.createElement("a");link.href=url;
+          link.textContent="Herunterladen";link.download=item.filename;card.append(link);
+        }else{
+          const pre=document.createElement("pre");pre.textContent=typeof item==="string"?item:JSON.stringify(item,null,2);
+          card.append(pre);
+        }
+        target.append(card);
+      }
+    }
+  }
+  if(!target.childElementCount)target.textContent="Noch keine Artefakte vorhanden.";
+}
 document.getElementById("hostJobExecutionStatus").onclick=async()=>{
   const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
   if(!host_id||!job_id)return;
   const result=await request("/api/host/jobs/execution?host_id="+
     encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
   document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
-  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+  if(result.status===200){document.getElementById("hostJobsRefresh").click();await loadJobArtifacts();}
 };
 document.getElementById("hostJobEvaluate").onclick=async()=>{
   const result=await api("/api/host/jobs/evaluate",
@@ -1243,6 +1289,49 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(403 if jobs is None else 200,
                         {"error":"not_host_owner"} if jobs is None else
                         {"jobs":jobs,"simulation_only":True})
+            elif path == "/api/host/jobs/artifact":
+                policy=getattr(service,"_host_policy",None)
+                params=parse_qs(urlsplit(self.path).query)
+                required=("host_id","job_id","node_id","kind","index")
+                if policy is None or any(len(params.get(k,[]))!=1 for k in required):
+                    self.reply(400,{"error":"invalid_artifact_query"})
+                    return
+                host_id,job_id,node_id,kind,index=(params[k][0] for k in required)
+                context=policy.comfy_execution_context(host_id,principal.user_id,job_id)
+                if context is None or not context["prompt_id"]:
+                    self.reply(404,{"error":"artifact_not_found"})
+                    return
+                try:
+                    from urllib.request import urlopen,Request
+                    from urllib.parse import urlencode,quote
+                    with urlopen(context["runtime"]["endpoint"]+"/history/"+
+                            quote(context["prompt_id"],safe=""),timeout=10) as response:
+                        history=json.loads(response.read(4*1024*1024+1))
+                    items=history[context["prompt_id"]]["outputs"][node_id][kind]
+                    item=items[int(index)]
+                    if (type(item) is not dict or type(item.get("filename")) is not str
+                            or item.get("type") not in ("temp","output","input")
+                            or type(item.get("subfolder","")) is not str):
+                        raise ValueError("not_file_artifact")
+                    query=urlencode({k:item.get(k,"") for k in ("filename","subfolder","type")})
+                    with urlopen(Request(context["runtime"]["endpoint"]+"/view?"+query),
+                            timeout=30) as response:
+                        mime=response.headers.get("Content-Type","application/octet-stream")
+                        if not (mime.startswith("image/") or mime.startswith("application/")):
+                            mime="application/octet-stream"
+                        self.send_response(200)
+                        self.send_header("Content-Type",mime)
+                        self.send_header("Content-Disposition","attachment; filename*=UTF-8''"+
+                            quote(item["filename"],safe=""))
+                        self.send_header("Cache-Control","private, no-store")
+                        self.send_header("X-Content-Type-Options","nosniff")
+                        self.end_headers()
+                        while True:
+                            chunk=response.read(256*1024)
+                            if not chunk:break
+                            self.wfile.write(chunk)
+                except (OSError,ValueError,KeyError,TypeError,IndexError):
+                    self.reply(404,{"error":"artifact_unavailable"})
             elif path == "/api/host/jobs/execution":
                 policy=getattr(service,"_host_policy",None)
                 params=parse_qs(urlsplit(self.path).query)

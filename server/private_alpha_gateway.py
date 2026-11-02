@@ -684,6 +684,7 @@ function renderJobParameters(){
   const effect=host?.effects.find(e=>e.effect_id===hv("jobEffectSelect"));
   const area=document.getElementById("jobParameterFields");
   area.replaceChildren();
+  document.getElementById("effectManual").disabled=false;
   const specs=effect?.comfy_workflow?.parameters||[];
   const groups=new Map();
   for(const p of specs){
@@ -730,7 +731,30 @@ function renderJobParameters(){
       }
       field.value=String(p.default??"");}
     field.style.maxWidth="100%";
-    label.append(field);grid.append(label);
+    label.append(field);
+    if(p.type==="file"){
+      const picker=document.createElement("input");
+      picker.type="file";picker.setAttribute("aria-label","Lokale Datei für "+p.binding+" auswählen");
+      picker.dataset.fileBinding=p.binding;
+      picker.style.cssText="max-width:100%;font-size:12px";
+      const status=document.createElement("small");
+      status.textContent="Noch keine lokale Datei ausgewählt.";
+      picker.addEventListener("change",()=>{
+        const selected=picker.files?.[0];
+        status.textContent=selected
+          ?selected.name+" ("+selected.size+" Bytes) – noch nicht im Projekt-Staging gespeichert"
+          :"Noch keine lokale Datei ausgewählt.";
+        // Never silently substitute an unpersisted browser File for a durable job asset.
+        document.getElementById("effectManual").disabled=
+          !!document.querySelector('#jobParameterFields input[data-file-binding]')
+            &&[...document.querySelectorAll('#jobParameterFields input[data-file-binding]')]
+                .some(x=>x.files?.length);
+        if(selected)document.getElementById("jobActionOutput").textContent=
+          "Datei ausgewählt, aber noch nicht persistent gestaged. Jobanlage gesperrt, bis die Projekt-Staging-Anbindung implementiert ist.";
+      });
+      label.append(picker,status);
+    }
+    grid.append(label);
     }
     area.append(section);
   }

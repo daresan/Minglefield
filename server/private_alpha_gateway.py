@@ -1545,7 +1545,7 @@ document.getElementById("gameIntegrationUpdateInspect").onclick=async()=>{
   if(!project)return;
   const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
     "&project_id="+encodeURIComponent(project.project_id);
-  const response=await request("/api/game/integration/update-status"+query);
+  const response=await request("/api/game/integration/releases"+query);
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };

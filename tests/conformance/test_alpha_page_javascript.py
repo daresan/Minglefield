@@ -17,7 +17,7 @@ from private_alpha_gateway import PAGE
 
 class AlphaPageJavascriptTests(unittest.TestCase):
     def test_embedded_javascript_parses(self):
-        scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script\\s*>", PAGE,
+        scripts = re.findall(r"<script[^>]*>(.*?)</script\s*>", PAGE,
                              flags=re.IGNORECASE | re.DOTALL)
         self.assertTrue(scripts, "No embedded script found in served PAGE")
         node = shutil.which("node")

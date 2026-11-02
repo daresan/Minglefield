@@ -1239,6 +1239,34 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                 self.reply(200,{"reachable":ok,"error":None if ok else "http_error"})
                             except (OSError, ValueError, HTTPError, URLError):
                                 self.reply(200,{"reachable":False,"error":"connection_failed"})
+            elif path == "/api/host/comfy/file-choices":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                host=query.get("host_id",[])
+                effect=query.get("effect_id",[])
+                if policy is None or len(host)!=1 or len(effect)!=1:
+                    self.reply(400,{"error":"invalid_file_choices_query"})
+                else:
+                    context=policy.comfy_file_parameter_context(host[0],principal.user_id,effect[0])
+                    if context is None:
+                        self.reply(403,{"error":"workflow_unavailable"})
+                    elif not context["parameters"]:
+                        self.reply(200,{"choices":{}})
+                    elif not context["runtime"].get("enabled"):
+                        self.reply(403,{"error":"runtime_unavailable"})
+                    else:
+                        from urllib.request import Request,urlopen
+                        try:
+                            with urlopen(Request(context["runtime"]["endpoint"]+"/object_info/LoadImage",
+                                                 headers={"Accept":"application/json"}),timeout=5) as response:
+                                metadata=json.loads(response.read(4*1024*1024+1))
+                            choices=metadata["LoadImage"]["input"]["required"]["image"][0]
+                            if (type(choices) is not list or len(choices)>10000
+                                    or any(type(x) is not str for x in choices)):
+                                raise ValueError("invalid_file_choices")
+                            self.reply(200,{"choices":{p["binding"]:choices for p in context["parameters"]}})
+                        except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
+                            self.reply(502,{"error":"file_choices_unavailable"})
             elif path == "/api/host/runtimes":
                 policy=getattr(service,"_host_policy",None)
                 host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])

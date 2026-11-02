@@ -1614,6 +1614,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                             self.reply(200,{"choices":result})
                         except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
                             self.reply(502,{"error":"file_choices_unavailable"})
+            elif path == "/api/game/projects":
+                policy=getattr(service,"_host_policy",None)
+                host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_ids)!=1 or not host_ids[0]:
+                    self.reply(400,{"error":"invalid_project_query"})
+                else:
+                    projects=policy.list_game_projects(host_ids[0],principal.user_id)
+                    self.reply(403 if projects is None else 200,
+                               {"error":"not_host_owner"} if projects is None else
+                               {"projects":projects})
             elif path == "/api/host/settings":
                 policy=getattr(service,"_host_policy",None)
                 host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
@@ -1644,7 +1654,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/game/projects"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -1830,6 +1840,23 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 body = json.loads(self.rfile.read(int(length)))
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
+                return
+            if path=="/api/game/projects":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","name","repository_root",
+                        "staging_root","output_root"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or any(type(body[key]) is not str for key in fields)):
+                    self.reply(400,{"error":"invalid_project_request"})
+                    return
+                decision=policy.create_game_project(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["name"],body["repository_root"],body["staging_root"],
+                    body["output_root"])
+                status=201 if decision.state=="created" else (
+                    403 if decision.reason=="not_host_owner" else
+                    409 if decision.reason=="project_id_exists" else 400)
+                self.reply(status,{"state":decision.state,"reason":decision.reason})
                 return
             if path=="/api/host/settings":
                 policy=getattr(service,"_host_policy",None)

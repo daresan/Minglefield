@@ -81,7 +81,7 @@ def fetch_compare_files(repository, base_tag, head_tag, *, opener=urlopen):
     try:
         data=json.loads(raw)
         files=data["files"]
-        if (not isinstance(files,list) or len(files)>100
+        if (not isinstance(files,list) or len(files)>=100
                 or not isinstance(data.get("total_commits"),int)
                 or data["total_commits"]>250
                 or len(files)!=len({f.get("filename") for f in files if isinstance(f,dict)})):

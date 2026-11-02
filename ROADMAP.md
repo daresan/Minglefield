@@ -59,6 +59,16 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
 - [x] **P0 release gate before Game tab (P1):** 431 conformance tests passed; Load3D GLB binding confirmed; user reported successful SkinTokens execution and approved continuation. See [P0 acceptance](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
 
+## P1.4f — Game integration update management (in progress)
+
+- [x] P1.4f.1: Read-only project integration status; report unknown update availability when no release source is configured (22 focused tests passed on Windows).
+- [ ] P1.4f.2: Read-only release discovery and version comparison, based on **GitHub Releases and Git tags**, not a proprietary release catalog. Use the existing release `tag_name`, `body` (release notes), `html_url`, and published timestamp; link commits via GitHub's existing comparison URLs. Treat untrusted release text as display data only.
+- [ ] Define the first published **game integration** version independently from the Minglefield platform version and `.minglefield/project.json` schema version. Do not infer an installed integration version from `schema_version: 1`; currently it is unknown.
+- [ ] Use a standard SemVer implementation or an existing project dependency, rather than implementing a custom version parser. Do not guess release tags, repository origins, or available updates.
+- [ ] P1.4f.3: Preview release notes, changed files, compatibility requirements and migration steps before modifying a game repository.
+- [ ] P1.4f.4: Explicit user-approved installation with conflict detection, rollback/recovery and audit trail; preserve independent game Git remotes, branches and history.
+- [ ] For offline or inaccessible release sources, distinguish `unknown` from `up_to_date`. A missing or invalid release is not proof that no update exists.
+
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.
 - [ ] Accept implementations from independent human or AI contributors and mixed teams.

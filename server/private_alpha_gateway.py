@@ -228,7 +228,11 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 </div><div class="form-group"><h3>Effekte auf diesem Host</h3><div class="field-grid"><label>Effekte auf diesem Host <select id="hostEffectShortcut"></select></label>
 </div><div class="action-row"><button id="hostOpenEffect">Effekt im Effekte-Tab öffnen</button>
 
-</div><details id="hostGitSettings">
+</div>
+<pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre></div>
+<fieldset id="hostGitPanel"><legend>Git-Konfiguration dieses Hosts</legend>
+<p>Eigenständige Host-Einstellungen für Git und Authentifizierungsprofile.</p>
+<details id="hostGitSettings">
 <summary>Git-Einstellungen</summary>
 <p>Authentifizierungsprofile (ohne gespeicherte Zugangsdaten). Git-Operationen sind noch nicht aktiviert.</p>
 <label>Profil <select id="gameGitProfileSelect"></select></label>
@@ -247,7 +251,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <button id="gameGitReload" type="button">Git-Profile laden</button>
 <pre id="gameGitStatus" aria-live="polite"></pre>
 </details>
-<pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre></div>
+</fieldset>
 </fieldset>
 <section id="gameProjectPanel" class="alphaPanel" hidden>
 <h2>Game-Projekte (P1 Alpha)</h2>

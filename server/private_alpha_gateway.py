@@ -1604,7 +1604,10 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                 spec=inputs.get("required",{}).get(p["input"])
                                 if spec is None:
                                     spec=inputs.get("optional",{}).get(p["input"])
-                                choices=spec[0] if isinstance(spec,(list,tuple)) and spec and isinstance(spec[0],list) else None
+                                choices=(spec[0] if isinstance(spec,(list,tuple)) and spec and isinstance(spec[0],list)
+                                         else spec[1].get("options") if isinstance(spec,(list,tuple))
+                                         and len(spec)>1 and spec[0]=="COMBO" and isinstance(spec[1],dict)
+                                         else None)
                                 if (choices is not None and len(choices)<=10000
                                         and all(type(v) is str for v in choices)):
                                     result[p["binding"]]=choices
@@ -2088,7 +2091,10 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                     if definition is None:
                                         definition=inputs.get("optional",{}).get(spec["input"])
                                     options=(definition[0] if isinstance(definition,(list,tuple))
-                                             and definition and isinstance(definition[0],list) else None)
+                                             and definition and isinstance(definition[0],list)
+                                             else definition[1].get("options") if isinstance(definition,(list,tuple))
+                                             and len(definition)>1 and definition[0]=="COMBO"
+                                             and isinstance(definition[1],dict) else None)
                                     if options is None or any(type(v) is not str for v in options):
                                         raise ValueError("invalid_file_choices")
                                     current_choices[spec["binding"]]=options

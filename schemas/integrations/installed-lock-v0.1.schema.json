@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minglefield game integration lockfile v0.1 (draft)",
+  "description": "Recorded installation evidence, not proof of verification. Read-only validation; no installation or migration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "lock_version",
+    "project_id",
+    "integrations"
+  ],
+  "properties": {
+    "lock_version": {
+      "const": "0.1"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "integrations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/installed"
+      }
+    }
+  },
+  "$defs": {
+    "installed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "integration_id",
+        "installed_version",
+        "publisher",
+        "release_source",
+        "artifact",
+        "verification_status"
+      ],
+      "properties": {
+        "integration_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.][a-z][a-z0-9_-]*)+$",
+          "maxLength": 128
+        },
+        "installed_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "release_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "repository"
+          ],
+          "properties": {
+            "provider": {
+              "const": "github"
+            },
+            "repository": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            }
+          }
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sha256",
+            "reference"
+          ],
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "reference": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "source_revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "verification_status": {
+          "enum": [
+            "verified",
+            "unverified",
+            "unknown"
+          ]
+        }
+      }
+    }
+  }
+}

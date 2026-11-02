@@ -397,7 +397,7 @@ class HostCommitPolicy:
                 rel=resolved.relative_to(root.resolve()).as_posix()
                 try:
                     ignored=subprocess.run(["git","-C",str(root),"check-ignore","-q",
-                                            "--no-index","--",rel+"/.minglefield-ignore-probe"],
+                                            "--no-index","--",rel+"/"],
                                            timeout=8,stdin=subprocess.DEVNULL,
                                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
                     info["ignored"]=ignored.returncode==0

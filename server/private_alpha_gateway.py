@@ -245,7 +245,8 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <label>Staging-Pfad (absolut) <input id="gameStagingRoot"></label>
 <label>Output-Pfad (absolut) <input id="gameOutputRoot"></label>
 <div class="action-row"><button id="gameProjectUpdate" type="button">Änderungen speichern</button>
-<button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button></div>
+<button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button>
+<button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button></div>
 <p><small>Entfernen löscht nur die Registrierung, niemals lokale Dateien oder Ordner.</small></p>
 </div>
 <div id="gameCreatePanel" hidden>
@@ -1415,6 +1416,15 @@ document.getElementById("gameProjectNew").onclick=()=>{
   setGameCreateMode(true);
 };
 document.getElementById("gameProjectCancel").onclick=()=>setGameCreateMode(false);
+document.getElementById("gameProjectInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+              "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/projects/paths"+query);
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("gameProjectDelete").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;

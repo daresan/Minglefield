@@ -64,7 +64,9 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [x] Define draft `.minglefield/integrations.lock.json` contract, JSON Schema, offline validator and focused negative tests. See [Game Integration Lock v0.1](docs/GAME-INTEGRATION-LOCK-v0.1-DRAFT.md).
 - [ ] Verify tests on Windows; no game files are written.
 - [ ] Reconcile draft path/format with the portable `minglefield.lock` package architecture before any persistent write path.
-- [ ] Implement owner-scoped, symlink-safe, read-only lock inspection; verify artifact bytes and source identity before treating any local status as trusted.
+- [x] Implement owner-scoped, read-only lock inspection with symlink checks, registry source comparison and explicit unverified declaration status; expose in Game tab.
+- [ ] Verify focused Game-Project tests on Windows and review UI with a local lockfile fixture.
+- [ ] Implement artifact-byte/source attestation separately; no local declaration is trusted as verified.
 
 ## P1.4f.2b — Federated integration registry (implementation in progress)
 

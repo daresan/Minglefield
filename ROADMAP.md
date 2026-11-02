@@ -66,7 +66,9 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Verify tests on the Windows development host and add CI coverage.
 - [ ] Define publisher ownership proof, release identity/artifact integrity, and source-transfer review before admitting actual entries.
 - [ ] Add explicit, user-authorized external-source support separately; external developers need no approval to publish independently.
-- [ ] Connect read-only local installed-integration discovery to curated definitions without changing legacy manifests.
+- [x] Add owner-scoped read-only project/registry inspection; legacy installed integrations remain unknown and no manifest is changed. Backend method: `inspect_game_integrations`; focused regression test added (Windows verification pending).
+- [ ] Expose the read-only integration report through the Game HTTP API/UI after focused tests pass; do not add a free-text release-source field.
+- [ ] Define and validate actual installed-integration metadata before reporting installed versions.
 
 ## P1.4f.2a — Integration metadata contract
 

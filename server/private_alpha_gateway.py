@@ -273,6 +273,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button>
 <button id="gameGitInspect" type="button">Git-Status prüfen</button>
 <button id="gameCompatibilityInspect" type="button">Minglefield-Kompatibilität prüfen</button>
+<label>GitHub-Release-Quelle (owner/repo, optional) <input id="gameReleaseRepository" placeholder="owner/repo"></label>
 <button id="gameIntegrationUpdateInspect" type="button">Integrationsupdates prüfen</button>
 <button id="gameManifestPrepare" type="button">Minglefield-Konfiguration einrichten</button>
 <button id="gameGitInit" type="button">Git initialisieren</button>
@@ -1521,7 +1522,9 @@ document.getElementById("gameIntegrationUpdateInspect").onclick=async()=>{
   if(!project)return;
   const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
     "&project_id="+encodeURIComponent(project.project_id);
-  const response=await request("/api/game/integration/update-status"+query);
+  const source=document.getElementById("gameReleaseRepository").value.trim();
+  const response=await request("/api/game/integration/update-status"+query+
+    (source?"&release_repository="+encodeURIComponent(source):""));
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
@@ -1940,11 +1943,14 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 policy=getattr(service,"_host_policy",None)
                 query=parse_qs(urlsplit(self.path).query)
                 hosts=query.get("host_id",[]); projects=query.get("project_id",[])
-                if policy is None or len(hosts)!=1 or len(projects)!=1:
+                sources=query.get("release_repository",[])
+                if (policy is None or len(hosts)!=1 or len(projects)!=1
+                        or len(sources)>1):
                     self.reply(400,{"error":"invalid_integration_update_query"})
                 else:
                     report=policy.inspect_game_integration_update(
-                        hosts[0],principal.user_id,projects[0])
+                        hosts[0],principal.user_id,projects[0],
+                        release_repository=sources[0] if sources else None)
                     self.reply(404 if report is None else 200,
                                {"error":"project_not_found_or_forbidden"}
                                if report is None else report)

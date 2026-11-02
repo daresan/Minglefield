@@ -59,6 +59,15 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
 - [x] **P0 release gate before Game tab (P1):** 431 conformance tests passed; Load3D GLB binding confirmed; user reported successful SkinTokens execution and approved continuation. See [P0 acceptance](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
 
+## P1.4f.2b — Federated integration registry (implementation in progress)
+
+- [x] Add a public, initially empty curated registry, JSON Schema and offline cross-entry validation. See [Integration Registry v0.1 draft](docs/INTEGRATION-REGISTRY-v0.1-DRAFT.md).
+- [x] Reserve `minglefield.*` for official entries and `community.<publisher>.*` for reviewed community entries; reject duplicates and malformed entries.
+- [ ] Verify tests on the Windows development host and add CI coverage.
+- [ ] Define publisher ownership proof, release identity/artifact integrity, and source-transfer review before admitting actual entries.
+- [ ] Add explicit, user-authorized external-source support separately; external developers need no approval to publish independently.
+- [ ] Connect read-only local installed-integration discovery to curated definitions without changing legacy manifests.
+
 ## P1.4f.2a — Integration metadata contract
 
 - [x] Draft identity, installed-version provenance, trusted release-source mapping, multiple-integration semantics and legacy unknown states in [Game Integration Metadata v0.1 draft](docs/GAME-INTEGRATION-METADATA-v0.1-DRAFT.md).

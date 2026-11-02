@@ -123,6 +123,8 @@ Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small><
 <button id="hostJobRetry">Abgebrochenen Job erneut einreihen</button>
 <button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button>
 <button id="hostJobReserve">Slot reservieren (Mock)</button>
+<button id="hostJobExecute">Jetzt ausführen (ComfyUI)</button>
+<button id="hostJobExecutionStatus">Ausführungsstatus abrufen</button>
 <button id="hostJobRelease">Reservierung aufheben (Mock)</button>
 <pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
 <pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre></fieldset>
@@ -971,6 +973,22 @@ for(const [id,path] of [
   }
   };
 }
+document.getElementById("hostJobExecute").onclick=async()=>{
+  const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
+  if(!host_id||!job_id)return;
+  if(!confirm("Reservierten Job "+job_id+" jetzt an ComfyUI übermitteln?"))return;
+  const result=await api("/api/host/jobs/execute",{host_id,job_id});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+document.getElementById("hostJobExecutionStatus").onclick=async()=>{
+  const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
+  if(!host_id||!job_id)return;
+  const result=await request("/api/host/jobs/execution?host_id="+
+    encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
 document.getElementById("hostJobEvaluate").onclick=async()=>{
   const result=await api("/api/host/jobs/evaluate",
     {host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});

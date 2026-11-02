@@ -317,7 +317,7 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(report["manifest"]["state"],"compatible")
         self.assertFalse(report["issues"])
 
-    def test_update_inspection_reads_explicit_release_source_without_writes(self):
+    def test_update_inspection_rejects_explicit_release_source_without_writes(self):
         repo=self.root/"release_repo"
         repo.mkdir()
         self.assertEqual(self.policy.create_game_project(
@@ -334,8 +334,8 @@ class GameProjectRegistryTests(unittest.TestCase):
         result=self.policy.inspect_game_integration_update(
             "host.one","user.owner","game.release",
             release_repository="owner/repo",release_fetcher=fetcher)
-        self.assertEqual(called,["owner/repo"])
-        self.assertEqual(result["release_catalog"]["state"],"available")
+        self.assertEqual(called,[])
+        self.assertEqual(result["release_catalog"]["reason"],"client_release_source_forbidden")
         self.assertIsNone(result["update_available"])
         self.assertIsNone(result["integration_version"])
         self.assertFalse((repo/".minglefield").exists())

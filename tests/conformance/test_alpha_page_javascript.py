@@ -29,6 +29,29 @@ class AlphaPageJavascriptTests(unittest.TestCase):
                     capture_output=True, timeout=20, check=False)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_release_display_uses_text_and_never_signals_verified_current(self):
+        start=PAGE.index("function gameUpdateSignal(")
+        end=PAGE.index("let gameUpdateRequestId=",start)
+        functions=PAGE[start:end]
+        script="""
+const assert=require('node:assert/strict');
+const target={textContent:''};
+Object.defineProperty(target,'innerHTML',{set(){throw Error('HTML injection');}});
+global.document={getElementById:()=>target};
+"""+functions+"""
+const item={state:'unknown',comparison_state:'up_to_date',version_scheme:'pep440',
+ release_notes:'<img src=x onerror=alert(1)>',verification_state:'unknown'};
+renderGameUpdatePreview({updates:[item]},200);
+assert.ok(target.textContent.includes(item.release_notes));
+assert.ok(target.textContent.includes('up_to_date'));
+assert.equal(gameUpdateSignal({updates:[item]},200),'unknown');
+assert.equal(gameUpdateSignal({updates:[{...item,version_comparison:'newer_release_than_declared'}]},200),'yellow');
+"""
+        node=shutil.which("node")
+        self.assertIsNotNone(node)
+        result=subprocess.run([node,"-"],input=script,text=True,capture_output=True,timeout=20)
+        self.assertEqual(result.returncode,0,result.stderr)
+
     def test_tab_navigation_and_global_update_dialog_present(self):
         self.assertIn('id="alphaNav"', PAGE)
         self.assertIn("renderAlphaTabs();", PAGE)

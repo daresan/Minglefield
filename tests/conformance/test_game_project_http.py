@@ -233,6 +233,52 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(data["updates"],[])
         self.assertFalse((repo/"minglefield.lock").exists())
 
+    def test_multiple_release_discovery_is_isolated_and_preserves_files(self):
+        from unittest.mock import patch
+        repo=self.root/"multi"
+        repo.mkdir()
+        project="game.multi"
+        payload=dict(host_id="host.one",project_id=project,name="Multi",repository_root=str(repo),
+                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+        self.assertEqual(self.request("POST","/api/game/projects",self.owner,payload)[0],201)
+        (repo/".minglefield").mkdir()
+        (repo/".minglefield/project.json").write_text(json.dumps({"schema_version":1,"project_id":project}))
+        entries=[{"integration_id":"community.alice."+name,"name":name,"publisher":"alice",
+                  "trust_tier":"community","release_source":{"provider":"github","repository":"alice/"+name}}
+                 for name in ("one","two")]
+        packages=[{"package_id":e["integration_id"],"kind":"game_integration","version":"1.0",
+                   "publisher":"alice","release_source":e["release_source"],
+                   "artifact":{"reference":"asset","sha256":"a"*64}} for e in entries]
+        (repo/"minglefield.lock").write_text(json.dumps({"lock_version":"0.1","project_id":project,"packages":packages}))
+        (repo/"unrelated.txt").write_text("preserve")
+        before={str(p.relative_to(repo)):p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+        route="/api/game/integration/releases?host_id=host.one&project_id="+project
+        calls=[]
+        def fetch(source):
+            calls.append(source)
+            if source=="alice/two":
+                raise OSError("offline")
+            return {"state":"available","releases":[{"tag_name":"1.0","release_notes":"<script>untrusted</script>"}]}
+        # Exercise the real inspector, validator and discovery engine with only external I/O mocked.
+        import game_integration_updates as updates
+        original=updates.discover_integration_update
+        with patch("game_integration_registry.load_registry",return_value={"registry_version":"0.1","integrations":entries}), patch(
+                "game_integration_updates.discover_integration_update",
+                side_effect=lambda e,c: original(e,c,fetcher=fetch,compare_fetcher=lambda *_: {"state":"unknown"})):
+            self.assertEqual(self.request("GET",route)[0],401)
+            self.assertEqual(self.request("GET",route,self.other)[0],404)
+            self.assertEqual(calls,[])
+            status,data=self.request("GET",route,self.owner)
+            self.assertEqual(status,200)
+            self.assertEqual([u["comparison_state"] for u in data["updates"]],["up_to_date","error"])
+            self.assertEqual(data["updates"][0]["release_notes"],"<script>untrusted</script>")
+            self.assertEqual(calls,["alice/one","alice/two"])
+        self.assertEqual(before,{str(p.relative_to(repo)):p.read_bytes() for p in repo.rglob("*") if p.is_file()})
+        for endpoint in ("releases","update-status"):
+            for extra in ("&release_repository=evil/repo","&release_repository=","&unknown=x"):
+                url="/api/game/integration/"+endpoint+"?host_id=host.one&project_id="+project+extra
+                self.assertEqual(self.request("GET",url,self.owner)[0],400)
+
     def test_invalid_requests_are_rejected(self):
         self.assertEqual(self.request("GET", "/api/game/projects", self.owner)[0], 400)
         self.assertEqual(self.request("GET", "/api/game/projects?host_id=a&host_id=b",

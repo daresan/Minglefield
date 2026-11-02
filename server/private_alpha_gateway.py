@@ -1461,7 +1461,11 @@ function renderGameUpdatePreview(data,status){
       "Prüfung: "+(item.state||"unbekannt"),
       "Deklarierte Version: "+(item.declared_version||item.installed_version||"unbekannt"),
       "Verfügbare Release: "+(item.available_version||"unbekannt"),
-      "Versionsvergleich: "+(item.version_comparison||"unbekannt"),
+      "Release-Vergleich (nur Deklaration): "+(item.comparison_state||"unknown"),
+      "Versionsschema: "+(item.version_scheme||"unbekannt"),
+      "Grund: "+(item.reason||"unbekannt"),
+      "Release-Quelle: "+(item.release_url||"unbekannt"),
+      "Veröffentlicht: "+(item.published_at||"unbekannt"),
       "Installation verifiziert: "+(item.verification_state==="installation_verified"?"ja":"nein"),
       "Kompatibilität: "+(item.preview?.compatibility?.state||"unbekannt"),
       "Migration: "+(item.preview?.migration?.state||"unbekannt"),
@@ -2027,7 +2031,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                if report is None else report)
             elif path == "/api/game/integrations":
                 policy=getattr(service,"_host_policy",None)
-                query=parse_qs(urlsplit(self.path).query)
+                query=parse_qs(urlsplit(self.path).query, keep_blank_values=True)
                 hosts=query.get("host_id",[]); projects=query.get("project_id",[])
                 if (policy is None or len(hosts)!=1 or len(projects)!=1
                         or len(query)!=2):
@@ -2040,7 +2044,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                if report is None else report)
             elif path == "/api/game/integration/releases":
                 policy=getattr(service,"_host_policy",None)
-                query=parse_qs(urlsplit(self.path).query)
+                query=parse_qs(urlsplit(self.path).query, keep_blank_values=True)
                 hosts=query.get("host_id",[]); projects=query.get("project_id",[])
                 if (policy is None or len(hosts)!=1 or len(projects)!=1 or len(query)!=2):
                     self.reply(400,{"error":"invalid_integration_releases_query"})
@@ -2052,16 +2056,15 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                if report is None else report)
             elif path == "/api/game/integration/update-status":
                 policy=getattr(service,"_host_policy",None)
-                query=parse_qs(urlsplit(self.path).query)
+                query=parse_qs(urlsplit(self.path).query, keep_blank_values=True)
                 hosts=query.get("host_id",[]); projects=query.get("project_id",[])
                 sources=query.get("release_repository",[])
                 if (policy is None or len(hosts)!=1 or len(projects)!=1
-                        or len(sources)>1):
+                        or len(query)!=2 or sources):
                     self.reply(400,{"error":"invalid_integration_update_query"})
                 else:
                     report=policy.inspect_game_integration_update(
-                        hosts[0],principal.user_id,projects[0],
-                        release_repository=sources[0] if sources else None)
+                        hosts[0],principal.user_id,projects[0])
                     self.reply(404 if report is None else 200,
                                {"error":"project_not_found_or_forbidden"}
                                if report is None else report)

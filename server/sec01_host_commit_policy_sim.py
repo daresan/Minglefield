@@ -439,7 +439,7 @@ class HostCommitPolicy:
 
     def inspect_game_integration_update(self, host_id, owner_id, project_id,
                                         release_repository=None, release_fetcher=None):
-        """Read-only integration status; GitHub source must be explicitly selected."""
+        """Legacy manifest status; client-selected release sources are forbidden."""
         report=self.inspect_game_compatibility(host_id,owner_id,project_id)
         if report is None:
             return None
@@ -454,14 +454,7 @@ class HostCommitPolicy:
             update_state="manual_review_required"
         release_catalog={"state":"not_configured"}
         if release_repository is not None:
-            from game_release_metadata import fetch_releases
-            fetcher=release_fetcher or fetch_releases
-            try:
-                release_catalog=fetcher(release_repository)
-                if not isinstance(release_catalog,dict) or release_catalog.get("state") not in ("available","unavailable"):
-                    release_catalog={"state":"unavailable","reason":"invalid_adapter_response","releases":[]}
-            except (ValueError,TypeError):
-                release_catalog={"state":"unavailable","reason":"invalid_repository","releases":[]}
+            release_catalog={"state":"unavailable","reason":"client_release_source_forbidden","releases":[]}
         return {"project_id":project_id,
                 "installed_schema_version":installed,
                 "supported_schema_version":1,

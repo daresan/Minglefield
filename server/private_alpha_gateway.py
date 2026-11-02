@@ -1219,7 +1219,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -1309,7 +1309,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 self.reply(415, {"error": "json_required"})
                 return
             length = self.headers.get("Content-Length", "")
-            if not length.isdecimal() or int(length) > (2 * 1024 * 1024 + 65536 if path in ("/api/host/comfy/inspect","/api/host/comfy/import") else MAX_BODY):
+            if not length.isdecimal() or int(length) > (2 * 1024 * 1024 + 65536 if path in ("/api/host/comfy/inspect","/api/host/comfy/import") else (12 * 1024 * 1024 if path=="/api/host/comfy/upload" else MAX_BODY)):
                 self.reply(413, {"error": "invalid_body_length"})
                 return
             try:
@@ -1324,6 +1324,53 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 status, result = delete_resource(service, self.headers.get("Authorization"),
                     DELETE_ROUTES[path][0], body)
                 self.reply(status, result)
+                return
+            if path == "/api/host/comfy/upload":
+                import base64
+                import re
+                import uuid
+                from urllib.request import build_opener, HTTPHandler, Request, HTTPRedirectHandler
+                policy=getattr(service,"_host_policy",None)
+                if policy is None or type(body) is not dict or set(body)!={"host_id","runtime_id","filename","data"}:
+                    self.reply(400,{"error":"invalid_upload_request"})
+                    return
+                host_id,runtime_id,filename,encoded=(body[k] for k in ("host_id","runtime_id","filename","data"))
+                if (any(type(v) is not str for v in (host_id,runtime_id,filename,encoded))
+                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}",filename)
+                        or filename in (".","..")):
+                    self.reply(400,{"error":"invalid_upload_filename"})
+                    return
+                runtimes=policy.list_runtimes(host_id,principal.user_id)
+                runtime=next((x for x in runtimes or [] if x["id"]==runtime_id
+                              and x["type"]=="comfyui" and x["enabled"]),None)
+                if runtime is None:
+                    self.reply(403,{"error":"runtime_unavailable"})
+                    return
+                try:
+                    data=base64.b64decode(encoded,validate=True)
+                    if not data or len(data)>8*1024*1024:
+                        raise ValueError("file_size_out_of_range")
+                    boundary="minglefield"+uuid.uuid4().hex
+                    prefix=("--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"image\"; filename=\""+
+                            filename+"\"\\r\\nContent-Type: application/octet-stream\\r\\n\\r\\n").encode()
+                    payload=prefix+data+("\\r\\n--"+boundary+"--\\r\\n").encode()
+                    class NoRedirect(HTTPRedirectHandler):
+                        def redirect_request(self,req,fp,code,msg,headers,newurl):
+                            return None
+                    opener=build_opener(HTTPHandler(),NoRedirect())
+                    req=Request(runtime["endpoint"]+"/upload/image",data=payload,
+                                headers={"Content-Type":"multipart/form-data; boundary="+boundary},
+                                method="POST")
+                    with opener.open(req,timeout=20) as response:
+                        answer=json.loads(response.read(65537))
+                    if type(answer) is not dict or type(answer.get("name")) is not str:
+                        raise ValueError("invalid_comfy_upload_response")
+                    self.reply(200,{"state":"uploaded","runtime_id":runtime_id,
+                                    "name":answer["name"],"subfolder":answer.get("subfolder",""),
+                                    "type":answer.get("type","input"),
+                                    "job_binding":"not_assigned"})
+                except (ValueError,OSError,TypeError) as exc:
+                    self.reply(400,{"error":"comfy_upload_failed","detail":str(exc)[:160]})
                 return
             if path in ("/api/host/comfy/inspect", "/api/host/comfy/import"):
                 policy=getattr(service,"_host_policy",None)

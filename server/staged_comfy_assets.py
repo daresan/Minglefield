@@ -5,7 +5,10 @@ import re
 import secrets
 from pathlib import Path
 from urllib.parse import urlsplit
-from game_asset_staging import ProjectAssetStaging, StagingError
+try:
+    from .game_asset_staging import ProjectAssetStaging, StagingError
+except ImportError:  # Direct gateway execution: python server/private_alpha_gateway.py
+    from game_asset_staging import ProjectAssetStaging, StagingError
 
 ASSET_PREFIX = "minglefield-asset:"
 ASSET_ID = re.compile(r"^[0-9a-f]{32}$")

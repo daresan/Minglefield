@@ -74,16 +74,22 @@ def fetch_compare_files(repository, base_tag, head_tag, *, opener=urlopen):
     try:
         with opener(request,timeout=8) as response:
             raw=response.read(_MAX_BYTES+1)
+            link_header=response.headers.get("Link","")
     except (HTTPError,URLError,TimeoutError,OSError):
         return {"state":"unknown","reason":"compare_unavailable","files":[]}
     if len(raw)>_MAX_BYTES:
         return {"state":"unknown","reason":"response_too_large","files":[]}
+    if 'rel="next"' in link_header:
+        return {"state":"unknown","reason":"compare_paginated","files":[]}
     try:
         data=json.loads(raw)
         files=data["files"]
+        if (data.get("status")!="ahead" or not isinstance(data.get("ahead_by"),int)
+                or data["ahead_by"]<1):
+            raise ValueError("non_forward_compare")
         if (not isinstance(files,list) or len(files)>=100
-                or not isinstance(data.get("total_commits"),int)
-                or data["total_commits"]>250
+                or type(data.get("total_commits")) is not int
+                or data["total_commits"]<1 or data["total_commits"]>250
                 or len(files)!=len({f.get("filename") for f in files if isinstance(f,dict)})):
             raise ValueError("incomplete_compare")
         allowed={"added","modified","removed","renamed","copied","changed","unchanged"}

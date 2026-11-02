@@ -106,6 +106,20 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual((data["projects"][0]["name"], data["projects"][0]["settings_revision"]),
                          ("Updated", 2))
 
+    def test_git_profile_http_contract(self):
+        profile=dict(profile_id="git.default",label="Default",auth_method="local",
+                     git_executable="git",author_name="Tester",
+                     author_email="tester@example.invalid")
+        payload={"host_id":"host.one","profile":profile}
+        self.assertEqual(self.request("POST", "/api/git/profiles", payload=payload)[0], 401)
+        self.assertEqual(self.request("POST", "/api/git/profiles", self.other, payload)[0], 403)
+        self.assertEqual(self.request("POST", "/api/git/profiles", self.owner, payload)[0], 200)
+        status,data=self.request("GET", "/api/git/profiles?host_id=host.one", self.owner)
+        self.assertEqual(status,200)
+        self.assertEqual(data["profiles"][0]["profile_id"],"git.default")
+        self.assertEqual(self.request("GET", "/api/git/profiles?host_id=host.one",
+                                      self.other)[0],403)
+
     def test_unregister_is_owner_scoped_and_does_not_touch_files(self):
         existing = self.root / "repo"
         existing.mkdir()

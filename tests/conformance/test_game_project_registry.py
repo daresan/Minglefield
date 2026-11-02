@@ -63,6 +63,51 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(invalid["registry"]["state"],"unavailable")
         self.assertIsNone(invalid["installed_integrations"])
 
+    def test_integration_lock_inspection_rejects_untrusted_sources_and_symlinks(self):
+        import json
+        repo=self.root/"lock-game"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.lock","Lock",
+            str(repo),str(repo/"stage"),str(repo/"output")).state,"created")
+        config=repo/".minglefield"
+        config.mkdir()
+        lock=config/"integrations.lock.json"
+        record={"lock_version":"0.1","project_id":"game.lock","integrations":[{
+            "integration_id":"community.alice.godot","installed_version":"1.2.3",
+            "publisher":"alice","release_source":{"provider":"github","repository":"attacker/godot"},
+            "artifact":{"reference":"asset","sha256":"a"*64},
+            "verification_status":"verified"}]}
+        registry=lambda: {"registry_version":"0.1","integrations":[{
+            "integration_id":"community.alice.godot","name":"Godot","publisher":"alice",
+            "trust_tier":"community",
+            "release_source":{"provider":"github","repository":"alice/godot"}}]}
+        lock.write_text(json.dumps(record),encoding="utf-8")
+        before=lock.read_bytes()
+        self.assertIsNone(self.policy.inspect_game_integrations(
+            "host.one","user.other","game.lock",registry_loader=registry))
+        report=self.policy.inspect_game_integrations(
+            "host.one","user.owner","game.lock",registry_loader=registry)
+        self.assertEqual(report["lockfile"]["state"],"valid_declarations")
+        self.assertEqual(report["installation_state"],"declarations_unverified")
+        self.assertEqual(report["installed_integrations"][0]["source_state"],"source_mismatch")
+        self.assertEqual(report["installed_integrations"][0]["trusted_verification_status"],"unknown")
+        self.assertEqual(lock.read_bytes(),before)
+        record["project_id"]="game.other"
+        lock.write_text(json.dumps(record),encoding="utf-8")
+        report=self.policy.inspect_game_integrations(
+            "host.one","user.owner","game.lock",registry_loader=registry)
+        self.assertEqual(report["lockfile"]["state"],"invalid")
+        self.assertEqual(report["installation_state"],"manual_review_required")
+        lock.unlink()
+        try:
+            lock.symlink_to(self.root/"outside.json")
+        except (OSError,NotImplementedError):
+            return
+        report=self.policy.inspect_game_integrations(
+            "host.one","user.owner","game.lock",registry_loader=registry)
+        self.assertEqual(report["lockfile"]["state"],"unsafe_symlink")
+
     def test_persistence_and_owner_isolation(self):
         args = ("host.one", "user.owner", "game.one", "My Game",
                 str(self.root / "game"), str(self.root / "stage"), str(self.root / "output"))

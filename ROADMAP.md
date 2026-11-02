@@ -59,6 +59,17 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
 - [x] **P0 release gate before Game tab (P1):** 431 conformance tests passed; Load3D GLB binding confirmed; user reported successful SkinTokens execution and approved continuation. See [P0 acceptance](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
 
+## P1.4f schema/convention audit (2026-11-02)
+
+Existing conventions checked on the active feature branch:
+1. `schemas/map/v0.1/game-manifest.schema.json` is a **MAP discovery/negotiation manifest** with `manifest_version: "0.1"`, `game_id`, `map_versions`, capabilities and endpoints. It forbids unknown top-level properties and provides an `extensions` object. It is **not** the local workspace's `.minglefield/project.json`.
+2. `docs/map/CAPABILITY-NEGOTIATION-v0.1-DRAFT.md` explicitly separates descriptive discovery metadata from authentication/authorization and uses namespaced capability strings. No package-installation or integration-release identity is specified.
+3. `docs/REPOSITORY-PACKAGE-ARCHITECTURE-v0.1-DRAFT.md` proposes `minglefield.yaml` and `minglefield.lock` for versioned packages, but explicitly says package IDs, version ranges and resolver semantics **remain to be standardized**. These files are not implemented as an authoritative package manager.
+4. The **implemented** alpha workspace uses `.minglefield/project.json` (`schema_version: 1`, `project_id`), not the proposed `minglefield.yaml`. Its compatibility inspector currently tolerates extra fields but does not validate installed integration records.
+5. `server/game_release_metadata.py` is a GitHub-specific read-only metadata adapter; GitHub Releases alone do not prove integration identity.
+
+Design consequence: keep MAP discovery, local workspace configuration and proposed portable package/lockfile formats **separate**. Do not silently turn `extensions`, `map_versions`, `schema_version`, Git tags, or an arbitrary repository URL into installed integration identity. Before introducing any persisted integration list, specify identity, provenance, version, provider-neutral source mapping, duplicate-ID handling and legacy-manifest migration as a separately reviewed contract. Initial implementation should be read-only and must preserve both existing game repositories and v1 manifests.
+
 ## P1.4f architecture decision — multiple independent integrations
 
 Code audit (2026-11-02):

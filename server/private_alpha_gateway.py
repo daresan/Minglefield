@@ -2088,17 +2088,13 @@ def run_local():
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port must be 1024..65535")
-    if True:
-        from private_alpha_auth import AlphaAuthStore
-        service = AlphaAuthStore(args.auth_db or default_alpha_database())
-        from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
-        from sec01_host_commit_policy_sim import HostCommitPolicy
-        service._host_policy=HostCommitPolicy(IntegratedAlphaAdmission(service))
-        token = None
-    else:
-        token = secrets.token_urlsafe(36)
-        service = AlphaSimulation({token: TestPrincipal("demo.local", "agent.demo")})
-    bootstrap=secrets.token_urlsafe(32) if args.auth_db else None
+    from private_alpha_auth import AlphaAuthStore
+    from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+    from sec01_host_commit_policy_sim import HostCommitPolicy
+    service = AlphaAuthStore(args.auth_db or default_alpha_database())
+    service._host_policy = HostCommitPolicy(IntegratedAlphaAdmission(service))
+    token = None
+    bootstrap = secrets.token_urlsafe(32)
     server = ThreadingHTTPServer(("127.0.0.1", args.port),
                                  handler_for(service,local_bootstrap_secret=bootstrap))
     print("LOCAL-ONLY simulation, no real effects. DO NOT EXPOSE VIA SERVE YET.")

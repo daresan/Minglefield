@@ -240,8 +240,9 @@ class HostCommitPolicy:
         roots=[Path(repo),Path(staging),Path(output)]
         try:
             resolved=[p.resolve(strict=False) for p in roots]
-            if (not roots[0].is_dir() or
-                    resolved[0] in resolved[1:] or resolved[1]==resolved[2] or
+            if not roots[0].is_dir():
+                return {"state":"denied","reason":"repository_directory_missing_or_invalid"}
+            if (resolved[0] in resolved[1:] or resolved[1]==resolved[2] or
                     any(resolved[i].is_relative_to(resolved[j])
                         for i,j in ((0,1),(0,2)))):
                 return {"state":"denied","reason":"unsafe_project_paths"}

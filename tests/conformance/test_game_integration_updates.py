@@ -21,7 +21,8 @@ def releases(repo):
 
 class GameIntegrationUpdateTests(unittest.TestCase):
     def test_update_preview_uses_registry_source(self):
-        report=discover_integration_update(ENTRY,CATALOG,fetcher=releases)
+        report=discover_integration_update(ENTRY,CATALOG,fetcher=releases,
+            compare_fetcher=lambda *_: {"state":"unknown"})
         self.assertEqual(report["state"],"update_available")
         self.assertEqual(report["available_version"],"v1.3.0")
         self.assertEqual(report["release_notes"],"Upgrade")
@@ -35,10 +36,16 @@ class GameIntegrationUpdateTests(unittest.TestCase):
         self.assertEqual(preview["migration"]["state"],"unknown")
         self.assertEqual(preview["artifact_integrity"]["state"],"unknown")
         self.assertIs(preview["installation_allowed"],False)
+        verified=discover_integration_update(ENTRY,CATALOG,fetcher=releases,
+            compare_fetcher=lambda *_: {"state":"available","files":[{"path":"plugin.py","status":"modified"}]})
+        self.assertEqual(verified["preview"]["changed_files"]["state"],"available")
+        self.assertEqual(verified["preview"]["changed_files"]["files"][0]["path"],"plugin.py")
+        self.assertIs(verified["preview"]["installation_allowed"],False)
 
     def test_up_to_date_and_no_comparable_releases(self):
         entry=dict(ENTRY,declared_version="1.3.0")
-        current=discover_integration_update(entry,CATALOG,fetcher=releases)
+        current=discover_integration_update(entry,CATALOG,fetcher=releases,
+            compare_fetcher=lambda *_: {"state":"unknown"})
         self.assertEqual(current["state"],"up_to_date")
         self.assertIsNone(current["preview"]["changed_files"]["comparison_url"])
         self.assertEqual(discover_integration_update(ENTRY,CATALOG,fetcher=lambda _:{"state":"available","releases":[]})["state"],"unknown")

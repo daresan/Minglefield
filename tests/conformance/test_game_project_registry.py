@@ -181,6 +181,29 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(report["manifest"]["state"],"compatible")
         self.assertFalse(report["issues"])
 
+    def test_manifest_setup_is_owner_scoped_and_preserves_existing(self):
+        import json
+        repo=self.root/"manifest_repo"
+        repo.mkdir()
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.manifest","Manifest",
+            str(repo),str(repo/"staging"),str(repo/"output")).state,"created")
+        self.assertEqual(self.policy.prepare_game_manifest(
+            "host.one","user.other","game.manifest",1)["reason"],"not_host_owner")
+        self.assertEqual(self.policy.prepare_game_manifest(
+            "host.one","user.owner","game.manifest",2)["reason"],"revision_conflict")
+        result=self.policy.prepare_game_manifest(
+            "host.one","user.owner","game.manifest",1)
+        self.assertEqual(result["state"],"created")
+        target=repo/".minglefield"/"project.json"
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8")),
+                         {"schema_version":1,"project_id":"game.manifest"})
+        target.write_text('{"custom":"preserved"}',encoding="utf-8")
+        self.assertEqual(self.policy.prepare_game_manifest(
+            "host.one","user.owner","game.manifest",1)["state"],"unchanged")
+        self.assertEqual(target.read_text(encoding="utf-8"),
+                         '{"custom":"preserved"}')
+
     def test_directory_preparation_rejects_unsafe_paths(self):
         repo=self.root / "repo"
         repo.mkdir()

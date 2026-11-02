@@ -110,6 +110,22 @@ class GameProjectRegistryTests(unittest.TestCase):
             "host.one","user.owner","game.prepare",1)["created"],[])
         self.assertEqual(marker.read_text(),"keep")
 
+    def test_directory_preparation_distinguishes_missing_repository(self):
+        repo=self.root / "not_created"
+        self.assertEqual(self.policy.create_game_project(
+            "host.one","user.owner","game.missing","Missing",
+            str(repo),str(repo/"staging"),str(repo/"output")).state,"created")
+        result=self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.missing",1)
+        self.assertEqual(result["reason"],"repository_directory_missing_or_invalid")
+        self.assertFalse(repo.exists())
+        repo.mkdir()
+        result=self.policy.prepare_game_project_directories(
+            "host.one","user.owner","game.missing",1)
+        self.assertEqual(result["state"],"prepared")
+        self.assertTrue((repo/"staging").is_dir())
+        self.assertTrue((repo/"output").is_dir())
+
     def test_directory_preparation_rejects_unsafe_paths(self):
         repo=self.root / "repo"
         repo.mkdir()

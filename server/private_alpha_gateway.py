@@ -272,6 +272,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button>
 <button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button>
 <button id="gameGitInspect" type="button">Git-Status prüfen</button>
+<button id="gameCompatibilityInspect" type="button">Minglefield-Kompatibilität prüfen</button>
 <button id="gameGitInit" type="button">Git initialisieren</button>
 <button id="gameProjectPrepare" type="button">Fehlende Arbeitsverzeichnisse anlegen</button></div>
 <p><small>Entfernen löscht nur die Registrierung, niemals lokale Dateien oder Ordner.</small></p>
@@ -1501,6 +1502,15 @@ document.getElementById("gameProjectPrepare").onclick=async()=>{
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
+document.getElementById("gameCompatibilityInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+    "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/compatibility"+query);
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("gameGitInspect").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
@@ -1891,6 +1901,18 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(404 if paths is None else 200,
                                {"error":"project_not_found_or_forbidden"} if paths is None
                                else {"paths":paths})
+            elif path == "/api/game/compatibility":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if policy is None or len(hosts)!=1 or len(projects)!=1:
+                    self.reply(400,{"error":"invalid_compatibility_query"})
+                else:
+                    report=policy.inspect_game_compatibility(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if report is None else 200,
+                               {"error":"project_not_found_or_forbidden"}
+                               if report is None else report)
             elif path == "/api/game/git/status":
                 policy=getattr(service,"_host_policy",None)
                 query=parse_qs(urlsplit(self.path).query)

@@ -1327,6 +1327,67 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     revoke(self.headers.get("Authorization"))
                     self.reply(200, {"status": "session_revoked"})
                 return
+            if path == "/api/host/comfy/upload":
+                if self.headers.get("Content-Type","").split(";")[0].strip()!="application/octet-stream":
+                    self.reply(415,{"error":"binary_upload_required"})
+                    return
+            if path == "/api/host/comfy/upload":
+                import http.client
+                import re
+                import uuid
+                from urllib.parse import urlsplit as split_url
+                policy=getattr(service,"_host_policy",None)
+                host_id=self.headers.get("X-Minglefield-Host","")
+                runtime_id=self.headers.get("X-Minglefield-Runtime","")
+                filename=self.headers.get("X-Minglefield-Filename","")
+                length=self.headers.get("Content-Length","")
+                if (not length.isdecimal() or type(host_id) is not str
+                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}",filename)
+                        or filename in (".","..")):
+                    self.reply(400,{"error":"invalid_upload_request"})
+                    return
+                runtimes=policy.list_runtimes(host_id,principal.user_id) if policy else None
+                runtime=next((x for x in runtimes or [] if x["id"]==runtime_id
+                              and x["type"]=="comfyui" and x["enabled"]),None)
+                if runtime is None:
+                    self.reply(403,{"error":"runtime_unavailable"})
+                    return
+                conn=None
+                try:
+                    boundary="minglefield"+uuid.uuid4().hex
+                    prefix=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"image\"; filename=\""+
+                            filename+"\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode()
+                    suffix=("\r\n--"+boundary+"--\r\n").encode()
+                    url=split_url(runtime["endpoint"])
+                    conn=http.client.HTTPConnection(url.hostname,url.port,timeout=120)
+                    conn.putrequest("POST","/upload/image")
+                    conn.putheader("Content-Type","multipart/form-data; boundary="+boundary)
+                    conn.putheader("Content-Length",str(len(prefix)+int(length)+len(suffix)))
+                    conn.endheaders()
+                    conn.send(prefix)
+                    remaining=int(length)
+                    while remaining:
+                        chunk=self.rfile.read(min(1024*1024,remaining))
+                        if not chunk:
+                            raise ConnectionError("incomplete_upload")
+                        conn.send(chunk)
+                        remaining-=len(chunk)
+                    conn.send(suffix)
+                    response=conn.getresponse()
+                    if response.status!=200:
+                        raise ValueError("comfy_http_"+str(response.status))
+                    answer=json.loads(response.read(65537))
+                    if type(answer) is not dict or type(answer.get("name")) is not str:
+                        raise ValueError("invalid_comfy_upload_response")
+                    self.reply(200,{"state":"uploaded","runtime_id":runtime_id,
+                                    "name":answer["name"],"subfolder":answer.get("subfolder",""),
+                                    "type":answer.get("type","input"),"job_binding":"not_assigned"})
+                except (ValueError,OSError,TypeError) as exc:
+                    self.reply(400,{"error":"comfy_upload_failed","detail":str(exc)[:160]})
+                finally:
+                    if conn: conn.close()
+                return
+                return
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self.reply(415, {"error": "json_required"})
                 return
@@ -1346,53 +1407,6 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 status, result = delete_resource(service, self.headers.get("Authorization"),
                     DELETE_ROUTES[path][0], body)
                 self.reply(status, result)
-                return
-            if path == "/api/host/comfy/upload":
-                import base64
-                import re
-                import uuid
-                from urllib.request import build_opener, HTTPHandler, Request, HTTPRedirectHandler
-                policy=getattr(service,"_host_policy",None)
-                if policy is None or type(body) is not dict or set(body)!={"host_id","runtime_id","filename","data"}:
-                    self.reply(400,{"error":"invalid_upload_request"})
-                    return
-                host_id,runtime_id,filename,encoded=(body[k] for k in ("host_id","runtime_id","filename","data"))
-                if (any(type(v) is not str for v in (host_id,runtime_id,filename,encoded))
-                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}",filename)
-                        or filename in (".","..")):
-                    self.reply(400,{"error":"invalid_upload_filename"})
-                    return
-                runtimes=policy.list_runtimes(host_id,principal.user_id)
-                runtime=next((x for x in runtimes or [] if x["id"]==runtime_id
-                              and x["type"]=="comfyui" and x["enabled"]),None)
-                if runtime is None:
-                    self.reply(403,{"error":"runtime_unavailable"})
-                    return
-                try:
-                    data=base64.b64decode(encoded,validate=True)
-                    if not data or len(data)>8*1024*1024:
-                        raise ValueError("file_size_out_of_range")
-                    boundary="minglefield"+uuid.uuid4().hex
-                    prefix=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"image\"; filename=\""+
-                            filename+"\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode()
-                    payload=prefix+data+("\r\n--"+boundary+"--\r\n").encode()
-                    class NoRedirect(HTTPRedirectHandler):
-                        def redirect_request(self,req,fp,code,msg,headers,newurl):
-                            return None
-                    opener=build_opener(HTTPHandler(),NoRedirect())
-                    req=Request(runtime["endpoint"]+"/upload/image",data=payload,
-                                headers={"Content-Type":"multipart/form-data; boundary="+boundary},
-                                method="POST")
-                    with opener.open(req,timeout=20) as response:
-                        answer=json.loads(response.read(65537))
-                    if type(answer) is not dict or type(answer.get("name")) is not str:
-                        raise ValueError("invalid_comfy_upload_response")
-                    self.reply(200,{"state":"uploaded","runtime_id":runtime_id,
-                                    "name":answer["name"],"subfolder":answer.get("subfolder",""),
-                                    "type":answer.get("type","input"),
-                                    "job_binding":"not_assigned"})
-                except (ValueError,OSError,TypeError) as exc:
-                    self.reply(400,{"error":"comfy_upload_failed","detail":str(exc)[:160]})
                 return
             if path in ("/api/host/comfy/inspect", "/api/host/comfy/import"):
                 policy=getattr(service,"_host_policy",None)

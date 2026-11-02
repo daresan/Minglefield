@@ -1433,14 +1433,52 @@ document.getElementById("gameGitSave").onclick=async()=>{
   document.getElementById("gameGitStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
+function gameUpdateSignal(data,status){
+  if(status!==200||!data||typeof data!=="object")return "unknown";
+  const updates=Array.isArray(data.updates)?data.updates:[];
+  if(updates.some(x=>x.verification_state==="invalid"||x.state==="invalid"))return "red";
+  if(data.installation_state==="manual_review_required"||
+     updates.some(x=>x.version_comparison==="newer_release_than_declared"))return "yellow";
+  return "unknown";
+}
+function setGameUpdateSignal(signal){
+  const indicator=document.getElementById("gameUpdateIndicator");
+  indicator.dataset.signal=signal;
+  indicator.title=signal==="red"?"Integrationsnachweis ungültig":
+    signal==="yellow"?"Prüfung erforderlich; kein verifiziertes Update":
+    "Game-Update: Status unbekannt oder nicht verifiziert";
+}
+function renderGameUpdatePreview(data,status){
+  const target=document.getElementById("gameUpdateStatus");
+  const updates=Array.isArray(data?.updates)?data.updates:[];
+  const lines=["HTTP-Status: "+status,"Projekt: "+(data?.project_id||"unbekannt"),
+    "Installationsstatus: "+(data?.installation_state||"unbekannt"),
+    "Prüfstatus: "+(data?.state||"unbekannt")];
+  if(data?.reason)lines.push("Grund: "+data.reason);
+  if(!updates.length)lines.push("Keine prüfbaren Integrationsupdates vorhanden.");
+  for(const item of updates){
+    lines.push("","Integration: "+(item.integration_id||"unbekannt"),
+      "Prüfung: "+(item.state||"unbekannt"),
+      "Deklarierte Version: "+(item.declared_version||item.installed_version||"unbekannt"),
+      "Verfügbare Release: "+(item.available_version||"unbekannt"),
+      "Versionsvergleich: "+(item.version_comparison||"unbekannt"),
+      "Installation verifiziert: "+(item.verification_state==="installation_verified"?"ja":"nein"),
+      "Kompatibilität: "+(item.preview?.compatibility?.state||"unbekannt"),
+      "Migration: "+(item.preview?.migration?.state||"unbekannt"),
+      "Integrität: "+(item.preview?.artifact_integrity?.state||"unbekannt"),
+      "Installation erlaubt: "+(item.preview?.installation_allowed===true?"ja":"nein"));
+    if(item.release_notes)lines.push("Release Notes: "+item.release_notes);
+    if(item.preview?.changed_files?.state)lines.push("Dateivergleich: "+item.preview.changed_files.state);
+  }
+  target.textContent=lines.join("\n");
+}
 let gameUpdateRequestId=0;
 async function refreshSelectedGameUpdateSignal(){
   const indicator=document.getElementById("gameUpdateIndicator");
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   const host=gameHostSelect.value;
   const requestId=++gameUpdateRequestId;
-  indicator.dataset.signal="unknown";
-  indicator.title="Game-Update: Status unbekannt oder nicht verifiziert";
+  setGameUpdateSignal("unknown");
   if(!project||!host)return;
   const query="?host_id="+encodeURIComponent(host)+"&project_id="+encodeURIComponent(project.project_id);
   try{
@@ -1448,8 +1486,7 @@ async function refreshSelectedGameUpdateSignal(){
     if(requestId!==gameUpdateRequestId)return;
     const state=response.data?.installation_state;
     if(response.status===200&&state==="manual_review_required"){
-      indicator.dataset.signal="yellow";
-      indicator.title="Game-Integration: Manuelle Prüfung erforderlich";
+      setGameUpdateSignal("yellow");
     }
   }catch(error){if(requestId===gameUpdateRequestId)indicator.title="Game-Update: Prüfung nicht möglich";}
 }
@@ -1573,15 +1610,9 @@ document.getElementById("gameIntegrationUpdateInspect").onclick=async()=>{
   const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
     "&project_id="+encodeURIComponent(project.project_id);
   const response=await request("/api/game/integration/releases"+query);
-  const indicator=document.getElementById("gameUpdateIndicator");
-  const updates=Array.isArray(response.data?.updates)?response.data.updates:[];
-  const invalid=updates.some(x=>x.verification_state==="invalid"||x.state==="invalid");
-  const newer=updates.some(x=>x.version_comparison==="newer_release_than_declared");
-  const signal=response.status!==200?"unknown":invalid?"red":newer?"yellow":"unknown";
-  indicator.dataset.signal=signal;
-  indicator.title=signal==="yellow"?"Neuere Release als deklarierte Version; Installation nicht verifiziert":signal==="red"?"Integrationskonflikt":"Game-Update: Status unbekannt oder nicht verifiziert";
-  document.getElementById("gameUpdateStatus").textContent=JSON.stringify(
-    {status:response.status,...response.data},null,2);
+  if(project.project_id!==document.getElementById("gameProjectSelect").value)return;
+  setGameUpdateSignal(gameUpdateSignal(response.data,response.status));
+  renderGameUpdatePreview(response.data,response.status);
 };
 document.getElementById("gameCompatibilityInspect").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);

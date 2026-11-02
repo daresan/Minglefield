@@ -72,6 +72,17 @@ class GameReleaseMetadataTests(unittest.TestCase):
         self.assertEqual(fetch_releases("a/b", opener=lambda *a, **kw:
                          Response(b'{}'))["state"], "unavailable")
 
+    def test_incomplete_malformed_offline_and_oversized_fail_closed(self):
+        valid={"tag_name":"1.0","html_url":"https://github.com/a/b/releases/tag/1.0"}
+        for payload,link in [([valid], '<url>; rel="next"'), ([valid,None], ""),
+                             ([dict(valid,prerelease="false")], "")]:
+            result=fetch_releases("a/b",opener=lambda *a,**k: Response(json.dumps(payload).encode(),link))
+            self.assertEqual(result["state"],"unavailable")
+        self.assertEqual(fetch_releases("a/b",opener=lambda *a,**k: Response(b"x"*(1024*1024+1)))["reason"],"response_too_large")
+        def offline(*args,**kwargs):
+            raise TimeoutError()
+        self.assertEqual(fetch_releases("a/b",opener=offline)["state"],"unavailable")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,6 +24,9 @@ def normalize_release(record, repository):
             or not parsed.path.startswith(prefix) or not parsed.path[len(prefix):]
             or parsed.query or parsed.fragment):
         raise ValueError("invalid_release_url")
+    for flag in ("draft", "prerelease"):
+        if flag in record and type(record[flag]) is not bool:
+            raise ValueError("invalid_release_flag")
     notes, published = record.get("body"), record.get("published_at")
     if notes is not None and not isinstance(notes, str):
         raise ValueError("invalid_release_notes")
@@ -44,13 +47,16 @@ def fetch_releases(repository, *, opener=urlopen):
     try:
         with opener(request, timeout=8) as response:
             raw = response.read(_MAX_BYTES + 1)
+            link = response.headers.get("Link", "")
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         return {"state": "unavailable", "reason": type(exc).__name__, "releases": []}
+    if 'rel="next"' in link:
+        return {"state": "unavailable", "reason": "incomplete_release_catalog", "releases": []}
     if len(raw) > _MAX_BYTES:
         return {"state": "unavailable", "reason": "response_too_large", "releases": []}
     try:
         records = json.loads(raw)
-        if not isinstance(records, list):
+        if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
             raise ValueError("invalid_release_list")
         releases = [normalize_release(record, repository) for record in records
                     if isinstance(record, dict) and record.get("draft") is not True]

@@ -1,7 +1,7 @@
 """Read-only update discovery for registry-authorized integration sources.
 
-Version comparison uses packaging.version (PEP 440), pending a SemVer-specific
-dependency decision. This module never claims artifact integrity or installation.
+Version comparison uses packaging.version (PEP 440), stable public versions only.
+This module never claims artifact integrity or installation.
 """
 from packaging.version import Version, InvalidVersion
 from urllib.parse import quote
@@ -12,12 +12,13 @@ def _version(value):
     if not isinstance(value,str) or not value.strip():
         return None
     try:
-        return Version(value.strip())
+        version = Version(value.strip())
+        return None if version.local is not None else version
     except InvalidVersion:
         return None
 
 
-def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
+def _discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
                                 compare_fetcher=fetch_compare_files):
     """Compare a declared version against stable releases from a matching curated source."""
     if not isinstance(entry,dict) or not isinstance(catalog,dict):
@@ -37,7 +38,7 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
             or match.get("publisher") is None):
         return {"state":"unknown","reason":"untrusted_source"}
     installed=_version(entry.get("declared_version"))
-    if installed is None:
+    if installed is None or installed.is_prerelease or installed.is_devrelease:
         return {"state":"unknown","reason":"invalid_installed_version"}
     if not isinstance(source,dict) or source.get("provider")!="github":
         return {"state":"unknown","reason":"unsupported_release_provider"}
@@ -50,6 +51,8 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
     releases=result.get("releases")
     if not isinstance(releases,list) or any(not isinstance(r,dict) for r in releases):
         return {"state":"unknown","reason":"invalid_release_data"}
+    if result.get("complete") is False:
+        return {"state":"unknown","reason":"incomplete_release_catalog"}
     versions=[]
     for release in releases:
         if release.get("draft") or release.get("prerelease"):
@@ -82,7 +85,8 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
             pass
     return {"state":"unknown","reason":"installation_not_verified",
             "version_comparison":"newer_release_than_declared" if latest>installed else "no_newer_release_than_declared",
-            "installed_version":entry["declared_version"],
+            "declared_version":entry["declared_version"],
+            "comparison_state":"update_available" if latest>installed else "up_to_date",
             "available_version":release["tag_name"],
             "release_notes":release.get("release_notes",""),
             "release_url":release.get("release_url"),
@@ -97,3 +101,18 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
                        "artifact_integrity":{"state":"unknown"},
                        "installation_allowed":False},
             "note":"Version comparison only; installation and artifact integrity unverified."}
+
+
+def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
+                                compare_fetcher=fetch_compare_files):
+    """Discovery states compare declarations only; installation state stays unknown."""
+    result = _discover_integration_update(entry, catalog, fetcher=fetcher,
+                                         compare_fetcher=compare_fetcher)
+    errors = {"invalid_input", "invalid_registry_catalog", "invalid_release_data",
+              "release_source_unavailable"}
+    result.setdefault("comparison_state", "error" if result.get("reason") in errors else "unknown")
+    result.setdefault("verification_state", "unknown")
+    result["comparison_basis"] = "declared_version"
+    result["version_scheme"] = "pep440"
+    result["installation_allowed"] = False
+    return result

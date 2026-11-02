@@ -78,6 +78,34 @@ class GameIntegrationUpdateTests(unittest.TestCase):
         self.assertEqual(discover_integration_update(dict(ENTRY,declared_version="n/a"),CATALOG,fetcher=releases)["state"],"unknown")
         self.assertEqual(discover_integration_update(ENTRY,CATALOG,fetcher=lambda _: (_ for _ in ()).throw(OSError()))["state"],"unknown")
 
+    def test_explicit_comparison_states_and_pep440_policy(self):
+        for declared, tag, expected in [
+            ("1.2", "v1.2.0", "up_to_date"),
+            ("1.9", "1.10", "update_available"),
+            ("2.0", "1.9", "up_to_date"),
+            ("1.0", "1.0.post1", "update_available"),
+            ("1.0+build", "2.0", "unknown"),
+            ("1.0rc1", "2.0", "unknown"),
+            ("1.0", "2.0+build", "unknown"),
+            ("1.0", "2.0.dev1", "unknown"),
+            ("1.0", "2.0rc1", "unknown")]:
+            with self.subTest(declared=declared, tag=tag):
+                result=discover_integration_update(dict(ENTRY,declared_version=declared),
+                    CATALOG,fetcher=lambda _: {"state":"available","releases":[{"tag_name":tag}]},
+                    compare_fetcher=lambda *_: {"state":"unknown"})
+                self.assertEqual(result["comparison_state"],expected)
+                self.assertEqual(result["state"],"unknown")
+                self.assertFalse(result["installation_allowed"])
+                self.assertEqual(result["version_scheme"],"pep440")
+
+    def test_errors_are_distinct_from_unknown_and_current(self):
+        for payload in ({"state":"unavailable"}, {"state":"available","releases":[None]}):
+            result=discover_integration_update(ENTRY,CATALOG,fetcher=lambda _: payload)
+            self.assertEqual(result["comparison_state"],"error")
+        result=discover_integration_update(ENTRY,CATALOG,
+            fetcher=lambda _: {"state":"available","complete":False,"releases":[{"tag_name":"1.2.3"}]})
+        self.assertEqual(result["comparison_state"],"unknown")
+
 
 if __name__=="__main__":
     unittest.main()

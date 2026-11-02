@@ -1546,6 +1546,15 @@ def handler_for(service, *, local_bootstrap_secret=None):
                             self.reply(200,{"choices":result})
                         except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
                             self.reply(502,{"error":"file_choices_unavailable"})
+            elif path == "/api/host/settings":
+                policy=getattr(service,"_host_policy",None)
+                host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_ids)!=1:
+                    self.reply(400,{"error":"invalid_settings_query"})
+                else:
+                    settings=policy.host_settings(host_ids[0],principal.user_id)
+                    self.reply(403 if settings is None else 200,
+                               {"error":"not_host_owner"} if settings is None else {"settings":settings})
             elif path == "/api/host/runtimes":
                 policy=getattr(service,"_host_policy",None)
                 host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
@@ -1567,7 +1576,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -1654,14 +1663,14 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(200, {"status": "session_revoked"})
                 return
             if path == "/api/host/assets/stage":
-                import os
                 from pathlib import Path
                 from game_asset_staging import ProjectAssetStaging, StagingError, MAX_ASSET_BYTES
                 policy=getattr(service,"_host_policy",None)
                 host_id=self.headers.get("X-Minglefield-Host","")
                 filename=self.headers.get("X-Minglefield-Filename","")
                 length=self.headers.get("Content-Length","")
-                configured=os.environ.get("MINGLEFIELD_GAME_STAGING_ROOT","")
+                settings=policy.host_settings(host_id,principal.user_id) if policy else None
+                configured=(settings or {}).get("staging_root","")
                 if self.headers.get("Content-Type","").split(";")[0].strip()!="application/octet-stream":
                     self.reply(415,{"error":"binary_upload_required"})
                     return
@@ -1675,7 +1684,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(403,{"error":"host_not_owned"})
                     return
                 try:
-                    staging=ProjectAssetStaging(host_id,Path(configured)/host_id)
+                    staging=ProjectAssetStaging(host_id,Path(configured))
                     record=staging.stage(filename,self.rfile,int(length))
                     self.reply(201,{"state":"staged","asset":record,"comfy_transferred":False})
                 except (StagingError,OSError,ValueError) as exc:
@@ -1753,6 +1762,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 body = json.loads(self.rfile.read(int(length)))
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
+                return
+            if path=="/api/host/settings":
+                policy=getattr(service,"_host_policy",None)
+                if (policy is None or type(body) is not dict or
+                        set(body)!={"host_id","settings"} or type(body["host_id"]) is not str):
+                    self.reply(400,{"error":"invalid_settings_request"})
+                    return
+                decision=policy.save_host_settings(body["host_id"],principal.user_id,body["settings"])
+                self.reply(200 if decision.state=="saved" else 400,
+                           {"state":decision.state,"reason":decision.reason})
                 return
             if path=="/api/host/jobs/execute":
                 policy=getattr(service,"_host_policy",None)

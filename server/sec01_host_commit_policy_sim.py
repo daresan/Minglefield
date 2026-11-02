@@ -148,6 +148,26 @@ class HostCommitPolicy:
                 (name.strip(),*paths,host_id,owner_id,project_id,revision))
         return HostDecision("saved","game_project_updated")
 
+    def delete_game_project(self, host_id, owner_id, project_id, revision):
+        """Remove only a registry row, never project directories or files."""
+        if not ident(project_id) or type(revision) is not int or revision < 1:
+            return HostDecision("denied","invalid_project_delete")
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return HostDecision("denied","not_host_owner")
+            row=db.execute("""SELECT settings_revision FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+            if row is None:
+                return HostDecision("denied","project_not_found")
+            if row[0]!=revision:
+                return HostDecision("denied","revision_conflict")
+            db.execute("""DELETE FROM alpha_game_projects WHERE host_id=? AND owner_id=?
+                AND project_id=? AND settings_revision=?""",
+                (host_id,owner_id,project_id,revision))
+        return HostDecision("deleted","game_project_unregistered")
+
     def host_settings(self, host_id, owner_id):
         with self.authority.store._tx() as db:
             if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",

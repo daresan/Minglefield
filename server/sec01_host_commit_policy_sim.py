@@ -261,6 +261,26 @@ class HostCommitPolicy:
                 WHERE host_id=? AND job_id=? AND state='submitting'""",
                 ("submitted" if prompt_id else "submission_unknown",host_id,job_id))
 
+    def record_comfy_preflight_failure(self, host_id, job_id, error):
+        """Finalize a failure before /prompt; no remote submission is possible."""
+        with self.authority.store._tx() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_comfy_executions(
+                job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                prompt_id TEXT, error TEXT)""")
+            updated=db.execute("""UPDATE sec01_host_jobs SET state='failed'
+                WHERE host_id=? AND job_id=? AND state='submitting'""",
+                (host_id,job_id)).rowcount
+            if not updated:
+                return False
+            db.execute("""INSERT INTO sec01_host_comfy_executions
+                (job_id,host_id,prompt_id,error) VALUES(?,?,NULL,?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                prompt_id=NULL,error=excluded.error""",
+                (job_id,host_id,error))
+            db.execute("""DELETE FROM sec01_host_active_slots
+                WHERE host_id=? AND effect_key=?""",(host_id,job_id))
+            return True
+
     def comfy_execution_context(self, host_id, owner_id, job_id):
         with self.authority.store._tx() as db:
             if db.execute("""SELECT 1 FROM sec01_host_owners

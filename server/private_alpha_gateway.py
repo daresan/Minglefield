@@ -703,6 +703,24 @@ function renderJobParameters(){
     area.append(section);
   }
 }
+async function refreshJobFileChoices(){
+  const host=hv("jobHostSelect"),effect=hv("jobEffectSelect");
+  if(!host||!effect)return;
+  const response=await request("/api/host/comfy/file-choices?host_id="+
+    encodeURIComponent(host)+"&effect_id="+encodeURIComponent(effect));
+  if(response.status!==200)return;
+  for(const field of document.querySelectorAll("#jobParameterFields select[data-binding]")){
+    const choices=response.data.choices?.[field.dataset.binding];
+    if(!Array.isArray(choices))continue;
+    const previous=field.value;
+    field.replaceChildren();
+    for(const value of choices){
+      const option=document.createElement("option");
+      option.value=value;option.textContent=value;field.append(option);
+    }
+    if(choices.includes(previous))field.value=previous;
+  }
+}
 function renderJobEffects(){
   const host=hostCache.find(h=>h.host_id===hv("jobHostSelect"));
   const select=document.getElementById("jobEffectSelect");
@@ -715,6 +733,7 @@ function renderJobEffects(){
   if([...select.options].some(o=>o.value===previous))select.value=previous;
   renderJobParameters();
   refreshJobComfyRuntimes();
+  refreshJobFileChoices();
 }
 async function refreshJobComfyRuntimes(){
   const select=document.getElementById("jobComfyRuntime");
@@ -732,7 +751,7 @@ async function refreshJobComfyRuntimes(){
   if([...select.options].some(o=>o.value===preferred))select.value=preferred;
   else if([...select.options].some(o=>o.value===old))select.value=old;
 }
-document.getElementById("jobEffectSelect").onchange=()=>{renderJobParameters();refreshJobComfyRuntimes();};
+document.getElementById("jobEffectSelect").onchange=()=>{renderJobParameters();refreshJobComfyRuntimes();refreshJobFileChoices();};
 document.getElementById("jobHostSelect").onchange=()=>{
   hostSelect.value=hv("jobHostSelect");renderHost();renderJobEffects();
 };
@@ -1017,6 +1036,7 @@ document.getElementById("jobComfyUpload").onclick=async()=>{
         "X-Minglefield-Filename":file.name},body:file});
     if(result.status!==200){output.textContent=JSON.stringify({uploaded,error:result.data},null,2);return;}
     uploaded.push(result.data);
+    await refreshJobFileChoices();
     output.textContent=JSON.stringify({uploaded,note:"Dateien liegen in ComfyUI. Noch keine automatische Workflow-/Job-Bindung."},null,2);
   }
 };

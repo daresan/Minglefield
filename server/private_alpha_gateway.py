@@ -739,18 +739,38 @@ function renderJobParameters(){
       picker.style.cssText="max-width:100%;font-size:12px";
       const status=document.createElement("small");
       status.textContent="Noch keine lokale Datei ausgewählt.";
-      picker.addEventListener("change",()=>{
+      picker.addEventListener("change",async()=>{
         const selected=picker.files?.[0];
-        status.textContent=selected
-          ?selected.name+" ("+selected.size+" Bytes) – noch nicht im Projekt-Staging gespeichert"
-          :"Noch keine lokale Datei ausgewählt.";
-        // Never silently substitute an unpersisted browser File for a durable job asset.
-        document.getElementById("effectManual").disabled=
-          !!document.querySelector('#jobParameterFields input[data-file-binding]')
-            &&[...document.querySelectorAll('#jobParameterFields input[data-file-binding]')]
-                .some(x=>x.files?.length);
-        if(selected)document.getElementById("jobActionOutput").textContent=
-          "Datei ausgewählt, aber noch nicht persistent gestaged. Jobanlage gesperrt, bis die Projekt-Staging-Anbindung implementiert ist.";
+        if(!selected){status.textContent="Noch keine lokale Datei ausgewählt.";return;}
+        const host_id=hv("jobHostSelect");
+        const effect_id=hv("jobEffectSelect");
+        document.getElementById("effectManual").disabled=true;
+        status.textContent="Lokales Staging läuft: "+selected.name;
+        try{
+          const result=await request("/api/host/assets/stage",{
+            method:"POST",
+            headers:{"Content-Type":"application/octet-stream",
+              "X-Minglefield-Host":host_id,
+              "X-Minglefield-Filename":selected.name},
+            body:selected});
+          if(result.status!==201){
+            status.textContent="Staging fehlgeschlagen: "+JSON.stringify(result.data);
+            return;
+          }
+          if(host_id!==hv("jobHostSelect")||effect_id!==hv("jobEffectSelect")){
+            status.textContent="Asset gespeichert, aber Host/Effekt hat sich geändert.";
+            return;
+          }
+          picker.dataset.stagedAssetId=result.data.asset.asset_id;
+          status.textContent="Lokal gespeichert: "+selected.name+
+            " · Asset-ID "+result.data.asset.asset_id+
+            " · SHA-256 "+result.data.asset.sha256;
+          document.getElementById("jobActionOutput").textContent=
+            "Datei dauerhaft im lokalen Staging gespeichert. Noch kein ComfyUI-Transfer. "+
+            "Jobanlage bleibt bis zur persistenten Asset-Job-Bindung gesperrt.";
+        }catch(error){
+          status.textContent="Staging fehlgeschlagen: "+String(error);
+        }
       });
       label.append(picker,status);
     }

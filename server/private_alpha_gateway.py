@@ -1795,6 +1795,16 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(404 if paths is None else 200,
                                {"error":"project_not_found_or_forbidden"} if paths is None
                                else {"paths":paths})
+            elif path == "/api/git/profiles":
+                policy=getattr(service,"_host_policy",None)
+                hosts=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(hosts)!=1:
+                    self.reply(400,{"error":"invalid_git_profile_query"})
+                else:
+                    profiles=policy.list_git_profiles(hosts[0],principal.user_id)
+                    self.reply(403 if profiles is None else 200,
+                               {"error":"not_host_owner"} if profiles is None else
+                               {"profiles":profiles})
             elif path == "/api/game/projects":
                 policy=getattr(service,"_host_policy",None)
                 host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
@@ -2021,6 +2031,17 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 body = json.loads(self.rfile.read(int(length)))
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
+                return
+            if path=="/api/git/profiles":
+                policy=getattr(service,"_host_policy",None)
+                if (policy is None or type(body) is not dict or
+                        set(body)!={"host_id","profile"} or type(body["host_id"]) is not str):
+                    self.reply(400,{"error":"invalid_git_profile_request"})
+                    return
+                decision=policy.save_git_profile(body["host_id"],principal.user_id,body["profile"])
+                self.reply(200 if decision.state=="saved" else
+                           403 if decision.reason=="not_host_owner" else 400,
+                           {"state":decision.state,"reason":decision.reason})
                 return
             if path=="/api/game/projects/prepare":
                 policy=getattr(service,"_host_policy",None)

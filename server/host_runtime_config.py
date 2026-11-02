@@ -94,10 +94,11 @@ def parameter_definition(candidate):
     name = c.get("input", "").lower()
     multiline = kind == "string" and any(x in name for x in ("prompt", "text", "description", "system_message"))
     widget = {"integer": "number", "number": "number", "boolean": "checkbox",
-              "enum": "select", "string": "textarea" if multiline else "text"}[kind]
+              "enum": "select", "file": "text",
+              "string": "textarea" if multiline else "text"}[kind]
     c.update({"schema_version": 1, "widget": widget, "constraints": {
         **c.get("limits", {}), **({"choices": opts} if kind == "enum" else {})},
-        "asset_type": None})
+        "asset_type": "file" if kind == "file" else None})
     return c
 
 

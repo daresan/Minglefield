@@ -80,7 +80,8 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
                          "comparison_url":comparison_url}
         except (ValueError,TypeError,KeyError,OSError):
             pass
-    return {"state":"update_available" if latest>installed else "up_to_date",
+    return {"state":"unknown","reason":"installation_not_verified",
+            "version_comparison":"newer_release_than_declared" if latest>installed else "no_newer_release_than_declared",
             "installed_version":entry["declared_version"],
             "available_version":release["tag_name"],
             "release_notes":release.get("release_notes",""),

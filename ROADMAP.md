@@ -47,13 +47,17 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Local Git project import/create, manifest and dependency validation, versioned asset output and reviewable changes.
 - [ ] First reproducible human + agent game-asset creation workflow; no remote hosting or autonomous external effects before independent security gates.
 
+## Local ComfyUI GLB P0 — accepted functional slice
+- [x] User-reported successful SkinTokens workflow execution via alpha UI; 431 conformance tests passed. See [P0 acceptance and limitations](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
+- [ ] Independently capture completed ComfyUI history and output provenance in P1.
+
 ## Near-term design — Game tab and managed local assets (approved direction; not shipped)
 - [x] Record requirements and staged implementation gates in [Game Workspace and Asset Lifecycle v0.1 draft](docs/GAME-WORKSPACE-AND-ASSET-LIFECYCLE-v0.1-DRAFT.md).
 - [ ] Game tab: create/import/select Git-backed games; edit per-project staging and output paths.
 - [ ] Persistent local asset staging via native file dialog; store asset IDs and job bindings without premature ComfyUI transfer.
 - [ ] Transfer staged inputs to ComfyUI **only when the job starts**, using generic file-input capabilities rather than node-specific UI functions.
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
-- [ ] **P0 release gate before Game tab (P1):** verify the parameter fix with a fully passing conformance suite; check real workflow parameter recognition/binding; obtain the user's successful visual acceptance test and explicit approval. No P1 implementation until sign-off.
+- [x] **P0 release gate before Game tab (P1):** 431 conformance tests passed; Load3D GLB binding confirmed; user reported successful SkinTokens execution and approved continuation. See [P0 acceptance](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
 
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.

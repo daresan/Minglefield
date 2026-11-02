@@ -14,7 +14,8 @@ class GameProjectRegistryTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.store = AlphaAuthStore(Path(temp.name) / "alpha.sqlite3")
+        self.root = Path(temp.name)
+        self.store = AlphaAuthStore(self.root / "alpha.sqlite3")
         self.authority = IntegratedAlphaAdmission(self.store)
         self.policy = HostCommitPolicy(self.authority)
         with self.store._tx() as db:
@@ -23,7 +24,7 @@ class GameProjectRegistryTests(unittest.TestCase):
 
     def test_persistence_and_owner_isolation(self):
         args = ("host.one", "user.owner", "game.one", "My Game",
-                "/workspace/game", "/workspace/stage", "/workspace/output")
+                str(self.root / "game"), str(self.root / "stage"), str(self.root / "output"))
         self.assertEqual(self.policy.create_game_project(*args).state, "created")
         self.assertEqual(self.policy.create_game_project(*args).reason, "project_id_exists")
         self.assertIsNone(self.policy.list_game_projects("host.one", "user.other"))
@@ -40,7 +41,7 @@ class GameProjectRegistryTests(unittest.TestCase):
         original = self.policy.host_settings("host.one", "user.owner")
         self.assertEqual(self.policy.create_game_project(
             "host.one", "user.owner", "game.one", "Test",
-            "relative/path", "/workspace/stage", "/workspace/output").state, "denied")
+            "relative/path", str(self.root / "stage"), str(self.root / "output")).state, "denied")
         self.assertEqual(self.policy.host_settings("host.one", "user.owner"), original)
         self.assertEqual(self.policy.list_game_projects("host.one", "user.owner"), [])
 

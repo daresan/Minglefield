@@ -59,6 +59,12 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
 - [x] **P0 release gate before Game tab (P1):** 431 conformance tests passed; Load3D GLB binding confirmed; user reported successful SkinTokens execution and approved continuation. See [P0 acceptance](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
 
+## P1.4f.2a — Integration metadata contract
+
+- [x] Draft identity, installed-version provenance, trusted release-source mapping, multiple-integration semantics and legacy unknown states in [Game Integration Metadata v0.1 draft](docs/GAME-INTEGRATION-METADATA-v0.1-DRAFT.md).
+- [ ] Implement read-only inspection with owner isolation and negative conformance tests, without assuming the final package/lockfile format.
+- [ ] Decide final persistence and source-of-truth boundary before writing integration metadata to project manifests or lockfiles.
+
 ## P1.4f schema/convention audit (2026-11-02)
 
 Existing conventions checked on the active feature branch:

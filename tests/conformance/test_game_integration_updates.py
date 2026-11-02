@@ -29,7 +29,8 @@ class GameIntegrationUpdateTests(unittest.TestCase):
         preview=report["preview"]
         self.assertEqual(preview["state"],"incomplete")
         self.assertEqual(preview["release_notes"],"Upgrade")
-        self.assertEqual(preview["changed_files"],{"state":"unknown","files":[]})
+        self.assertEqual(preview["changed_files"],{"state":"unknown","files":[],
+                         "comparison_url":"https://github.com/alice/godot/compare/1.2.3...v1.3.0"})
         self.assertEqual(preview["compatibility"]["state"],"unknown")
         self.assertEqual(preview["migration"]["state"],"unknown")
         self.assertEqual(preview["artifact_integrity"]["state"],"unknown")
@@ -37,7 +38,9 @@ class GameIntegrationUpdateTests(unittest.TestCase):
 
     def test_up_to_date_and_no_comparable_releases(self):
         entry=dict(ENTRY,declared_version="1.3.0")
-        self.assertEqual(discover_integration_update(entry,CATALOG,fetcher=releases)["state"],"up_to_date")
+        current=discover_integration_update(entry,CATALOG,fetcher=releases)
+        self.assertEqual(current["state"],"up_to_date")
+        self.assertIsNone(current["preview"]["changed_files"]["comparison_url"])
         self.assertEqual(discover_integration_update(ENTRY,CATALOG,fetcher=lambda _:{"state":"available","releases":[]})["state"],"unknown")
 
     def test_source_mismatch_and_missing_registry_fail_closed(self):

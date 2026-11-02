@@ -2068,6 +2068,19 @@ def handler_for(service, *, local_bootstrap_secret=None):
     return Handler
 
 
+def default_alpha_database():
+    """Stable per-user database outside the Git checkout; auto-created on first run."""
+    import os
+    from pathlib import Path
+    if os.name=="nt":
+        base=Path(os.environ.get("LOCALAPPDATA") or (Path.home()/"AppData"/"Local"))
+    else:
+        base=Path.home()/".local"/"share"
+    directory=base/"Minglefield"
+    directory.mkdir(parents=True,exist_ok=True)
+    return str(directory/"alpha.sqlite3")
+
+
 def run_local():
     parser = argparse.ArgumentParser(description="LOCAL simulation only; NEVER publish as-is")
     parser.add_argument("--port", type=int, default=8767)
@@ -2075,9 +2088,9 @@ def run_local():
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port must be 1024..65535")
-    if args.auth_db:
+    if True:
         from private_alpha_auth import AlphaAuthStore
-        service = AlphaAuthStore(args.auth_db)
+        service = AlphaAuthStore(args.auth_db or default_alpha_database())
         from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
         from sec01_host_commit_policy_sim import HostCommitPolicy
         service._host_policy=HostCommitPolicy(IntegratedAlphaAdmission(service))

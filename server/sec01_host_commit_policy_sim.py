@@ -220,6 +220,57 @@ class HostCommitPolicy:
                 result[key]={"path":raw,"state":"unavailable"}
         return result
 
+    @staticmethod
+    def _prepare_game_ignore(repo, staging, output):
+        """Append anchored ignore rules for in-repo asset directories only."""
+        import subprocess
+        from pathlib import Path
+        root=Path(repo).resolve()
+        paths=[Path(staging).resolve(),Path(output).resolve()]
+        rules=[]
+        for path in paths:
+            if not path.is_relative_to(root):
+                continue
+            relative=path.relative_to(root)
+            if any(part in (".git", ".minglefield") for part in relative.parts):
+                return {"state":"denied","reason":"reserved_asset_directory"}
+            rules.append("/"+"/".join(relative.parts)+"/")
+        if not rules:
+            return {"state":"unchanged","rules_added":[],"tracked_assets":[]}
+        ignore=root/".gitignore"
+        if ignore.is_symlink() or (ignore.exists() and not ignore.is_file()):
+            return {"state":"denied","reason":"gitignore_not_regular_file"}
+        try:
+            existing=ignore.read_text(encoding="utf-8-sig") if ignore.exists() else ""
+        except (OSError,UnicodeError):
+            return {"state":"denied","reason":"gitignore_unreadable"}
+        present=set(existing.splitlines())
+        added=[rule for rule in dict.fromkeys(rules) if rule not in present]
+        tracked=[]
+        try:
+            result=subprocess.run(["git","-C",str(root),"rev-parse","--show-toplevel"],
+                                  capture_output=True,text=True,timeout=8,
+                                  stdin=subprocess.DEVNULL)
+            if result.returncode==0 and Path(result.stdout.strip()).resolve()==root:
+                tracked_result=subprocess.run(["git","-C",str(root),"ls-files","--",
+                                               *[rule.strip("/") for rule in rules]],
+                                               capture_output=True,text=True,timeout=8,
+                                               stdin=subprocess.DEVNULL)
+                if tracked_result.returncode==0:
+                    tracked=tracked_result.stdout.splitlines()
+        except (OSError,subprocess.TimeoutExpired,ValueError):
+            pass
+        if added:
+            try:
+                with ignore.open("a",encoding="utf-8",newline="\n") as stream:
+                    if existing and not existing.endswith(("\n","\r")):
+                        stream.write("\n")
+                    stream.write("\n".join(added)+"\n")
+            except OSError:
+                return {"state":"denied","reason":"gitignore_write_failed"}
+        return {"state":"updated" if added else "unchanged",
+                "rules_added":added,"tracked_assets":tracked}
+
     def prepare_game_project_directories(self, host_id, owner_id, project_id, revision):
         """Explicitly create only missing staging/output directories for a current project."""
         from pathlib import Path
@@ -252,7 +303,11 @@ class HostCommitPolicy:
                 if not path.is_dir():
                     path.mkdir(parents=True,exist_ok=True)
                     created.append(str(path))
-            return {"state":"prepared","reason":"project_directories_ready","created":created}
+            ignore=self._prepare_game_ignore(repo,staging,output)
+            if ignore["state"]=="denied":
+                return {"state":"denied","reason":ignore["reason"],"created":created}
+            return {"state":"prepared","reason":"project_directories_ready",
+                    "created":created,"gitignore":ignore}
         except (OSError,ValueError):
             return {"state":"denied","reason":"filesystem_error"}
 

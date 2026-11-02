@@ -59,6 +59,24 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
 - [x] **P0 release gate before Game tab (P1):** 431 conformance tests passed; Load3D GLB binding confirmed; user reported successful SkinTokens execution and approved continuation. See [P0 acceptance](docs/COMFYUI-GLB-P0-ACCEPTANCE.md).
 
+## P1.4f architecture decision — multiple independent integrations
+
+Code audit (2026-11-02):
+- Existing owner-scoped `alpha_game_projects` registry identifies games and repository roots; do not duplicate it.
+- Existing `.minglefield/project.json` schema v1 currently records only `schema_version` and `project_id`. Compatibility inspection accepts additional keys but does **not** validate an integrations collection. No installed integration versions can be inferred from schema v1.
+- Existing `server/game_release_metadata.py` reads GitHub Releases metadata. It does **not** establish whether any GitHub release belongs to a Minglefield integration.
+- Existing update-status API accepts an optional `release_repository` query parameter; the Game tab no longer exposes that field. Do not treat arbitrary client-provided repository names as trusted integration sources.
+
+Agreed design:
+- A game MAY have **zero, one, or multiple** independently versioned Minglefield integrations.
+- An integration has a stable ID, a separately tracked installed version, and an **official, centrally resolved release source**; these are independent of the game project's ID, its own Git remote, the Minglefield platform version, and manifest `schema_version`.
+- Before defining a manifest extension, inspect existing MAP schemas, package/adapter conventions and migration rules; reuse an existing identifier/metadata convention if one exists.
+- The authoritative mapping `integration_id -> release source` must be maintained by Minglefield's trusted integration definitions, not a free-text Game-tab field or an arbitrary game manifest URL. Optional source selection is shown only when multiple valid registered choices exist.
+- Distinguish a game release, a platform release and an integration release. GitHub Releases is a transport for published metadata, **not** evidence of integration identity by itself.
+- Existing v1 manifests are legacy/unversioned with respect to integrations; report `unknown` rather than claiming an update exists. Never silently rewrite them.
+- First implementation stage: read-only, owner-scoped discovery of installed integrations and source mapping, including clear missing/unknown states. Only then implement SemVer comparison using a standard dependency and show release notes. Mutations require a separate explicit preview and confirmation stage.
+- Preserve existing repositories, Git histories, and local files throughout read-only inspection.
+
 ## P1.4f — Game integration update management (in progress)
 
 - [x] P1.4f.1: Read-only project integration status; report unknown update availability when no release source is configured (22 focused tests passed on Windows).

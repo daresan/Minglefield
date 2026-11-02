@@ -84,6 +84,7 @@ class GameProjectHttpTests(unittest.TestCase):
             connection.close()
         for fragment in ('id="gameProjectPanel"', 'id="gameHostSelect"',
                          'id="gameProjectCreate"', 'id="gameProjectUpdate"', 'id="gameProjectSelect"',
+                         'id="gameProjectDelete"', 'id="gameCreatePanel"',
                          '"/api/game/projects"', '["game","Game"]'):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, html)
@@ -104,6 +105,25 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual((data["projects"][0]["name"], data["projects"][0]["settings_revision"]),
                          ("Updated", 2))
+
+    def test_unregister_is_owner_scoped_and_does_not_touch_files(self):
+        existing = self.root / "repo"
+        existing.mkdir()
+        marker = existing / "keep.txt"
+        marker.write_text("preserve")
+        payload = dict(host_id="host.one", project_id="game.remove", name="Temporary",
+                       repository_root=str(existing), staging_root=str(self.root / "stage"),
+                       output_root=str(self.root / "output"))
+        self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
+        deletion = dict(host_id="host.one", project_id="game.remove", settings_revision=1)
+        route = "/api/game/projects/delete"
+        self.assertEqual(self.request("POST", route, payload=deletion)[0], 401)
+        self.assertEqual(self.request("POST", route, self.other, deletion)[0], 403)
+        self.assertEqual(self.request("POST", route, self.owner, deletion)[0], 200)
+        self.assertEqual(self.request("POST", route, self.owner, deletion)[0], 409)
+        self.assertEqual(marker.read_text(), "preserve")
+        self.assertEqual(self.request("GET", "/api/game/projects?host_id=host.one",
+                                      self.owner)[1]["projects"], [])
 
     def test_invalid_requests_are_rejected(self):
         self.assertEqual(self.request("GET", "/api/game/projects", self.owner)[0], 400)

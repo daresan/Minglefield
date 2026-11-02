@@ -665,12 +665,12 @@ function renderJobParameters(){
   }
   for(const [nodeId,items] of groups){
     const section=document.createElement("fieldset");
-    section.style.cssText="min-width:0;margin:4px 0 10px;padding:12px;border:1px solid var(--line);border-radius:10px";
+    section.style.cssText="display:block;min-width:0;width:100%;margin:4px 0 10px;padding:12px;border:1px solid var(--line);border-radius:10px";
     const legend=document.createElement("legend");
     legend.textContent="Node "+nodeId+" · "+items[0].class_type;
     section.append(legend);
     const grid=document.createElement("div");
-    grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px;align-items:start";
+    grid.style.cssText="display:grid;flex-basis:auto;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,170px),1fr));gap:10px;align-items:start";
     section.append(grid);
     for(const p of items){
     const label=document.createElement("label");

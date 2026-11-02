@@ -1602,8 +1602,27 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     if set(body) not in ({"host_id","effect_id"},{"host_id","effect_id","parameters"}):
                         self.reply(400,{"error":"invalid_manual_intent"})
                         return
+                    context=policy.comfy_file_parameter_context(
+                        body["host_id"],principal.user_id,body["effect_id"])
+                    current_choices={}
+                    if context and context["parameters"]:
+                        if not context["runtime"].get("enabled"):
+                            self.reply(403,{"error":"runtime_unavailable"})
+                            return
+                        from urllib.request import Request,urlopen
+                        try:
+                            with urlopen(Request(context["runtime"]["endpoint"]+"/object_info/LoadImage",
+                                                 headers={"Accept":"application/json"}),timeout=5) as response:
+                                metadata=json.loads(response.read(4*1024*1024+1))
+                            options=metadata["LoadImage"]["input"]["required"]["image"][0]
+                            if type(options) is not list or any(type(v) is not str for v in options):
+                                raise ValueError("invalid_file_choices")
+                            current_choices={p["binding"]:options for p in context["parameters"]}
+                        except (OSError,ValueError,KeyError,TypeError,IndexError):
+                            self.reply(502,{"error":"file_choices_unavailable"})
+                            return
                     result=policy.manual_start_mock(body["host_id"],principal.user_id,
-                        body["effect_id"],body.get("parameters"))
+                        body["effect_id"],body.get("parameters"),current_choices)
                 self.reply(200 if result.state in ("claimed","saved","requested_mock","queued_mock")
                            else 403,{"state":result.state,"reason":result.reason,
                                     "simulation_only":True})

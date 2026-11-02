@@ -1470,7 +1470,7 @@ function renderGameUpdatePreview(data,status){
     if(item.release_notes)lines.push("Release Notes: "+item.release_notes);
     if(item.preview?.changed_files?.state)lines.push("Dateivergleich: "+item.preview.changed_files.state);
   }
-  target.textContent=lines.join("\n");
+  target.textContent=lines.join("\\n");
 }
 let gameUpdateRequestId=0;
 async function refreshSelectedGameUpdateSignal(){

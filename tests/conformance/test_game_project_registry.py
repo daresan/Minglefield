@@ -1,11 +1,13 @@
 """Persistent game project registry, owner isolation and legacy compatibility."""
 import tempfile
 import unittest
+import sys
 from pathlib import Path
 
-from server.private_alpha_auth import AlphaAuthStore
-from server.sec01_integrated_alpha_admission import IntegratedAlphaAdmission
-from server.sec01_host_commit_policy_sim import HostCommitPolicy
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
+from private_alpha_auth import AlphaAuthStore
+from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+from sec01_host_commit_policy_sim import HostCommitPolicy
 
 
 class GameProjectRegistryTests(unittest.TestCase):

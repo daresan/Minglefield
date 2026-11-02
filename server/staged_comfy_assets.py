@@ -36,13 +36,15 @@ def upload_staged_asset(endpoint, asset_path, record):
         raise ValueError("invalid_asset_filename")
     prefix = ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"image\"; filename=\"" +
               filename + "\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode()
+    middle = ("\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"type\"\r\n\r\ninput" +
+              "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"subfolder\"\r\n\r\n3d").encode()
     suffix = ("\r\n--" + boundary + "--\r\n").encode()
     cls = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
     conn = cls(url.hostname, url.port, timeout=120)
     try:
         conn.putrequest("POST", (url.path.rstrip("/") if url.path not in ("", "/") else "") + "/upload/image")
         conn.putheader("Content-Type", "multipart/form-data; boundary=" + boundary)
-        conn.putheader("Content-Length", str(len(prefix) + record["size"] + len(suffix)))
+        conn.putheader("Content-Length", str(len(prefix) + record["size"] + len(middle) + len(suffix)))
         conn.endheaders()
         conn.send(prefix)
         with Path(asset_path).open("rb") as source:
@@ -51,6 +53,7 @@ def upload_staged_asset(endpoint, asset_path, record):
                 if not chunk:
                     break
                 conn.send(chunk)
+        conn.send(middle)
         conn.send(suffix)
         response = conn.getresponse()
         if response.status != 200:
@@ -58,8 +61,9 @@ def upload_staged_asset(endpoint, asset_path, record):
         data = json.loads(response.read(65537))
         if not isinstance(data, dict) or not isinstance(data.get("name"), str):
             raise ValueError("invalid_comfy_upload_response")
-        if data.get("type", "input") != "input" or data.get("subfolder"):
+        if (data.get("type") != "input" or data.get("subfolder") != "3d"
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", data["name"])):
             raise ValueError("unsupported_comfy_upload_location")
-        return data["name"]
+        return "3d/" + data["name"]
     finally:
         conn.close()

@@ -49,17 +49,17 @@ class DispatchGate:
             if version != (4,):
                 raise ValueError("dispatch gate requires schema v4")
             row = db.execute("""SELECT job_id,user_id,agent_id,delegation_id,request_json,
-                session_token_hash,cost_minor,claimed_by,claim_token_hash,state,
+                session_token_hash,cost_minor,policy_revision,claimed_by,claim_token_hash,state,
                 fingerprint FROM action_jobs WHERE job_id=?""", (job_id,)).fetchone()
-            if (not row or row[9] != "ready" or row[7] != worker_id
-                    or not isinstance(row[8], str) or len(row[8]) != 64
-                    or any(c not in "0123456789abcdef" for c in row[8])
-                    or not hmac.compare_digest(digest, row[8])):
+            if (not row or row[10] != "ready" or row[8] != worker_id
+                    or not isinstance(row[9], str) or len(row[9]) != 64
+                    or any(c not in "0123456789abcdef" for c in row[9])
+                    or not hmac.compare_digest(digest, row[9])):
                 return DispatchResult("rejected", "invalid_claim", job_id)
             now = self.service.clock()
             if not isinstance(now, (int, float)) or not math.isfinite(now):
                 raise ValueError("invalid server clock")
-            reason = ClaimWorker._check(self, db, now, row[:7])
+            reason = ClaimWorker._check(self, db, now, row[:8])
             if reason:
                 db.execute("UPDATE action_jobs SET state='denied' WHERE job_id=? AND state='ready'",
                            (job_id,))
@@ -79,8 +79,8 @@ class DispatchGate:
                     raise ValueError("no trusted adapter")
                 canonical = _canonical(request)
                 fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-                if (canonical != row[4] or not isinstance(row[10], str)
-                        or not hmac.compare_digest(fingerprint, row[10])):
+                if (canonical != row[4] or not isinstance(row[11], str)
+                        or not hmac.compare_digest(fingerprint, row[11])):
                     raise ValueError("request fingerprint mismatch")
             except (ValueError, TypeError, KeyError, RecursionError):
                 db.execute("UPDATE action_jobs SET state='denied' WHERE job_id=? AND state='ready'",

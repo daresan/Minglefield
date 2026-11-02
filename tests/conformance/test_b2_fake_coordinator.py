@@ -60,6 +60,27 @@ class FakeCoordinatorTests(unittest.TestCase):
                         **args, scenario="success").state, "rejected")
                     self.assertEqual(self.counts(), (1, events, 100))
 
+    def test_revocation_after_committed_intent_does_not_replay(self):
+        args = self.ready()
+        coordinator = FakeSimulationCoordinator(self.new_service())
+        with self.assertRaisesRegex(RuntimeError, "simulated crash after intent"):
+            coordinator.run_once(**args, scenario="success", crash_at="after_commit")
+        self.assertEqual(self.query("SELECT state FROM action_jobs"),
+                         [("dispatch_committed",)])
+        self.assertTrue(self.policy.revoke(
+            delegation_id="grant.01", verified_actor="user.alice").allowed)
+        # The fake coordinator cannot re-enter a committed intent, but this
+        # does not establish downstream revocation fencing for a real adapter.
+        result = FakeSimulationCoordinator(self.new_service()).run_once(
+            **args, scenario="success")
+        self.assertEqual(result.state, "rejected")
+        self.assertEqual(self.query("SELECT state FROM action_jobs"),
+                         [("dispatch_committed",)])
+        self.assertEqual(self.query(
+            "SELECT COUNT(*) FROM action_audit WHERE event_type='job.succeeded'"),
+            [(0,)])
+        self.assertEqual(self.counts(), (1, 4, 100))
+
     def test_parallel_coordinators_only_one_terminal_result(self):
         args = self.ready()
         def run(_):

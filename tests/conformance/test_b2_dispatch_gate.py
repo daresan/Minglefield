@@ -1,5 +1,8 @@
 """B2.3b dispatch intent tests; no effects."""
+import sqlite3
+import json
 import unittest
+from contextlib import closing
 import test_action_submission as fixture
 from b2_worker import ClaimWorker
 from b2_prestart import PrestartGate
@@ -29,6 +32,43 @@ class DispatchGateTests(unittest.TestCase):
         args = dict(job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
         return DispatchGate(self.new_service(), adapters={"game.feedback": ("fake.test", "1")}).commit_intent(
             **(args | changes))
+
+ 
+    def test_corrupt_structural_records_after_ready_fail_closed(self):
+        for table, column, mutation in (
+                ("agents", "descriptor", lambda data: data.update({"operators": []})),
+                ("grants", "grant_json", lambda data: data.update({"issuer_user_id": "bad id"})),
+                ("action_jobs", "request_json", lambda data: data.update({"parameters": []}))):
+            with self.subTest(table=table):
+                self.setUp()
+                claim = self.prepare()
+                with closing(sqlite3.connect(self.db)) as db:
+                    raw = db.execute(f"SELECT {column} FROM {table}").fetchone()[0]
+                    data = json.loads(raw)
+                    mutation(data)
+                    db.execute(f"UPDATE {table} SET {column}=?", (json.dumps(data),))
+                    db.commit()
+                result = self.dispatch(claim)
+                self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+                self.assertEqual(self.query(
+                    "SELECT state,effect_idempotency_key FROM action_jobs"),
+                    [("denied", None)])
+                self.assertEqual(self.counts(), (1, 4, 100))
+
+    def test_agent_revision_change_after_ready_denies_dispatch(self):
+        claim = self.prepare()
+        with closing(sqlite3.connect(self.db)) as db:
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["revision"] += 1
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        result = self.dispatch(claim)
+        self.assertEqual((result.state, result.reason),
+                         ("denied", "policy_revision_changed"))
+        self.assertEqual(self.query(
+            "SELECT state,effect_idempotency_key,adapter_id,dispatched_at FROM action_jobs"),
+            [("denied", None, None, None)])
+        self.assertEqual(self.counts(), (1, 4, 100))
 
     def test_commits_intent_once(self):
         claim = self.prepare()
@@ -147,6 +187,22 @@ class DispatchGateTests(unittest.TestCase):
             "SELECT state,effect_idempotency_key,dispatch_fingerprint FROM action_jobs"),
             [("denied", None, None)])
         self.assertEqual(self.counts(), (1, 4, 100))
+
+
+    def test_corrupt_delegation_after_ready_denies_dispatch(self):
+        claim = self.prepare()
+        import json
+        with closing(sqlite3.connect(self.db)) as db:
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["delegation_id"] = "grant.other"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        result = self.dispatch(claim)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 4, 100))
+        self.assertEqual(self.query("SELECT effect_idempotency_key FROM action_jobs"), [(None,)])
+
 
     def test_adapter_configuration_is_immutable_snapshot(self):
         adapters = {"game.feedback": ("fake.test", "1")}

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minglefield integration registry v0.1",
+  "description": "Curated discovery metadata only; not installation authorization or proof of artifact safety.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "registry_version",
+    "integrations"
+  ],
+  "properties": {
+    "registry_version": {
+      "const": "0.1"
+    },
+    "integrations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/integration"
+      }
+    }
+  },
+  "$defs": {
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "integration_id",
+        "name",
+        "publisher",
+        "trust_tier",
+        "release_source"
+      ],
+      "properties": {
+        "integration_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.][a-z][a-z0-9_-]*)+$",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "trust_tier": {
+          "enum": [
+            "official",
+            "community"
+          ]
+        },
+        "release_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "repository"
+          ],
+          "properties": {
+            "provider": {
+              "const": "github"
+            },
+            "repository": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

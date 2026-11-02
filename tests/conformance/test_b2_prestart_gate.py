@@ -3,6 +3,7 @@ import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 import unittest
+from contextlib import closing
 
 import test_action_submission as fixture
 from b2_worker import ClaimWorker
@@ -24,6 +25,42 @@ class PrestartGateTests(unittest.TestCase):
         self.assertEqual(claim.state, "claimed")
         migrate_b2_prestart(self.db)
         return claim
+
+
+    def test_corrupt_structural_records_after_claim_fail_closed(self):
+        for table, column, mutation in (
+                ("agents", "descriptor", lambda data: data.update({"operators": []})),
+                ("grants", "grant_json", lambda data: data.update({"issuer_user_id": "bad id"})),
+                ("action_jobs", "request_json", lambda data: data.update({"parameters": []}))):
+            with self.subTest(table=table):
+                self.setUp()
+                claim = self.claimed()
+                with closing(sqlite3.connect(self.db)) as db:
+                    raw = db.execute(f"SELECT {column} FROM {table}").fetchone()[0]
+                    data = json.loads(raw)
+                    mutation(data)
+                    db.execute(f"UPDATE {table} SET {column}=?", (json.dumps(data),))
+                    db.commit()
+                result = PrestartGate(self.service).authorize(
+                    job_id=claim.job_id, worker_id="worker.one",
+                    claim_token=claim.claim_token)
+                self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+                self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+                self.assertEqual(self.counts(), (1, 3, 100))
+
+    def test_agent_revision_change_after_claim_denies_prestart(self):
+        claim = self.claimed()
+        with closing(sqlite3.connect(self.db)) as db:
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["revision"] += 1
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        result = PrestartGate(self.service).authorize(
+            job_id=claim.job_id, worker_id="worker.one", claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason),
+                         ("denied", "policy_revision_changed"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 3, 100))
 
     def test_valid_claim_becomes_ready_once_without_effect(self):
         claim = self.claimed()
@@ -241,6 +278,21 @@ class PrestartGateTests(unittest.TestCase):
         self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
         self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
         self.assertEqual(self.counts(), (1, 3, 100))
+
+
+    def test_corrupt_delegation_after_claim_denies_prestart(self):
+        claim = self.claimed()
+        import json
+        with closing(sqlite3.connect(self.db)) as db:
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["delegation_id"] = "grant.other"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        result = PrestartGate(self.service).authorize(job_id=claim.job_id, worker_id='worker.one', claim_token=claim.claim_token)
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.query("SELECT state FROM action_jobs"), [("denied",)])
+        self.assertEqual(self.counts(), (1, 3, 100))
+
 
 
 if __name__ == "__main__":

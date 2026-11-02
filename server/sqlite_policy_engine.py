@@ -7,7 +7,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from policy_engine import Decision
 
 
@@ -86,8 +86,8 @@ class SQLitePolicyEngine:
             return Decision(True, "grant_added")
 
     def authorize(self, *, verified_requester, delegation_id, scope, target_id, at,
-                  cost_minor=0, operation_id=None, expected_agent_id=None):
-        with self._tx() as db:
+                  cost_minor=0, operation_id=None, expected_agent_id=None, _db=None):
+        with (self._tx() if _db is None else nullcontext(_db)) as db:
             row = db.execute("""SELECT g.grant_json,g.revoked,g.spent_minor,
                                        a.descriptor,a.suspended,g.agent_id
                                 FROM grants g JOIN agents a ON g.agent_id=a.agent_id
@@ -120,10 +120,16 @@ class SQLitePolicyEngine:
                 if previous is not None:
                     return Decision(previous[0] == fingerprint,
                                     "already_allowed" if previous[0] == fingerprint else "operation_id_conflict")
-            limits = [v for v in (grant.get("max_spend_minor"),
-                       agent.get("policy", {}).get("max_spend_minor")) if v is not None]
-            if limits and spent + cost_minor > min(limits):
+            grant_limit = grant.get("max_spend_minor")
+            agent_limit = agent.get("policy", {}).get("max_spend_minor")
+            if grant_limit is not None and spent + cost_minor > grant_limit:
                 return Decision(False, "budget_exceeded")
+            if agent_limit is not None:
+                agent_spent = db.execute(
+                    "SELECT COALESCE(SUM(spent_minor), 0) FROM grants WHERE agent_id=?",
+                    (row[5],)).fetchone()[0]
+                if agent_spent + cost_minor > agent_limit:
+                    return Decision(False, "budget_exceeded")
             db.execute("UPDATE grants SET spent_minor=spent_minor+? WHERE delegation_id=?",
                        (cost_minor,delegation_id))
             if operation_id is not None:

@@ -30,15 +30,15 @@ class PrestartGate:
             if version not in ((3,), (4,)):
                 raise ValueError("pre-start gate requires schema v3 or v4")
             row = db.execute("""SELECT job_id,user_id,agent_id,delegation_id,request_json,
-                session_token_hash,cost_minor,claimed_by,claim_token_hash,state
+                session_token_hash,cost_minor,policy_revision,claimed_by,claim_token_hash,state
                 FROM action_jobs WHERE job_id=?""", (job_id,)).fetchone()
-            if not row or row[9] != "claimed" or row[7] != worker_id or not row[8]:
+            if not row or row[10] != "claimed" or row[8] != worker_id or not row[9]:
                 return PrestartResult("rejected", "invalid_claim", job_id)
             try:
                 digest = hashlib.sha256(claim_token.encode("utf-8")).hexdigest()
             except UnicodeEncodeError:
                 return PrestartResult("rejected", "invalid_claim", job_id)
-            stored = row[8]
+            stored = row[9]
             if (not isinstance(stored, str) or len(stored) != 64
                     or any(c not in "0123456789abcdef" for c in stored)
                     or not hmac.compare_digest(digest, stored)):
@@ -46,7 +46,7 @@ class PrestartGate:
             now = self.service.clock()
             if not isinstance(now, (int, float)) or not math.isfinite(now):
                 raise ValueError("invalid server clock")
-            reason = ClaimWorker._check(self, db, now, row[:7])
+            reason = ClaimWorker._check(self, db, now, row[:8])
             state = "denied" if reason else "ready"
             db.execute("UPDATE action_jobs SET state=? WHERE job_id=? AND state='claimed'",
                        (state, job_id))

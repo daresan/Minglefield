@@ -80,9 +80,11 @@ class PolicyEngine:
             if opkey in self.seen:
                 previous, decision = self.seen[opkey]
                 return decision if previous == fingerprint else Decision(False, "operation_id_conflict")
-            limits = [x for x in (grant.get("max_spend_minor"),
-                      self.agent.get("policy", {}).get("max_spend_minor")) if x is not None]
-            if limits and self.spent[delegation_id] + cost_minor > min(limits):
+            grant_limit = grant.get("max_spend_minor")
+            agent_limit = self.agent.get("policy", {}).get("max_spend_minor")
+            if grant_limit is not None and self.spent[delegation_id] + cost_minor > grant_limit:
+                return Decision(False, "budget_exceeded")
+            if agent_limit is not None and sum(self.spent.values()) + cost_minor > agent_limit:
                 return Decision(False, "budget_exceeded")
             self.spent[delegation_id] += cost_minor
             result = Decision(True, "allowed")

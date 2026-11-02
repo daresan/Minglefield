@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from b2_schema import migrate_b2
+from b2_validation import valid_request, valid_grant, valid_agent
 from action_service import _time
 
 
@@ -41,11 +42,11 @@ class ClaimWorker:
             if version not in ((2,), (3,), (4,)):
                 raise ValueError("worker requires schema v2, v3 or v4")
             job = db.execute("""SELECT job_id,user_id,agent_id,delegation_id,request_json,
-                session_token_hash,cost_minor FROM action_jobs WHERE state='queued'
+                session_token_hash,cost_minor,policy_revision FROM action_jobs WHERE state='queued'
                 ORDER BY created_at,job_id LIMIT 1""").fetchone()
             if not job:
                 return Claim("empty", "no_queued_jobs")
-            job_id, user_id, agent_id, delegation_id, request_json, session_hash, cost = job
+            job_id, user_id, agent_id, delegation_id, request_json, session_hash, cost, policy_revision = job
             reason = self._check(db, now, job)
             if reason:
                 db.execute("UPDATE action_jobs SET state='denied' WHERE job_id=? AND state='queued'",
@@ -62,7 +63,7 @@ class ClaimWorker:
             return Claim("claimed", "claimed", job_id, token)
 
     def _check(self, db, now, job):
-        job_id, user_id, agent_id, delegation_id, raw, session_hash, cost = job
+        job_id, user_id, agent_id, delegation_id, raw, session_hash, cost, policy_revision = job
         if not session_hash:
             return "missing_original_session"
         session = db.execute("""SELECT s.user_id,s.agent_id,s.delegation_id,
@@ -87,22 +88,42 @@ class ClaimWorker:
             request = json.loads(raw)
             grant = json.loads(row[1])
             agent = json.loads(row[3])
+            if not (valid_request(request) and valid_grant(grant) and valid_agent(agent)):
+                return "invalid_policy"
             rule = self.service.actions.get(request["action_type"])
             if (request["user_id"], request["agent_id"], request["delegation_id"]) != (
                     user_id, agent_id, delegation_id):
                 return "request_binding_mismatch"
-            if grant["agent_id"] != agent_id or agent["agent_id"] != agent_id:
+            if (type(grant) is not dict or type(agent) is not dict
+                    or grant.get("agent_id") != agent_id
+                    or agent.get("agent_id") != agent_id
+                    or grant.get("delegation_id") != delegation_id):
                 return "invalid_policy"
-            if grant["status"] != "active" or grant["requester_user_id"] != user_id:
+            # The descriptor must agree with the authoritative suspension flag.
+            if (type(policy_revision) is not int or policy_revision < 0
+                    or agent["revision"] != policy_revision):
+                return "policy_revision_changed"
+            if agent["state"] != "active":
+                return "invalid_policy"
+            if grant.get("status") != "active" or grant.get("requester_user_id") != user_id:
                 return "grant_inactive"
             if rule is None or rule.scope != request["scope"]:
                 return "action_rule_changed"
-            if rule.scope not in grant["scopes"] or rule.scope not in agent["policy"]["allowed_scopes"]:
+            policy = agent.get("policy")
+            scopes = grant.get("scopes")
+            allowed = policy.get("allowed_scopes") if type(policy) is dict else None
+            if type(policy) is not dict or type(allowed) is not list:
+                return "invalid_policy"
+            if rule.scope not in scopes or rule.scope not in allowed:
                 return "scope_denied"
             if grant.get("target_id") != request["target_id"]:
                 return "target_denied"
             at = datetime.fromtimestamp(now, timezone.utc)
-            if not _time(grant["issued_at"]) <= at < _time(grant["expires_at"]):
+            issued_at, expires_at = grant.get("issued_at"), grant.get("expires_at")
+            if type(issued_at) is not str or type(expires_at) is not str:
+                return "invalid_policy"
+            issued, expires = _time(issued_at), _time(expires_at)
+            if issued >= expires or not issued <= at < expires:
                 return "outside_validity"
             if type(cost) is not int or cost < 0:
                 return "invalid_cost"

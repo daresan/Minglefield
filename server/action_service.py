@@ -195,20 +195,42 @@ class ActionService:
                 if row[0] != session[1]:
                     raise _Reject("agent_delegation_mismatch")
                 grant, agent = json.loads(row[1]), json.loads(row[4])
-                if grant["agent_id"] != row[0] or agent["agent_id"] != row[0]:
+                if type(grant) is not dict or type(agent) is not dict:
                     raise _Reject("invalid_policy")
+                if (grant.get("agent_id") != row[0] or agent.get("agent_id") != row[0]
+                        or grant.get("delegation_id") != delegation_id):
+                    raise _Reject("invalid_policy")
+
                 if row[5]:
                     raise _Reject("agent_suspended")
                 if row[2]:
                     raise _Reject("grant_revoked")
-                if grant["status"] != "active" or grant["requester_user_id"] != session[0]:
+                if grant.get("status") != "active" or grant.get("requester_user_id") != session[0]:
                     raise _Reject("requester_or_grant_mismatch")
-                policy = agent.get("policy", {})
-                if rule.scope not in grant["scopes"] or rule.scope not in policy.get("allowed_scopes", []):
+                revision = agent.get("revision")
+                if type(revision) is not int or revision < 0 or revision > MAX_INT:
+                    raise _Reject("invalid_policy")
+                policy = agent.get("policy")
+                if type(policy) is not dict:
+                    raise _Reject("invalid_policy")
+                grant_scopes = grant.get("scopes")
+                allowed_scopes = policy.get("allowed_scopes")
+                if (type(grant_scopes) is not list or type(allowed_scopes) is not list
+                        or any(type(scope) is not str or not scope for scope in grant_scopes)
+                        or any(type(scope) is not str or not scope for scope in allowed_scopes)):
+                    raise _Reject("invalid_policy")
+                if rule.scope not in grant_scopes or rule.scope not in allowed_scopes:
                     raise _Reject("scope_denied")
                 if grant.get("target_id") != target_id:
                     raise _Reject("target_denied")
-                if not _time(grant["issued_at"]) <= at < _time(grant["expires_at"]):
+                issued_at, expires_at = grant.get("issued_at"), grant.get("expires_at")
+                if type(issued_at) is not str or type(expires_at) is not str:
+                    raise _Reject("invalid_policy")
+                try:
+                    issued, expires = _time(issued_at), _time(expires_at)
+                except (ValueError, TypeError, OverflowError):
+                    raise _Reject("invalid_policy")
+                if issued >= expires or not issued <= at < expires:
                     raise _Reject("outside_validity")
                 request_json = _canonical(dict(version=1, user_id=session[0], agent_id=agent_id,
                     delegation_id=delegation_id, target_id=target_id, action_type=action_type,

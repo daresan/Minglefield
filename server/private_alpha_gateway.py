@@ -1,0 +1,2799 @@
+"""Local-only Minglefield Private Alpha gateway, simulation ONLY.
+
+No B2 effect invocation, no ComfyUI, no password enrollment and no external
+listener. Static tokens are TEST FIXTURES, not production authentication.
+Do NOT expose this prototype via Tailscale Serve to invited users yet.
+"""
+import argparse
+import hashlib
+import hmac
+import json
+from pathlib import Path
+import secrets
+import time
+from threading import Lock
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
+
+MAX_BODY = 4096
+MAX_JOBS_PER_USER = 5
+
+PAGE = """<!doctype html><html lang="de"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minglefield — Local Alpha / Private Alpha (lokal)</title>
+<style>
+:root{font-family:Inter,"Segoe UI",system-ui,sans-serif;color-scheme:dark;--bg:#0b1020;--surface:#151d30;--raised:#1c2940;--line:#34425b;--text:#f0f4fb;--muted:#b6c3d6;--accent:#7aaaff;--danger:#ff9c9c}
+*{box-sizing:border-box}body{margin:0 auto;max-width:1440px;padding:30px clamp(16px,3vw,48px) 64px;background:radial-gradient(ellipse at top right,#1c2d51 0,transparent 46%),var(--bg);color:var(--text);font-size:16px;line-height:1.5}
+h1{font-size:clamp(26px,3vw,38px);letter-spacing:-.04em;margin:0 0 14px;font-weight:750}
+body>p{color:var(--muted)}#alphaNav{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 28px;padding:7px;border:1px solid var(--line);background:#10192b;border-radius:16px}
+#alphaNav button{flex:1 1 120px;background:transparent;border-color:transparent;box-shadow:none;font-weight:600}
+#alphaNav button[aria-current=page]{background:#2a426b;color:#fff;border-color:#5579b3}
+#alphaNav button:disabled{opacity:.4;cursor:not-allowed}
+.alphaPanel[hidden]{display:none!important}
+fieldset{margin:0 0 22px;border:1px solid var(--line);border-radius:18px;padding:clamp(16px,2.5vw,28px);display:flex;flex-wrap:wrap;gap:16px;align-items:end;background:var(--surface);box-shadow:0 12px 30px #0002;min-width:0}
+fieldset fieldset{background:#10192b;box-shadow:none;margin:8px 0}
+fieldset>legend{font-size:19px;font-weight:700;letter-spacing:-.015em;padding:0 10px;color:var(--text)}
+fieldset>label{display:flex;flex-direction:column;gap:7px;min-width:min(100%,230px);flex:1 1 240px;font-size:15px;font-weight:600;color:var(--muted)}
+fieldset>label:has(input[type=checkbox]){flex-direction:row;align-items:center;flex:0 1 auto;min-width:200px}
+fieldset>p,fieldset>pre,fieldset>fieldset,fieldset>div:not(:has(select)){flex-basis:100%}
+input,select,button{font:inherit;min-height:44px;border-radius:10px}
+input,select{width:100%;max-width:100%;padding:10px 13px;background:#0d1628;border:1px solid #50617d;color:var(--text);font-size:16px}
+select{cursor:pointer}select option{font-size:16px;background:#17243a;color:#fff}
+input[type=checkbox]{width:20px;min-height:20px;accent-color:var(--accent)}
+button{cursor:pointer;border:1px solid #5079bb;padding:10px 18px;background:#315c9d;color:#fff;font-weight:650;transition:background .15s,border-color .15s;max-width:100%;height:auto}
+button:hover:not(:disabled){background:#4175c1}button:disabled{opacity:.45;cursor:not-allowed}
+button[id$="Delete"],#hostRuleDelete,#allJobDelete{background:transparent;color:var(--danger);border-color:#78464f;font-size:14px;font-weight:600;min-height:40px;padding:8px 13px}
+button[id$="Delete"]:hover,#hostRuleDelete:hover,#allJobDelete:hover{background:#5b2634}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1424;border:1px solid #30405b;border-radius:12px;padding:16px;color:#cbd8ea;font:14px/1.55 ui-monospace,Consolas,monospace;max-height:340px;overflow:auto}
+small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left:3px solid var(--accent);padding:10px 16px;color:var(--muted)}
+#agentDetails,#allJobDetails,#selectedJobDetails,#agentJobList{font-size:16px;color:var(--text)}
+#hostJobsOutput{max-height:20rem;overflow:auto}
+@media(max-width:700px){body{padding:18px 12px 40px}fieldset{padding:18px 14px}fieldset>label{flex-basis:100%}#alphaNav button{flex:1 1 40%}}
+.form-group{width:100%;flex-basis:100%;padding:18px 20px;background:#10192b;border:1px solid var(--line);border-radius:14px;min-width:0}
+.form-group h3{font-size:18px;margin:0 0 14px}.form-group h4{font-size:15px;color:var(--muted);margin:20px 0 10px}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;align-items:end}
+.field-grid>label{display:flex;flex-direction:column;gap:7px;color:var(--muted);font-size:15px;font-weight:600;min-width:0}
+.field-grid>label:has(input[type=checkbox]){flex-direction:row;align-items:center}
+.action-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px}
+.form-group p{color:var(--muted)}.form-group pre{width:100%}
+#grantStatus{flex-basis:100%;font-size:15px;color:var(--muted)}
+@media(max-width:700px){.field-grid{grid-template-columns:minmax(0,1fr)}.form-group{padding:14px}}
+.artifact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;margin:12px 0}.artifact-card{border:1px solid var(--line);border-radius:9px;padding:12px;min-width:0;overflow-wrap:anywhere}.artifact-card img{display:block;max-width:100%;height:170px;object-fit:contain;background:#0b1020}.artifact-card a{display:inline-block;margin:8px 8px 0 0}.artifact-card small{display:block;color:var(--muted)}
+#jobResultsDialog{width:min(1100px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);padding:22px}#jobResultsDialog::backdrop{background:rgba(0,0,0,.75)}.results-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.results-dialog-head h2{margin:0}
+.job-table-scroll{width:100%;overflow-x:auto}.job-table-scroll table{width:100%;border-collapse:collapse;min-width:650px}.job-table-scroll th,.job-table-scroll td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:middle}.job-table-scroll td:first-child{overflow-wrap:anywhere;max-width:280px}.job-table-scroll td button{min-height:34px;padding:5px 9px;font-size:13px;margin:2px}.job-table-scroll tr[aria-selected=true]{background:var(--raised)}.job-toolbar,.job-actions{display:flex;flex-wrap:wrap;gap:8px;width:100%}.legacy-job-select{display:none!important}.job-diagnostics,#jobParametersDetails{width:100%;flex-basis:100%;border:1px solid var(--line);padding:12px;border-radius:10px}.job-diagnostics>summary,#jobParametersDetails>summary{cursor:pointer;font-weight:700;padding:8px}.job-diagnostics>fieldset{margin-top:16px}#jobParameterFields{margin-top:14px}#unifiedJobsPanel>pre{width:100%}
+dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:min(760px,92vw);width:100%}dialog::backdrop{background:#000a}dialog .action-row{margin:12px 0}#gameUpdateStatus{max-height:55vh;overflow:auto}
+.app-heading,.game-project-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.app-heading h1{margin-bottom:0}.game-project-heading{margin:12px 0}.game-project-heading label{flex:1;min-width:200px}.signal-indicator{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);padding:7px 12px;font-weight:600;font-size:13px;white-space:nowrap;cursor:pointer}.signal-indicator:hover{border-color:var(--accent)}.signal-indicator:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.signal-lamp{width:17px;height:17px;border-radius:50%;flex:none;background:#8792a5;border:2px solid #c3cad5;box-shadow:0 0 0 3px #8792a522,inset 0 1px 2px #0007}.signal-indicator[data-signal="green"] .signal-lamp{background:#28b86b;border-color:#8af5b6;box-shadow:0 0 9px #28b86b99}.signal-indicator[data-signal="yellow"] .signal-lamp{background:#e8b33b;border-color:#ffe29a;box-shadow:0 0 9px #e8b33b99}.signal-indicator[data-signal="red"] .signal-lamp{background:#e45b61;border-color:#ffb6ba;box-shadow:0 0 9px #e45b6199}
+</style>
+<header class="app-heading"><h1>Minglefield Private Alpha</h1><button id="platformUpdateIndicator" class="signal-indicator" data-signal="unknown" type="button" aria-haspopup="dialog" title="Minglefield-Update: Status unbekannt"><span class="signal-lamp" aria-hidden="true"></span><span>Minglefield-Update</span></button></header>
+<nav id="alphaNav" aria-label="Bereiche"></nav>
+<dialog id="platformUpdateDialog" aria-labelledby="platformUpdateTitle"><h3 id="platformUpdateTitle">Minglefield-Update</h3><p>Derzeit ist keine verifizierte Plattform-Updatequelle angebunden. Status: unbekannt. Es wird kein Update gestartet.</p><form method="dialog"><button>Schließen</button></form></dialog>
+
+<p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
+<fieldset><legend>1. Einladung einlösen (nur Auth-v2-Test)</legend>
+<label>Einladungscode <input id="invite" type="password" autocomplete="off"></label>
+<p>Das Benutzerkonto ist unabhängig von deinen eigenen oder beauftragten Agenten.</p>
+<label>Passwort für spätere Anmeldung (mind. 12 Zeichen) <input id="signupPassword" type="password" autocomplete="new-password"></label>
+<button id="redeem">Einladung einlösen</button>
+<p><small>Der Betreiber erstellt Einladungscodes weiterhin lokal per PowerShell.
+Der erzeugte Session-Token bleibt nur in diesem Browsertab gespeichert.</small></p></fieldset>
+<fieldset><legend>2. Wieder anmelden ohne neue Einladung</legend>
+<label>Benutzer-ID <input id="loginUser" autocomplete="username" placeholder="user.alice"></label>
+<label>Passwort <input id="loginPassword" type="password" autocomplete="current-password"></label>
+<button id="login">Anmelden</button>
+</fieldset>
+<fieldset><legend>2b. Vorhandener Session-Token / Alt-Konto</legend>
+<label>Session-Token (kein Einladungscode) <input id="token" type="password" autocomplete="off"></label>
+<button id="connect">Connect</button><button id="logout">Logout</button>
+<label>Passwort für bestehendes Alt-Konto setzen <input id="legacyPassword" type="password" autocomplete="new-password"></label>
+<button id="setPassword">Passwort setzen</button></fieldset>
+<fieldset><legend>3. Agenten verwalten oder beauftragen</legend>
+<label>Neuen eigenen Agenten anlegen <input id="newAgent" placeholder="agent.example"></label>
+<button id="addAgent">Agent anlegen</button>
+<label>Eigenen Agenten freigeben <select id="grantAgent" aria-label="Eigenen Agenten für Freigabe auswählen"></select></label>
+<label>Für Benutzer <select id="grantee" aria-label="Empfänger der Agentenfreigabe"></select></label><p><small>Nur aktive, bereits registrierte Alpha-Benutzer stehen zur Auswahl.</small></p>
+<button id="grant">Freigeben</button><button id="revoke">Freigabe widerrufen</button><p id="grantStatus" role="status" aria-live="polite"></p><div id="grantList" role="status">Freigaben werden nach Agentenauswahl geladen.</div>
+<label>Agent für Simulation <select id="selectedAgent"></select></label><button id="agentDelete" type="button">Agent löschen</button>
+<p><small>Eigene und ausdrücklich freigegebene fremde Agenten können ausgewählt werden. Freigaben werden ausschließlich vom Besitzer verwaltet.</small></p>
+<div id="agentDetails" role="status">Agent auswählen.</div>
+<div id="agentJobList"><p>Keine Agentenjobs geladen.</p></div>
+<pre id="agentOutput" aria-live="polite">Noch keine Agenten geladen.</pre>
+</fieldset>
+<fieldset id="unifiedJobsPanel"><legend>Jobs — Übersicht</legend>
+<div class="job-toolbar"><button id="hostJobsRefresh">Jobs aktualisieren</button><button id="refresh">Demo-Jobs aktualisieren</button></div>
+<div class="job-table-scroll"><table id="allJobsTable"><thead><tr><th>Job-ID</th><th>Typ / Effekt</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="allJobsRows"></tbody></table></div>
+<label class="legacy-job-select">Alle Jobs <select id="allJobsSelect"></select></label>
+<div id="allJobDetails" role="status">Job auswählen.</div>
+<button id="allJobResultsButton" type="button" hidden>Ergebnisse</button>
+<div class="job-actions"><button id="hostJobCancel">Abbrechen</button><button id="hostJobRetry">Erneut einreihen</button><button id="hostJobEvaluate">Host-Regeln prüfen (Mock)</button><button id="hostJobReserve">Slot reservieren (Mock)</button><button id="hostJobExecute">Jetzt ausführen (ComfyUI)</button><button id="hostJobExecutionStatus">Ausführungsstatus abrufen</button><button id="hostJobRelease">Reservierung aufheben (Mock)</button><button id="allJobDelete">Ausgewählten Testjob löschen</button></div>
+<details class="job-diagnostics"><summary>Jobdiagnose und Testdaten</summary>
+<label>Bestehenden Host-Job auswählen <select id="hostJobSelect"></select></label>
+<label>Job-ID <select id="hostJobId" aria-label="Host-Job auswählen"></select></label>
+<pre id="hostJobsOutput" aria-live="polite">Noch keine Host-Jobs geladen.</pre>
+<fieldset><legend>Demo-Jobs (Alpha-Testwerkzeuge)</legend>
+<label>Agent für Demo-Job <select id="jobAgentSelect"></select></label>
+<button id="create">Demo-Job erstellen</button>
+<label>Demo-Job auswählen <select id="demoJobSelect"></select></label>
+<div id="selectedJobDetails" role="status">Job auswählen.</div>
+<pre id="demoJobsOutput" aria-live="polite">Noch keine Demo-Jobs geladen.</pre></fieldset></details>
+<pre id="jobActionOutput" aria-live="polite">Noch keine Jobaktion.</pre>
+</fieldset>
+<fieldset id="hostJobPanel"><legend>Host-Jobs: Einreichen und konfigurieren</legend>
+<label>Host für Job <select id="jobHostSelect"></select></label>
+<label>Effekt für Job <select id="jobEffectSelect"></select></label>
+<fieldset><legend>ComfyUI-Eingabedateien (auch ohne Upload-Node)</legend>
+<label>Runtime <select id="jobComfyRuntime"></select></label>
+<label>Dateien auswählen <input id="jobComfyFiles" type="file" multiple accept="image/*,video/*,audio/*,.glb,.gltf,.obj,.ply"></label>
+<button id="jobComfyUpload" type="button">Dateien in ComfyUI hochladen</button>
+<pre id="jobComfyUploadOutput" aria-live="polite">Noch keine Dateien hochgeladen.</pre>
+</fieldset>
+<details id="jobParametersDetails"><summary>Workflowparameter konfigurieren</summary><div id="jobParameterFields" style="display:grid;gap:6px"></div></details>
+<button id="effectManual">Job in Warteschlange einreihen</button>
+</fieldset>
+<dialog id="jobResultsDialog" aria-labelledby="jobResultsTitle"><div class="results-dialog-head"><h2 id="jobResultsTitle">Job-Ergebnisse</h2><button type="button" id="jobResultsClose">Schließen</button></div><p id="jobResultsContext"></p><p>Temporäre ComfyUI-Dateien können später entfernt werden.</p><div id="jobArtifacts" class="artifact-grid" aria-live="polite"></div></dialog>
+<fieldset id="effectPanel"><legend>Effekte konfigurieren</legend>
+<p><strong>Workflow = ComfyUI API-JSON-Datei.</strong> Ein Workflow wird als
+Effekt importiert, nicht als Runtime. Exportiere ihn in ComfyUI im API-Format.</p>
+<fieldset><legend>Workflow-Datei auswählen (lokale Vorschau)</legend>
+<label>ComfyUI API-JSON <input type="file" id="comfyWorkflowFile" accept=".json,application/json"></label>
+<label>ComfyUI-Runtime <select id="comfyImportRuntime"></select></label>
+<label>Neue Effekt-ID (Pflicht, bestehende IDs werden abgelehnt) <input id="comfyNewEffectId" placeholder="comfy.mein-workflow"></label>
+<label>Beschreibung <input id="comfyNewEffectDescription" placeholder="3D-Modell aus Bild"></label>
+<button id="comfyWorkflowInspect">Parameter prüfen</button>
+<label>Node-Filter <input id="comfyNodeFilter" placeholder="Node-ID, Typ oder Parametername"></label>
+<div class="action-row"><button id="comfySelectVisibleAll" type="button">Alle sichtbaren auswählen</button>
+<button id="comfySelectVisibleNone" type="button">Keine sichtbaren auswählen</button>
+<span id="comfySelectionCount"></span></div>
+<div id="comfyBindings" style="display:grid;gap:6px;max-height:340px;overflow:auto"></div>
+<button id="comfyWorkflowSave" disabled>Ausgewählte Parameter und Workflow als Effekt speichern</button>
+<pre id="comfyWorkflowOutput" aria-live="polite">Noch keine Datei ausgewählt.</pre>
+<p><small>Die Prüfung verwendet /object_info der ausgewählten Runtime. Der Import speichert den Workflow als deaktivierten Effekt, ohne ihn auszuführen.</small></p>
+</fieldset>
+<label>Host-Zuordnung <select id="effectHostSelect"></select></label>
+<fieldset><legend>Effektdefinitionen (keine Jobeinreichung)</legend>
+<label>Bestehenden Effekt auswählen <select id="effectSelect"></select></label>
+<label>Effekt-ID <input id="effectId" placeholder="effect.example"></label>
+<label>Beschreibung <input id="effectDescription" placeholder="Beschreibung des Effekts"></label>
+<label><input type="checkbox" id="effectEnabled" checked> Effekt aktiviert</label>
+<button id="effectDelete">Effekt löschen</button>
+<button id="effectSave">Effektdefinition speichern</button>
+
+<p><small>Kein Befehl, keine externe Aktion: Es werden nur Metadaten gespeichert
+beziehungsweise ein persistenter Mock-Job ohne Ausführung eingereiht.</small></p>
+</fieldset>
+<pre id="effectOutput" aria-live="polite">Effekt auswählen oder anlegen.</pre>
+<pre id="effectWorkflowDetails" aria-live="polite">Kein Effekt ausgewählt.</pre>
+</fieldset>
+<fieldset><legend>5. Host-Verwaltung (lokaler Alpha-Test)</legend>
+<p>Eigene Hosts werden deinem angemeldeten Minglefield-Benutzer zugeordnet.
+Keine Systemadministratorrechte nötig. Nur lokale Simulation; keine echten Effekte.</p>
+<div class="form-group"><h3>Host übernehmen</h3><div class="field-grid"><label>Eigene Host-ID <input id="claimHost" placeholder="host.local"></label>
+<label>Lokaler Bestätigungscode aus der Gateway-Konsole
+<input id="claimSecret" type="password" autocomplete="off"></label>
+</div><div class="action-row"><button id="claimHostButton">Diesen lokalen Host übernehmen</button></div>
+<p><small>Den Bestätigungscode zeigt das lokal mit --auth-db gestartete Gateway beim Start.
+Die Hostübernahme ist nur einmalig erforderlich.</small></p></div>
+<div class="form-group"><h3>Hosts und Regeln auswählen</h3><div class="action-row"><button id="hostDelete">Host löschen</button>
+<button id="hostRefresh">Hosts und Regeln laden</button>\n<label>Vorhandene Regel <select id="hostRuleSelect"></select></label>\n<button id="hostLoadRule">Regel bearbeiten</button>
+</div><div class="field-grid"><label>Host <select id="hostSelect"></select></label></div></div><div class="form-group"><h3>Schritt 2 · ComfyUI-Instanz verbinden</h3>
+<p><strong>Runtime = laufender ComfyUI-Server, keine Datei.</strong>
+Wähle zuerst oben einen eigenen Host. Trage dann eine frei gewählte Runtime-ID
+und die lokale ComfyUI-Adresse ein (normalerweise http://127.0.0.1:8188).
+Klicke auf „Instanz hinzufügen / speichern“. Du kannst mehrere Instanzen pro Host eintragen.</p>
+<p>Bereits gespeicherte Instanzen erscheinen in der Liste. Der Endpunkt wird hier
+nur gespeichert, nicht auf Erreichbarkeit geprüft. Workflows werden im Tab „Effekte“ importiert.</p>
+<div class="field-grid">
+<label>Gespeicherte Instanzen <select id="runtimeSelect"></select></label>
+<label>Neue oder bestehende Runtime-ID <input id="runtimeId" placeholder="comfy-main"></label>
+<label>Typ <select id="runtimeType"><option value="comfyui">ComfyUI</option></select></label>
+<label>ComfyUI API-Adresse <input id="runtimeEndpoint" placeholder="http://127.0.0.1:8188"></label>
+<label>Input-Ordner (nur Anzeige, Upload erfolgt per API) <input id="runtimeInputFolder" placeholder="ComfyUI/input"></label>
+<label><input id="runtimeEnabled" type="checkbox"> Aktiviert</label>
+</div>
+<div class="action-row"><button id="runtimeRefresh">Runtimes laden</button><button id="runtimeCheck">Verbindung prüfen</button>
+<button id="runtimeNew">Neuen Eintrag vorbereiten</button>
+<button id="runtimeSave">Instanz hinzufügen / speichern</button>
+<button id="runtimeDelete">Gespeicherte Instanz löschen</button></div>
+<div id="runtimeStatus" role="status" aria-live="polite" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid var(--line);border-radius:12px">
+<span id="runtimeLamp" aria-hidden="true" style="display:inline-block;width:18px;height:18px;border-radius:50%;background:#8792a4;box-shadow:0 0 0 3px #8792a433"></span>
+<strong id="runtimeStatusText">Nicht geprüft</strong></div>
+<pre id="runtimeOutput" aria-live="polite">Keine Runtimes geladen.</pre></div>
+<div class="form-group"><h3>Host-Speicherorte</h3>
+<p>Lokale Verzeichnisse werden persistent in der Host-Datenbank gespeichert. Keine Umgebungsvariablen erforderlich.</p>
+<div class="field-grid">
+<label>Asset-Staging-Verzeichnis <input id="hostStagingRoot" placeholder="C:\\Minglefield\\Staging"></label>
+<label>Output-Verzeichnis <input id="hostOutputRoot" placeholder="C:\\Minglefield\\Output"></label>
+</div><div class="action-row"><button type="button" id="hostSettingsLoad">Einstellungen laden</button>
+<button type="button" id="hostSettingsSave">Einstellungen speichern</button></div>
+<pre id="hostSettingsStatus" aria-live="polite"></pre></div>
+<div class="form-group"><h3>Regel bearbeiten</h3><div class="field-grid">
+<label>Regel-ID <input id="hostRuleId" placeholder="rule.night"></label>
+<label>Priorität <input id="hostPriority" type="number" value="10" min="0"></label>
+<label><input id="hostEnabled" type="checkbox" checked> Regel aktiv</label>
+<label>Freigabe <select id="hostMode"><option value="automatic">Automatisch</option>
+<option value="manual">Manuell</option></select></label>
+<label><input id="hostIdle" type="checkbox"> Nur wenn kein anderer Effekt läuft</label>
+</div><h4>Ressourcenbedingungen</h4><div class="field-grid"><label>GPU-Auslastung unter % (leer = ohne Grenze)
+<input id="hostGpu" type="number" min="0" max="100"></label>
+<label>Maximal parallele Effekte (leer = ohne Grenze)
+<input id="hostParallel" type="number" min="1" max="1024"></label>
+</div><h4>Zeitplan</h4><div class="field-grid"><label>Zeitzone <input id="hostTimezone" value="Europe/Berlin"></label>
+<label>Wochentage (0=Mo bis 6=So, komma-getrennt)
+<input id="hostDays" value="0,1,2,3,4,5,6"></label>
+<label>Beginn <input id="hostStart" type="time" value="00:00"></label>
+<label>Ende <input id="hostEnd" type="time" value="23:59"></label>
+</div><div class="action-row"><button id="hostSave">Regel speichern</button>
+<button id="hostRuleDelete">Regel löschen</button>
+<button id="hostToggle">Regel aktivieren/deaktivieren</button>
+</div><p><small>Regeln gelten pro Host; die erste zeitlich passende aktive Regel entscheidet.
+Manuelle Bestätigung und Slots sind nur simuliert. Zeitfenster über Mitternacht
+sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
+</div><div class="form-group"><h3>Effekte auf diesem Host</h3><div class="field-grid"><label>Effekte auf diesem Host <select id="hostEffectShortcut"></select></label>
+</div><div class="action-row"><button id="hostOpenEffect">Effekt im Effekte-Tab öffnen</button>
+
+</div>
+<pre id="hostOutput" aria-live="polite">Bitte anmelden und Hosts laden.</pre></div>
+<fieldset id="hostGitPanel"><legend>Git-Konfiguration dieses Hosts</legend>
+<p>Eigenständige Host-Einstellungen für Git und Authentifizierungsprofile.</p>
+<details id="hostGitSettings">
+<summary>Git-Einstellungen</summary>
+<p>Authentifizierungsprofile (ohne gespeicherte Zugangsdaten). Git-Operationen sind noch nicht aktiviert.</p>
+<label>Profil <select id="gameGitProfileSelect"></select></label>
+<label>Profil-ID <input id="gameGitProfileId" placeholder="git.default"></label>
+<label>Bezeichnung <input id="gameGitLabel" placeholder="Mein Git-Profil"></label>
+<label>Authentifizierung <select id="gameGitAuthMethod">
+<option value="local">Lokal / keine</option>
+<option value="ssh">SSH / SSH-Agent</option>
+<option value="credential_manager">HTTPS / Git Credential Manager</option>
+<option value="github_cli">GitHub CLI (gh)</option>
+</select></label>
+<label>Git-Executable <input id="gameGitExecutable" value="git" placeholder="git"></label>
+<label>Commit-Name <input id="gameGitAuthorName"></label>
+<label>Commit-E-Mail <input id="gameGitAuthorEmail"></label>
+<button id="gameGitSave" type="button">Git-Profil speichern</button>
+<button id="gameGitReload" type="button">Git-Profile laden</button>
+<pre id="gameGitStatus" aria-live="polite"></pre>
+</details>
+</fieldset>
+</fieldset>
+<section id="gameProjectPanel" class="alphaPanel" hidden>
+<h2>Game-Projekte (P1 Alpha)</h2>
+<p>Projektregistrierung und Einstellungen; keine Dateisystemänderungen.</p>
+<label>Host <select id="gameHostSelect"></select></label>
+<div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
+<button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
+
+<dialog id="gameUpdateDialog" aria-labelledby="gameUpdateTitle"><h3 id="gameUpdateTitle">Game-Projekt: Updates</h3><p>Release-Vergleiche mit deklarierten Versionen sind keine Installationsnachweise.</p><div class="action-row"><button id="gameIntegrationUpdateInspect" type="button">Integrationsupdates prüfen</button><button id="gameIntegrationRegistryInspect" type="button">Integrationen anzeigen / aktualisieren</button></div><pre id="gameUpdateStatus" aria-live="polite">Noch nicht geprüft.</pre><form method="dialog"><button>Schließen</button></form></dialog>
+<div id="gameManagePanel">
+<h3>Bestehendes Projekt verwalten</h3>
+<div class="game-project-heading"><label>Projekt auswählen <select id="gameProjectSelect"></select></label><button id="gameUpdateIndicator" class="signal-indicator" data-signal="unknown" type="button" aria-haspopup="dialog" title="Game-Update: Status unbekannt"><span class="signal-lamp" aria-hidden="true"></span><span>Game-Update</span></button></div>
+<label>Projekt-ID (nicht änderbar) <input id="gameProjectId" readonly></label>
+<label>Name <input id="gameProjectName"></label>
+<label>Repository-Pfad (absolut) <input id="gameRepositoryRoot"></label>
+<label>Staging-Pfad (absolut) <input id="gameStagingRoot"></label>
+<label>Output-Pfad (absolut) <input id="gameOutputRoot"></label>
+<div class="action-row"><button id="gameProjectUpdate" type="button">Änderungen speichern</button>
+<button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button>
+<button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button>
+<button id="gameGitInspect" type="button">Git-Status prüfen</button>
+<button id="gameCompatibilityInspect" type="button">Minglefield-Kompatibilität prüfen</button>
+<button id="gameManifestPrepare" type="button">Minglefield-Konfiguration einrichten</button>
+<button id="gameGitInit" type="button">Git initialisieren</button>
+<button id="gameProjectPrepare" type="button">Fehlende Arbeitsverzeichnisse anlegen</button></div>
+<p><small>Entfernen löscht nur die Registrierung, niemals lokale Dateien oder Ordner.</small></p>
+</div>
+<div id="gameCreatePanel" hidden>
+<h3>Neues Projekt registrieren</h3>
+<label>Neue Projekt-ID <input id="gameNewProjectId" placeholder="game.demo"></label>
+<label>Name <input id="gameNewProjectName"></label>
+<label>Repository-Pfad (absolut) <input id="gameNewRepositoryRoot"></label>
+<label>Staging-Pfad (absolut) <input id="gameNewStagingRoot"></label>
+<label>Output-Pfad (absolut) <input id="gameNewOutputRoot"></label>
+<div class="action-row"><button id="gameProjectCreate" type="button">Neues Projekt registrieren</button>
+<button id="gameProjectCancel" type="button">Abbrechen</button></div>
+</div>
+<pre id="gameProjectStatus" aria-live="polite">Host wählen und Projekte laden.</pre>
+</section>
+<p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
+
+<p id="deleteStatus" role="status" aria-live="polite"></p>
+<script>
+let credential="";
+let expiresAt=0;
+const out=document.getElementById("agentOutput");
+const demoJobsOut=document.getElementById("demoJobsOutput");
+const statusLine=document.getElementById("sessionStatus");
+const alphaSections=[...document.querySelectorAll("body>fieldset")];
+const alphaNav=document.getElementById("alphaNav");
+const alphaPanels={
+  login:alphaSections.slice(0,3),
+  agents:[alphaSections[3]],
+  jobs:[alphaSections[4],document.getElementById("hostJobPanel")],
+  hosts:[alphaSections[7]],
+  effects:[document.getElementById("effectPanel")],
+  game:[document.getElementById("gameProjectPanel")]
+};
+let alphaTab="login";
+for(const [key,label] of [["login","Anmeldung"],["hosts","Hosts"],
+                           ["effects","Effekte"],["jobs","Jobs"],["game","Game"],["agents","Agenten"]]){
+  const button=document.createElement("button");
+  button.textContent=label;button.type="button";button.dataset.tab=key;
+  button.onclick=()=>{alphaTab=key;renderAlphaTabs();if(key==="game")loadGameProjects();};
+  alphaNav.append(button);
+}
+function renderAlphaTabs(){
+  if(!credential)alphaTab="login";
+  for(const button of alphaNav.querySelectorAll("button")){
+    button.disabled=!credential&&button.dataset.tab!=="login";
+    button.setAttribute("aria-current",button.dataset.tab===alphaTab?"page":"false");
+  }
+  for(const section of [...alphaSections,document.getElementById("gameProjectPanel")]){
+    section.classList.add("alphaPanel");
+    section.hidden=!(alphaPanels[alphaTab]||[]).includes(section);
+  }
+
+}
+renderAlphaTabs();
+const updateStatus=()=>{
+  renderAlphaTabs();
+  if(!credential){statusLine.textContent="Keine aktive Session.";return;}
+  if(!expiresAt){statusLine.textContent="Session-Token im Tab aktiv (Ablaufzeit nicht bekannt).";return;}
+  const seconds=Math.max(0,Math.ceil((expiresAt-Date.now())/1000));
+  statusLine.textContent=seconds>0?
+    "Session im Tab aktiv. Verbleibend bei letzter Aktualisierung: "+seconds+" Sekunden.":
+    "Session vermutlich abgelaufen – bitte neu anmelden.";
+};
+async function request(path,options={}){
+  const headers={...(options.headers||{})};
+  if(credential)headers.Authorization="Bearer "+credential;
+  const response=await fetch(path,{...options,headers,cache:"no-store"});
+  return {status:response.status,data:await response.json()};
+}
+const show=(v,area="agents")=>{
+  const target=area==="login"?statusLine:area==="jobs"?demoJobsOut:out;
+  target.textContent=JSON.stringify(v,null,2);
+};
+function fillSelect(id,items,selected){
+  const select=document.getElementById(id);
+  const previous=selected===undefined?select.value:selected;
+  select.replaceChildren();
+  for(const item of items){
+    const option=document.createElement("option");
+    option.value=item.value;option.textContent=item.label;
+    select.append(option);
+  }
+  if(items.some(item=>item.value===previous))select.value=previous;
+  return select;
+}
+async function refreshAgentGrants(){
+  const agentId=document.getElementById("grantAgent").value;
+  const list=document.getElementById("grantList");
+  list.replaceChildren();
+  if(!agentId){list.textContent="Keinen eigenen Agenten ausgewählt.";return;}
+  const result=await request("/api/agent-grants?agent_id="+encodeURIComponent(agentId));
+  if(result.status!==200){list.textContent="Freigaben konnten nicht geladen werden.";return;}
+  const users=result.data.grantees;
+  if(!users.length){list.textContent="Noch keine aktiven Freigaben für diesen Agenten.";return;}
+  const heading=document.createElement("strong");
+  heading.textContent="Aktive Freigaben (demo.echo): ";
+  list.append(heading);
+  list.append(document.createTextNode(users.join(", ")));
+}
+async function refreshGrantUsers(){
+  const result=await request("/api/grantable-users");
+  if(result.status===200){
+    fillSelect("grantee",result.data.users.map(user=>({value:user.user_id,label:user.user_id})));
+    if(!result.data.users.length)document.getElementById("grantStatus").textContent="Keine anderen aktiven Benutzer verfügbar.";
+  }else document.getElementById("grantStatus").textContent="Benutzerliste konnte nicht geladen werden ("+result.status+").";
+}
+const agentSelect=document.getElementById("selectedAgent");
+let cachedAgents=[],cachedDemoJobs=[],cachedHostJobs=[];
+const demoJobSelect=document.getElementById("demoJobSelect");
+const allJobsSelect=document.getElementById("allJobsSelect");
+function renderAllJobs(){
+  const previous=allJobsSelect.value;allJobsSelect.replaceChildren();
+  for(const job of cachedDemoJobs){
+    const option=document.createElement("option");option.value="demo:"+job.job_id;
+    option.textContent="Demo · "+job.job_id+" · "+job.state;allJobsSelect.append(option);
+  }
+  for(const job of cachedHostJobs){
+    const option=document.createElement("option");option.value="host:"+job.job_id;
+    option.textContent="Host · "+job.job_id+" · "+job.state;allJobsSelect.append(option);
+  }
+  if([...allJobsSelect.options].some(o=>o.value===previous))allJobsSelect.value=previous;
+  showAllJob();
+  const tbody=document.getElementById("allJobsRows");tbody.replaceChildren();
+  for(const [kind,jobs] of [["host",cachedHostJobs],["demo",cachedDemoJobs]]){
+    for(const job of jobs){
+      const row=document.createElement("tr"),id=kind+":"+job.job_id;
+      row.dataset.jobKey=id;row.setAttribute("aria-selected",String(id===allJobsSelect.value));
+      for(const value of [job.job_id,kind==="host"?(job.effect_id||"Host"):(job.agent_id||"Demo"),job.state||""]){
+        const td=document.createElement("td");td.textContent=value;row.append(td);
+      }
+      const actions=document.createElement("td");
+      const select=document.createElement("button");select.type="button";select.textContent="Auswählen";
+      select.onclick=()=>{allJobsSelect.value=id;showAllJob();};actions.append(select);
+      if(kind==="host"){
+        const results=document.createElement("button");results.type="button";results.textContent="Ergebnisse";
+        results.onclick=()=>{allJobsSelect.value=id;showAllJob();document.getElementById("allJobResultsButton").click();};
+        actions.append(results);
+        for(const [label,buttonId] of [["Ausführen","hostJobExecute"],["Status","hostJobExecutionStatus"],["Abbrechen","hostJobCancel"]]){
+          const action=document.createElement("button");action.type="button";action.textContent=label;
+          action.onclick=()=>{allJobsSelect.value=id;showAllJob();document.getElementById(buttonId).click();};
+          actions.append(action);
+        }
+      }
+      row.append(actions);tbody.append(row);
+    }
+  }
+}
+function showAllJob(){
+  const [kind,...parts]=allJobsSelect.value.split(":");const id=parts.join(":");
+  const job=(kind==="demo"?cachedDemoJobs:cachedHostJobs).find(j=>j.job_id===id);
+  document.getElementById("allJobDetails").textContent=job
+    ?[kind,job.job_id,job.state,job.user_id||job.requested_by||"",job.agent_id||job.effect_id||""].join(" · ")
+    :"Job auswählen.";
+  document.getElementById("allJobResultsButton").hidden=!(job&&kind==="host");
+  for(const row of document.querySelectorAll("#allJobsRows tr"))row.setAttribute("aria-selected",String(row.dataset.jobKey===allJobsSelect.value));
+  if(job&&kind==="demo"){demoJobSelect.value=id;showSelectedJob();}
+  if(job&&kind==="host"){
+    document.getElementById("hostJobSelect").value=id;
+    document.getElementById("hostJobId").value=id;showSelectedJob();
+  }
+}
+allJobsSelect.onchange=showAllJob;
+async function deleteSelected(path,payload,name,impact){
+  if(!name)return;
+  if(!confirm(name+" endgültig löschen? "+impact))return;
+  const output=document.getElementById("deleteStatus");
+  try{
+    const result=await api(path,payload);
+    handleUnauthorized(result);
+    const messages={unauthorized:"Bitte erneut anmelden.",not_resource_owner:"Keine Löschberechtigung.",
+      resource_not_found:"Eintrag wurde bereits gelöscht oder ist nicht vorhanden.",
+      cancel_job_first:"Job zuerst stornieren; Reservierungen vorher freigeben.",
+      delete_dependent_jobs_first:"Zugehörige Jobs zuerst stornieren und einzeln löschen.",
+      active_reservation_exists:"Aktive Reservierungen zuerst klären.",
+      protected_history_exists:"Geschützte Historie verhindert die Löschung.",
+      protected_history_or_reservation_exists:"Geschützte Historie oder Reservierung verhindert die Löschung.",
+      delete_transaction_failed:"Löschen fehlgeschlagen. Alle Änderungen wurden zurückgerollt."};
+    if(result.status===200||result.status===404){
+      cachedHostJobs=[];
+      document.getElementById("hostJobSelect").replaceChildren();
+      document.getElementById("hostJobId").replaceChildren();
+      await refresh();
+      renderDemoJobs();renderAllJobs();
+    }
+    output.textContent=result.status===200?name+" wurde gelöscht.":
+      (messages[result.data.error]||"Löschen fehlgeschlagen: "+(result.data.error||result.status));
+  }catch(error){output.textContent="Verbindung fehlgeschlagen. Listen vor erneutem Löschen aktualisieren.";}
+}
+document.getElementById("allJobDelete").onclick=async()=>{
+  const [kind,...parts]=allJobsSelect.value.split(":");const id=parts.join(":");
+  if(!id||!["demo","host"].includes(kind))return;
+  await deleteSelected(kind==="demo"?"/api/jobs/delete":"/api/host/jobs/delete",
+    kind==="demo"?{job_id:id}:{host_id:hv("jobHostSelect"),job_id:id},id,
+    "Nur inaktive Alpha-Testdaten werden entfernt. Host-Jobs zuerst stornieren.");
+};
+document.getElementById("agentDelete").onclick=()=>deleteSelected("/api/agents/delete",
+  {agent_id:agentSelect.value},agentSelect.value,"Delegationen und Host-Zuordnungen werden entfernt. Zugehörige Jobs vorher einzeln löschen.");
+document.getElementById("hostDelete").onclick=()=>deleteSelected("/api/hosts/delete",
+  {host_id:hostSelect.value},hostSelect.value,"Effektdefinitionen, Regeln und Zuordnungen werden entfernt. Jobs und Reservierungen vorher klären.");
+document.getElementById("effectDelete").onclick=()=>deleteSelected("/api/host/effects/delete",
+  {host_id:hv("effectHostSelect"),effect_id:hv("effectSelect")},hv("effectSelect"),
+  "Die Effektdefinition wird entfernt. Zugehörige Jobs vorher einzeln löschen.");
+
+function showSelectedJob(){
+  const job=cachedDemoJobs.find(j=>j.job_id===demoJobSelect.value)
+    ||cachedHostJobs.find(j=>j.job_id===document.getElementById("hostJobSelect").value);
+  document.getElementById("selectedJobDetails").textContent=job
+    ?[job.job_id,job.user_id||job.requested_by||"",job.state||""].join(" · ")
+    :"Job auswählen.";
+}
+function renderAgentJobs(){
+  const agent=cachedAgents.find(a=>a.agent_id===agentSelect.value);
+  document.getElementById("agentDetails").textContent=agent
+    ?[agent.agent_id,"Besitzer: "+agent.owner,"Zugriff: "+agent.relationship].join(" · ")
+    :"Agent auswählen.";
+  const container=document.getElementById("agentJobList");
+  container.replaceChildren();
+  const jobs=cachedDemoJobs.filter(j=>j.agent_id===agentSelect.value);
+  if(!jobs.length){container.textContent="Keine Jobs dieses Agenten vorhanden.";return;}
+  for(const job of jobs){
+    const button=document.createElement("button");button.type="button";
+    button.textContent=[job.job_id,job.user_id||"",job.state||""].join(" · ");
+    button.onclick=()=>{
+      alphaTab="jobs";renderAlphaTabs();
+      demoJobSelect.value=job.job_id;showSelectedJob();
+    };
+    container.append(button);
+  }
+}
+agentSelect.onchange=renderAgentJobs;
+demoJobSelect.onchange=showSelectedJob;
+function renderDemoJobs(){
+  const previous=demoJobSelect.value;
+  demoJobSelect.replaceChildren();
+  for(const job of cachedDemoJobs){
+    const option=document.createElement("option");option.value=job.job_id;
+    option.textContent=job.job_id+" · "+job.state;demoJobSelect.append(option);
+  }
+  if(cachedDemoJobs.some(j=>j.job_id===previous))demoJobSelect.value=previous;
+  showSelectedJob();renderAgentJobs();renderAllJobs();
+}
+function fillAgents(agents){
+  const last=agentSelect.value;
+  const jobAgentSelect=document.getElementById("jobAgentSelect");
+  const lastJobAgent=jobAgentSelect.value;
+  agentSelect.replaceChildren();jobAgentSelect.replaceChildren();
+  for(const agent of agents){
+    const option=document.createElement("option");
+    option.value=agent.agent_id;
+    option.textContent=agent.agent_id+" ("+agent.relationship+", owner: "+agent.owner+")";
+    agentSelect.append(option);
+    jobAgentSelect.append(option.cloneNode(true));
+  }
+  if(agents.some(a=>a.agent_id===last))agentSelect.value=last;
+  if(agents.some(a=>a.agent_id===lastJobAgent))jobAgentSelect.value=lastJobAgent;
+}
+const handleUnauthorized=(reply)=>{
+  if(reply.status===401){credential="";expiresAt=0;updateStatus();
+    statusLine.textContent="Session ungültig, widerrufen oder abgelaufen. Erneut anmelden.";}
+};
+const api=async(path,body)=>request(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+const refresh=async()=>{
+  if(!credential){show({message:"Bitte zuerst anmelden."});return;}
+  const agents=await request("/api/agents");
+  const jobs=await request("/api/jobs");
+  handleUnauthorized(agents);
+  handleUnauthorized(jobs);
+  if(credential && agents.status===200){cachedAgents=agents.data.agents;fillAgents(cachedAgents);}
+  if(credential && agents.status===200){
+    fillSelect("grantAgent",cachedAgents.filter(a=>a.relationship==="owned")
+      .map(a=>({value:a.agent_id,label:a.agent_id})));
+    await refreshGrantUsers();
+    await refreshAgentGrants();
+  }
+  if(credential && jobs.status===200){cachedDemoJobs=jobs.data.jobs;renderDemoJobs();}
+  if(credential)await refreshHosts();
+  if(credential)updateStatus();
+  out.textContent=agents.status===200?JSON.stringify({agents:agents.data.agents},null,2):JSON.stringify(agents,null,2);
+  demoJobsOut.textContent=JSON.stringify(jobs,null,2);
+};
+document.getElementById("redeem").onclick=async()=>{
+  const secret=document.getElementById("invite").value;
+  document.getElementById("invite").value="";
+  const password=document.getElementById("signupPassword").value;
+  document.getElementById("signupPassword").value="";
+  const result=await api("/api/redeem",{invitation:secret,password});
+  if(result.status===201){
+    credential=result.data.session_token;
+    expiresAt=Date.now()+result.data.expires_in*1000;
+    updateStatus();
+    show({status:201,message:"Session aktiviert."},"login");
+  }
+  else show(result);
+};
+document.getElementById("login").onclick=async()=>{
+  const user_id=document.getElementById("loginUser").value;
+  const password=document.getElementById("loginPassword").value;
+  document.getElementById("loginPassword").value="";
+  const result=await api("/api/login",{user_id,password});
+  if(result.status===200){
+    credential=result.data.session_token;
+    expiresAt=Date.now()+result.data.expires_in*1000;
+    updateStatus();
+    await refresh();
+  } else {
+    const explanations={
+      400:"Ungültige Anmeldedaten oder Anfrage.",
+      401:"Benutzer-ID oder Passwort nicht akzeptiert.",
+      403:"Lokale Origin-/Host-Prüfung fehlgeschlagen.",
+      429:"Zu viele Login-/Registrierungsversuche. Bitte mindestens 60 Sekunden warten."
+    };
+    show({status:result.status,error:result.data.error||"login_failed",
+          message:explanations[result.status]||"Anmeldung fehlgeschlagen."},"login");
+  }
+};
+document.getElementById("setPassword").onclick=async()=>{
+  if(!credential){show({message:"Für Alt-Konto zuerst gültigen Session-Token eingeben."});return;}
+  const password=document.getElementById("legacyPassword").value;
+  document.getElementById("legacyPassword").value="";
+  const result=await api("/api/password/set",{password});
+  show(result);
+};
+document.getElementById("connect").onclick=async()=>{
+  const supplied=document.getElementById("token").value;
+  if(supplied){credential=supplied;expiresAt=0;updateStatus();}
+  document.getElementById("token").value="";
+  await refresh();
+};
+document.getElementById("refresh").onclick=refresh;
+document.getElementById("addAgent").onclick=async()=>{
+  if(!credential){show({message:"Zuerst mit Benutzer-ID anmelden."});return;}
+  const agent_id=document.getElementById("newAgent").value;
+  const result=await api("/api/agents",{agent_id});
+  if(result.status===201){
+    document.getElementById("newAgent").value="";
+    await refresh();agentSelect.value=agent_id;
+    document.getElementById("grantAgent").value=agent_id;
+    await refreshAgentGrants();
+  } else show(result);
+};
+async function changeGrant(revoke){
+  if(!credential){show({message:"Zuerst anmelden."});return;}
+  const agentId=document.getElementById("grantAgent").value;
+  const userId=document.getElementById("grantee").value;
+  const message=document.getElementById("grantStatus");
+  if(!agentId||!userId){message.textContent="Bitte Agent und Empfänger auswählen.";return;}
+  if(!cachedAgents.some(a=>a.agent_id===agentId&&a.relationship==="owned")){
+    message.textContent="Der Agent gehört nicht zu deinem Konto.";return;
+  }
+  const result=await api("/api/grants",{agent_id:agentId,grantee_user_id:userId,revoke});
+  if(result.status===200){
+    message.textContent=revoke
+      ?"Freigabe für "+document.getElementById("grantee").value+" widerrufen."
+      :"Agent für "+document.getElementById("grantee").value+" freigegeben.";
+    await refresh();
+  }else{
+    const messages={grant_not_permitted:"Freigabe nicht möglich: Bitte eigenen Agenten und aktiven anderen Benutzer auswählen.",
+      invalid_grant:"Bitte einen Agenten und einen Empfänger auswählen.",
+      unauthorized:"Session abgelaufen. Bitte erneut anmelden."};
+    message.textContent=
+      messages[result.data?.error]||"Freigabe fehlgeschlagen ("+result.status+").";
+  }
+}
+document.getElementById("grantAgent").onchange=refreshAgentGrants;
+document.getElementById("grant").onclick=()=>changeGrant(false);
+document.getElementById("revoke").onclick=()=>changeGrant(true);
+document.getElementById("create").onclick=async()=>{
+  if(!credential){show({message:"Bitte zuerst anmelden."});return;}
+  const selectedJobAgent=document.getElementById("jobAgentSelect");
+  if(!selectedJobAgent.value){show({message:"Zuerst Agenten auswählen."},"jobs");return;}
+  const result=await api("/api/jobs",{agent_id:selectedJobAgent.value,
+    action:"demo.echo",idempotency_key:crypto.randomUUID()});
+  handleUnauthorized(result);
+  show(result,"jobs");
+  if(result.status===201||result.status===200)await refresh();
+};
+const hostOut=document.getElementById("hostOutput");
+const hostSelect=document.getElementById("hostSelect");
+let hostCache=[];
+const hv=id=>document.getElementById(id).value;
+const hm=id=>document.getElementById(id).checked;
+const minutes=s=>{const p=s.split(":").map(Number);return p[0]*60+p[1];};
+const fmtMinutes=n=>String(Math.floor(n/60)).padStart(2,"0")+":"+
+  String(n%60).padStart(2,"0");
+function hostConfig(){
+  const gpu=hv("hostGpu"),parallel=hv("hostParallel");
+  return {mode:hv("hostMode"),idle_only:hm("hostIdle"),
+    gpu_max_percent:gpu===""?null:Number(gpu),
+    max_parallel_effects:parallel===""?null:Number(parallel),
+    timezone:hv("hostTimezone"),
+    weekdays:hv("hostDays").split(",").map(x=>Number(x.trim())),
+    start_minute:minutes(hv("hostStart")),end_minute:minutes(hv("hostEnd"))};
+}
+function loadRule(rule){
+  document.getElementById("hostRuleId").value=rule.rule_id;
+  document.getElementById("hostPriority").value=rule.priority;
+  document.getElementById("hostEnabled").checked=rule.enabled;
+  document.getElementById("hostMode").value=rule.config.mode;
+  document.getElementById("hostIdle").checked=rule.config.idle_only;
+  document.getElementById("hostGpu").value=rule.config.gpu_max_percent??"";
+  document.getElementById("hostParallel").value=rule.config.max_parallel_effects??"";
+  document.getElementById("hostTimezone").value=rule.config.timezone;
+  document.getElementById("hostDays").value=rule.config.weekdays.join(",");
+  document.getElementById("hostStart").value=fmtMinutes(rule.config.start_minute);
+  document.getElementById("hostEnd").value=fmtMinutes(rule.config.end_minute);
+}
+async function refreshHosts(){
+  if(!credential){hostOut.textContent="Bitte zuerst anmelden.";return;}
+  const result=await request("/api/hosts");
+  handleUnauthorized(result);
+  if(result.status!==200){hostOut.textContent=JSON.stringify(result,null,2);return;}
+  const previous=hostSelect.value;
+  hostCache=result.data.hosts;
+  hostSelect.replaceChildren();
+  const jobHost=document.getElementById("jobHostSelect");jobHost.replaceChildren();
+  const effectHost=document.getElementById("effectHostSelect");effectHost.replaceChildren();
+  for(const host of hostCache){
+    const opt=document.createElement("option");
+    opt.value=host.host_id;opt.textContent=host.host_id;hostSelect.append(opt);
+    const copy=opt.cloneNode(true);jobHost.append(copy);
+    effectHost.append(opt.cloneNode(true));
+  }
+  if(hostCache.some(h=>h.host_id===previous))hostSelect.value=previous;
+  renderHost();
+  await loadHostStorageSettings();
+  await refreshRuntimes();
+  jobHost.value=hostSelect.value;
+  effectHost.value=hostSelect.value;
+  renderJobEffects();
+  if(hostSelect.value)await document.getElementById("hostJobsRefresh").onclick();
+}
+let renderedHostId="";
+function renderHost(){
+  document.getElementById("jobHostSelect").value=hostSelect.value;
+  renderJobEffects();
+  if(renderedHostId!==hostSelect.value){
+    renderedHostId=hostSelect.value;cachedHostJobs=[];
+    document.getElementById("hostJobSelect").replaceChildren();
+    document.getElementById("hostJobId").value="";
+    document.getElementById("hostJobsOutput").textContent="Keine Host-Jobs geladen.";
+    renderAllJobs();showSelectedJob();
+  }
+  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const select=document.getElementById("hostRuleSelect");
+  select.replaceChildren();
+  if(host)for(const rule of host.rules){
+    const opt=document.createElement("option");opt.value=rule.rule_id;
+    opt.textContent=rule.rule_id+" (Priorität "+rule.priority+")";select.append(opt);
+  }
+  if(!host?.rules.length)document.getElementById("hostRuleId").value="";
+  const shortcuts=document.getElementById("hostEffectShortcut");shortcuts.replaceChildren();
+  for(const effect of host?.effects||[]){const opt=document.createElement("option");opt.value=effect.effect_id;opt.textContent=effect.effect_id;shortcuts.append(opt);}
+  const effects=document.getElementById("effectSelect");
+  const previousEffect=effects.value;
+  effects.replaceChildren();
+  if(host)for(const effect of host.effects){
+    const opt=document.createElement("option");opt.value=effect.effect_id;
+    opt.textContent=effect.effect_id+(effect.enabled?"":" (deaktiviert)");
+    effects.append(opt);
+  }
+  if(host?.effects.some(e=>e.effect_id===previousEffect))effects.value=previousEffect;
+  document.getElementById("effectHostSelect").value=hostSelect.value;
+  refreshComfyImportRuntimes();
+  if(effects.value)loadSelectedEffect();
+  else {
+    document.getElementById("effectWorkflowDetails").textContent="Kein Effekt ausgewählt.";
+    document.getElementById("effectId").value="";
+    document.getElementById("effectDescription").value="";
+    document.getElementById("effectEnabled").checked=true;
+  }
+  hostOut.textContent=host?JSON.stringify(host,null,2):
+    "Noch kein eigener Host vorhanden. Oben Host-ID und lokalen Bestätigungscode eingeben und Host übernehmen.";
+}
+function renderJobParameters(){
+  const host=hostCache.find(h=>h.host_id===hv("jobHostSelect"));
+  const effect=host?.effects.find(e=>e.effect_id===hv("jobEffectSelect"));
+  const area=document.getElementById("jobParameterFields");
+  area.replaceChildren();
+  document.getElementById("effectManual").disabled=false;
+  const specs=effect?.comfy_workflow?.parameters||[];
+  const groups=new Map();
+  for(const p of specs){
+    const key=String(p.node_id||p.binding.split(".")[0]);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(p);
+  }
+  for(const [nodeId,items] of groups){
+    const section=document.createElement("details");
+    section.style.cssText="min-width:0;width:100%;margin:4px 0 10px;padding:12px;border:1px solid var(--line);border-radius:10px";
+    const legend=document.createElement("summary");
+    legend.textContent="Node "+nodeId+" · "+items[0].class_type+" ("+items.length+" Parameter)";
+    legend.style.cursor="pointer";section.append(legend);
+    const grid=document.createElement("div");
+    grid.style.cssText="display:grid;flex-basis:auto;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,170px),1fr));gap:10px;align-items:start";
+    section.append(grid);
+    for(const p of items){
+    const label=document.createElement("label");
+    label.textContent=p.input+" ("+p.type+")";
+    label.style.cssText="min-width:0;display:flex;flex-direction:column;gap:4px";
+    const wide=p.widget==="textarea"||p.type==="string"&&/prompt|text|description/i.test(p.input);
+    if(wide)label.style.gridColumn="1 / -1";
+    const field=(p.type==="enum"||p.type==="file")?document.createElement("select"):
+      (p.widget==="textarea"||p.type==="string"&&/prompt|text|description/i.test(p.input))
+      ?document.createElement("textarea"):document.createElement("input");
+    field.dataset.binding=p.binding;field.dataset.kind=p.type;
+    if(field.tagName==="SELECT"){
+      for(const choice of p.constraints?.choices||p.choices||[]){
+        const option=document.createElement("option");option.value=choice;
+        option.textContent=choice;field.append(option);
+      }
+      if(p.type==="file" && p.default!=null && ![...field.options].some(o=>o.value===String(p.default))){
+        const option=document.createElement("option");option.value=String(p.default);
+        option.textContent=String(p.default)+" (Workflow-Vorgabe)";field.append(option);
+      }
+      field.value=String(p.default??"");
+    }else if(field.tagName==="TEXTAREA"){field.rows=5;field.value=String(p.default??"");}
+    if(p.type==="boolean"){field.type="checkbox";field.checked=p.default===true;}
+    else if(field.tagName==="INPUT"){field.type=p.type==="integer"||p.type==="number"?"number":"text";
+      if(field.type==="number"){
+        field.step=String(p.constraints?.step??(p.type==="integer"?1:"any"));
+        if(Number.isFinite(p.constraints?.min))field.min=String(p.constraints.min);
+        if(Number.isFinite(p.constraints?.max))field.max=String(p.constraints.max);
+      }
+      field.value=String(p.default??"");}
+    field.style.maxWidth="100%";
+    label.append(field);
+    if(p.type==="file"){
+      const picker=document.createElement("input");
+      picker.type="file";picker.setAttribute("aria-label","Lokale Datei für "+p.binding+" auswählen");
+      picker.dataset.fileBinding=p.binding;
+      picker.style.cssText="max-width:100%;font-size:12px";
+      const status=document.createElement("small");
+      status.textContent="Noch keine lokale Datei ausgewählt.";
+      picker.addEventListener("change",async()=>{
+        const selected=picker.files?.[0];
+        if(!selected){status.textContent="Noch keine lokale Datei ausgewählt.";return;}
+        const host_id=hv("jobHostSelect");
+        const effect_id=hv("jobEffectSelect");
+        document.getElementById("effectManual").disabled=true;
+        status.textContent="Lokales Staging läuft: "+selected.name;
+        try{
+          const result=await request("/api/host/assets/stage",{
+            method:"POST",
+            headers:{"Content-Type":"application/octet-stream",
+              "X-Minglefield-Host":host_id,
+              "X-Minglefield-Filename":selected.name},
+            body:selected});
+          if(result.status!==201){
+            status.textContent="Staging fehlgeschlagen: "+JSON.stringify(result.data);
+            return;
+          }
+          if(host_id!==hv("jobHostSelect")||effect_id!==hv("jobEffectSelect")){
+            status.textContent="Asset gespeichert, aber Host/Effekt hat sich geändert.";
+            return;
+          }
+          picker.dataset.stagedAssetId=result.data.asset.asset_id;
+          const bindingField=[...document.querySelectorAll("#jobParameterFields [data-binding]")]
+            .find(x=>x.dataset.binding===picker.dataset.fileBinding);
+          if(bindingField){
+            const token="minglefield-asset:"+result.data.asset.asset_id;
+            if(bindingField.tagName==="SELECT"){
+              const option=document.createElement("option");
+              option.value=token;option.textContent="Lokales Asset: "+selected.name;
+              bindingField.append(option);
+            }
+            bindingField.value=token;
+          }
+          document.getElementById("effectManual").disabled=false;
+          status.textContent="Lokal gespeichert: "+selected.name+
+            " · Asset-ID "+result.data.asset.asset_id+
+            " · SHA-256 "+result.data.asset.sha256;
+          document.getElementById("jobActionOutput").textContent=
+            "Datei dauerhaft im lokalen Staging gespeichert. Noch kein ComfyUI-Transfer. "+
+            "Jobanlage bleibt bis zur persistenten Asset-Job-Bindung gesperrt.";
+        }catch(error){
+          status.textContent="Staging fehlgeschlagen: "+String(error);
+        }
+      });
+      label.append(picker,status);
+    }
+    grid.append(label);
+    }
+    area.append(section);
+  }
+}
+async function refreshJobFileChoices(){
+  const host=hv("jobHostSelect"),effect=hv("jobEffectSelect");
+  if(!host||!effect)return;
+  const response=await request("/api/host/comfy/file-choices?host_id="+
+    encodeURIComponent(host)+"&effect_id="+encodeURIComponent(effect));
+  if(response.status!==200)return;
+  for(const field of document.querySelectorAll("#jobParameterFields select[data-binding]")){
+    const choices=response.data.choices?.[field.dataset.binding];
+    if(!Array.isArray(choices))continue;
+    const previous=field.value;
+    field.replaceChildren();
+    for(const value of choices){
+      const option=document.createElement("option");
+      option.value=value;option.textContent=value;field.append(option);
+    }
+    if(choices.includes(previous))field.value=previous;
+    else if(previous.startsWith("minglefield-asset:")){
+      const option=document.createElement("option");
+      option.value=previous;option.textContent="Lokales Asset: "+previous.slice(17);
+      field.append(option);field.value=previous;
+    }
+  }
+}
+function renderJobEffects(){
+  const host=hostCache.find(h=>h.host_id===hv("jobHostSelect"));
+  const select=document.getElementById("jobEffectSelect");
+  const previous=select.value;select.replaceChildren();
+  for(const effect of host?.effects||[]){
+    if(!effect.enabled)continue;
+    const opt=document.createElement("option");opt.value=effect.effect_id;
+    opt.textContent=effect.effect_id;select.append(opt);
+  }
+  if([...select.options].some(o=>o.value===previous))select.value=previous;
+  renderJobParameters();
+  refreshJobComfyRuntimes();
+  refreshJobFileChoices();
+}
+async function refreshJobComfyRuntimes(){
+  const select=document.getElementById("jobComfyRuntime");
+  const old=select.value;select.replaceChildren();
+  const host=hv("jobHostSelect");
+  if(!host)return;
+  const response=await request("/api/host/runtimes?host_id="+encodeURIComponent(host));
+  if(response.status!==200)return;
+  for(const runtime of response.data.runtimes.filter(x=>x.type==="comfyui"&&x.enabled)){
+    const option=document.createElement("option");option.value=runtime.id;
+    option.textContent=runtime.id;select.append(option);
+  }
+  const effect=hostCache.find(h=>h.host_id===host)?.effects.find(e=>e.effect_id===hv("jobEffectSelect"));
+  const preferred=effect?.comfy_workflow?.runtime_id;
+  if([...select.options].some(o=>o.value===preferred))select.value=preferred;
+  else if([...select.options].some(o=>o.value===old))select.value=old;
+}
+document.getElementById("jobEffectSelect").onchange=()=>{renderJobParameters();refreshJobComfyRuntimes();refreshJobFileChoices();};
+document.getElementById("jobHostSelect").onchange=()=>{
+  hostSelect.value=hv("jobHostSelect");renderHost();renderJobEffects();
+};
+function loadSelectedEffect(){
+  const host=hostCache.find(h=>h.host_id===hv("effectHostSelect"));
+  const effect=host?.effects.find(e=>e.effect_id===document.getElementById("effectSelect").value);
+  if(!effect)return;
+  document.getElementById("effectId").value=effect.effect_id;
+  document.getElementById("effectDescription").value=effect.description;
+  document.getElementById("effectEnabled").checked=effect.enabled;
+  document.getElementById("effectWorkflowDetails").textContent=effect.comfy_workflow
+    ?JSON.stringify({workflow_attached:true,runtime_id:effect.comfy_workflow.runtime_id,
+       workflow_sha256:effect.comfy_workflow.workflow_sha256,
+       selected_bindings:effect.comfy_workflow.selected_bindings,
+       parameters:effect.comfy_workflow.parameters},null,2)
+    :"Kein ComfyUI-Workflow mit diesem Effekt verknüpft.";
+}
+document.getElementById("effectSelect").onchange=loadSelectedEffect;
+document.getElementById("hostRuleSelect").onchange=()=>{
+  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));
+  if(rule)loadRule(rule);
+};
+let inspectedComfy=null;
+function filterComfyBindings(){
+  const q=hv("comfyNodeFilter").trim().toLowerCase();
+  for(const label of document.querySelectorAll("#comfyBindings label"))
+    label.hidden=!label.dataset.search.includes(q);
+  updateComfySelectionCount();
+}
+function updateComfySelectionCount(){
+  const labels=[...document.querySelectorAll("#comfyBindings label")];
+  document.getElementById("comfySelectionCount").textContent=
+    labels.filter(l=>l.querySelector("input").checked).length+" / "+labels.length+
+    " gewählt · "+labels.filter(l=>!l.hidden).length+" sichtbar";
+}
+document.getElementById("comfyNodeFilter").oninput=filterComfyBindings;
+for(const [id,checked] of [["comfySelectVisibleAll",true],["comfySelectVisibleNone",false]]){
+  document.getElementById(id).onclick=()=>{
+    for(const label of document.querySelectorAll("#comfyBindings label:not([hidden])"))
+      label.querySelector("input").checked=checked;
+    updateComfySelectionCount();
+  };
+}
+async function refreshComfyImportRuntimes(){
+  const host=hv("effectHostSelect");
+  const select=document.getElementById("comfyImportRuntime");
+  select.replaceChildren();
+  if(!host)return;
+  const response=await request("/api/host/runtimes?host_id="+encodeURIComponent(host));
+  if(response.status!==200)return;
+  for(const runtime of response.data.runtimes.filter(r=>r.type==="comfyui"&&r.enabled)){
+    const option=document.createElement("option");option.value=runtime.id;
+    option.textContent=runtime.id+" · "+runtime.endpoint;select.append(option);
+  }
+}
+document.getElementById("comfyWorkflowInspect").onclick=async()=>{
+  const output=document.getElementById("comfyWorkflowOutput");
+  const bindings=document.getElementById("comfyBindings");
+  bindings.replaceChildren();inspectedComfy=null;
+  document.getElementById("comfyWorkflowSave").disabled=true;
+  const file=document.getElementById("comfyWorkflowFile").files[0];
+  const host=hv("effectHostSelect"),runtime=hv("comfyImportRuntime");
+  if(!file||!host||!runtime){output.textContent="Host, Runtime und API-JSON-Datei auswählen.";return;}
+  if(file.size>1024*1024){output.textContent="Datei über 1 MiB.";return;}
+  try{
+    const workflow=JSON.parse(await file.text());
+    const result=await request("/api/host/comfy/inspect",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({host_id:host,runtime_id:runtime,workflow})});
+    if(result.status!==200){output.textContent=JSON.stringify(result.data,null,2);return;}
+    inspectedComfy={host,runtime,workflow};
+    const verified=result.data.candidates.filter(c=>c.verified);
+    for(const c of verified){
+      const label=document.createElement("label");
+      const check=document.createElement("input");check.type="checkbox";check.value=c.binding;
+      label.dataset.search=(c.binding+" "+c.class_type+" "+c.type).toLowerCase();
+      check.onchange=updateComfySelectionCount;
+      label.append(check,document.createTextNode(" "+c.binding+" · "+c.class_type+
+        " · "+c.type+" · "+JSON.stringify(c.default)));
+      bindings.append(label);
+    }
+    filterComfyBindings();
+    output.textContent="API-JSON: "+result.data.node_count+" Nodes, "+
+      verified.length+" geprüfte Parameter. "+result.data.warnings.length+
+      " Hinweise. Parameter auswählen und Effekt-ID vergeben.";
+    document.getElementById("comfyWorkflowSave").disabled=false;
+  }catch(error){output.textContent="Importprüfung fehlgeschlagen: "+error.message;}
+};
+document.getElementById("comfyWorkflowSave").onclick=async()=>{
+  const output=document.getElementById("comfyWorkflowOutput");
+  if(!inspectedComfy)return;
+  const effect_id=hv("comfyNewEffectId").trim(),description=hv("comfyNewEffectDescription");
+  if(!effect_id){output.textContent="Bitte eine NEUE Effekt-ID für den Import eingeben.";return;}
+  if(hostCache.some(h=>h.host_id===inspectedComfy.host&&h.effects.some(e=>e.effect_id===effect_id))){output.textContent="Diese Effekt-ID existiert bereits. Import abgebrochen, nichts überschrieben.";return;}
+  const bindings=[...document.querySelectorAll("#comfyBindings input:checked")].map(x=>x.value);
+  const result=await request("/api/host/comfy/import",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:inspectedComfy.host,runtime_id:inspectedComfy.runtime,
+      effect_id,description,workflow:inspectedComfy.workflow,bindings})});
+  output.textContent=JSON.stringify(result.data,null,2);
+  if(result.status===200){
+    await refreshHosts();
+    hostSelect.value=inspectedComfy.host;
+    document.getElementById("effectHostSelect").value=inspectedComfy.host;
+    renderHost();
+    document.getElementById("effectSelect").value=effect_id;
+    loadSelectedEffect();
+    const present=hostCache.some(h=>h.host_id===inspectedComfy.host&&
+      h.effects.some(e=>e.effect_id===effect_id));
+    output.textContent=present
+      ?"Workflow gespeichert und Effekt "+effect_id+" in der Liste ausgewählt (zunächst deaktiviert)."
+      :"Speichern bestätigt, aber Effekt "+effect_id+
+        " fehlt in /api/hosts. Bitte diese Meldung melden; Datenbank und Host-Zuordnung prüfen.";
+  }
+};
+function setRuntimeLamp(state,message){
+  const colors={online:"#36ce83",offline:"#f16e72",unknown:"#8792a4"};
+  const color=colors[state]||colors.unknown;
+  document.getElementById("runtimeLamp").style.background=color;
+  document.getElementById("runtimeLamp").style.boxShadow="0 0 0 3px "+color+"33, 0 0 12px "+color+"66";
+  document.getElementById("runtimeStatusText").textContent=message;
+}
+document.getElementById("runtimeCheck").onclick=async()=>{
+  const id=hv("runtimeSelect");
+  const runtime=runtimeCache.find(r=>r.id===id);
+  if(!runtime){setRuntimeLamp("unknown","Bitte eine gespeicherte Runtime auswählen.");return;}
+  if(!runtime.enabled){setRuntimeLamp("unknown","Runtime deaktiviert");return;}
+  setRuntimeLamp("unknown","Verbindung wird geprüft …");
+  try{
+    const result=await request("/api/host/runtime/status?host_id="+
+      encodeURIComponent(hostSelect.value)+"&runtime_id="+encodeURIComponent(id));
+    if(result.status===200&&result.data.reachable)
+      setRuntimeLamp("online","ComfyUI API erreichbar");
+    else setRuntimeLamp("offline","ComfyUI nicht erreichbar: "+(result.data.error||result.status));
+  }catch(error){setRuntimeLamp("offline","Verbindungsprüfung fehlgeschlagen");}
+};
+let runtimeCache=[];
+async function refreshRuntimes(){
+  const output=document.getElementById("runtimeOutput");
+  const select=document.getElementById("runtimeSelect");
+  if(!hostSelect.value){select.replaceChildren();runtimeCache=[];return;}
+  const response=await request("/api/host/runtimes?host_id="+encodeURIComponent(hostSelect.value));
+  if(response.status!==200){output.textContent=JSON.stringify(response,null,2);return;}
+  runtimeCache=response.data.runtimes;
+  await refreshComfyImportRuntimes();
+  const old=select.value;select.replaceChildren();
+  for(const runtime of runtimeCache){
+    const option=document.createElement("option");option.value=runtime.id;
+    option.textContent=runtime.id+" · "+runtime.type;select.append(option);
+  }
+  if(runtimeCache.some(r=>r.id===old))select.value=old;
+  loadSelectedRuntime();
+  output.textContent=runtimeCache.length+" Runtime(s) konfiguriert.";
+}
+function loadSelectedRuntime(){
+  setRuntimeLamp("unknown","Noch nicht geprüft");
+  const runtime=runtimeCache.find(r=>r.id===document.getElementById("runtimeSelect").value);
+  document.getElementById("runtimeId").value=runtime?.id||"";
+  document.getElementById("runtimeType").value=runtime?.type||"comfyui";
+  document.getElementById("runtimeEndpoint").value=runtime?.endpoint||"";
+  document.getElementById("runtimeEnabled").checked=runtime?.enabled||false;
+  document.getElementById("runtimeInputFolder").value=runtime?.input_folder||"";
+}
+document.getElementById("runtimeSelect").onchange=loadSelectedRuntime;
+document.getElementById("runtimeRefresh").onclick=refreshRuntimes;
+document.getElementById("runtimeNew").onclick=()=>{
+  document.getElementById("runtimeSelect").value="";
+  loadSelectedRuntime();
+};
+document.getElementById("runtimeSave").onclick=async()=>{
+  const result=await api("/api/host/runtimes",{host_id:hostSelect.value,
+    runtime:{id:hv("runtimeId"),type:hv("runtimeType"),
+      endpoint:hv("runtimeEndpoint"),enabled:hm("runtimeEnabled"),input_folder:hv("runtimeInputFolder")}});
+  document.getElementById("runtimeOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshRuntimes();
+};
+document.getElementById("runtimeDelete").onclick=async()=>{
+  const id=hv("runtimeSelect");
+  if(!id||!confirm("Runtime "+id+" löschen?"))return;
+  const result=await api("/api/host/runtimes/delete",
+    {host_id:hostSelect.value,runtime_id:id});
+  document.getElementById("runtimeOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshRuntimes();
+};
+hostSelect.onchange=async()=>{renderHost();await loadHostStorageSettings();await refreshRuntimes();};
+document.getElementById("effectHostSelect").onchange=()=>{
+  hostSelect.value=hv("effectHostSelect");renderHost();loadHostStorageSettings();refreshComfyImportRuntimes();
+};
+document.getElementById("hostOpenEffect").onclick=()=>{
+  document.getElementById("effectHostSelect").value=hostSelect.value;
+  document.getElementById("effectSelect").value=hv("hostEffectShortcut");
+  loadSelectedEffect();alphaTab="effects";renderAlphaTabs();
+};
+document.getElementById("hostLoadRule").onclick=()=>{
+  const host=hostCache.find(h=>h.host_id===hostSelect.value);
+  const rule=host?.rules.find(r=>r.rule_id===hv("hostRuleSelect"));
+  if(rule)loadRule(rule);
+};
+document.getElementById("hostRefresh").onclick=refreshHosts;
+document.getElementById("claimHostButton").onclick=async()=>{
+  const secret=hv("claimSecret");
+  document.getElementById("claimSecret").value="";
+  const result=await api("/api/host/claim",
+    {host_id:hv("claimHost"),bootstrap_secret:secret});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+for(const [id,path] of [
+  ["hostJobReserve","/api/host/jobs/reserve"],
+  ["hostJobRelease","/api/host/jobs/release"]]){
+  document.getElementById(id).onclick=async()=>{
+    const result=await api(path,{host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
+    document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+    if(result.status===200){
+    await document.getElementById("hostJobsRefresh").click();
+  }
+  };
+}
+document.getElementById("hostJobExecute").onclick=async()=>{
+  const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
+  if(!host_id||!job_id)return;
+  if(!confirm("Reservierten Job "+job_id+" jetzt an ComfyUI übermitteln?"))return;
+  const result=await api("/api/host/jobs/execute",{host_id,job_id});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+document.getElementById("allJobResultsButton").onclick=async()=>{
+  const selected=allJobsSelect.value;
+  if(!selected.startsWith("host:"))return;
+  const job_id=selected.slice(5),host_id=hv("jobHostSelect");
+  document.getElementById("jobResultsContext").textContent=job_id;
+  document.getElementById("jobResultsDialog").showModal();
+  await loadJobArtifacts(host_id,job_id);
+};
+document.getElementById("jobResultsClose").onclick=()=>document.getElementById("jobResultsDialog").close();
+let artifactObjectUrls=[];
+async function loadJobArtifacts(host_id,job_id){
+  for(const url of artifactObjectUrls)URL.revokeObjectURL(url);
+  artifactObjectUrls=[];
+  const target=document.getElementById("jobArtifacts");
+  target.replaceChildren();
+  if(!host_id||!job_id)return;
+  const result=await request("/api/host/jobs/execution?host_id="+
+    encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
+  if(result.status!==200){target.textContent="Ergebnisse nicht verfügbar (HTTP "+result.status+").";return;}
+  const outputs=result.data.outputs||{};
+  let count=0;
+  for(const [node,groups] of Object.entries(outputs)){
+    for(const [kind,items] of Object.entries(groups)){
+      if(!Array.isArray(items))continue;
+      for(let index=0;index<items.length;index++){
+        const item=items[index];
+        const card=document.createElement("article");card.className="artifact-card";
+        const title=document.createElement("strong");
+        title.textContent="Node "+node+" · "+kind+" #"+(index+1);card.append(title);
+        if(item&&typeof item==="object"&&typeof item.filename==="string"){
+          count++;
+          const detail=document.createElement("small");
+          detail.textContent=item.filename+" · "+(item.type||"")+" · "+(item.metadata?.width?item.metadata.width+"×"+item.metadata.height:"");
+          card.append(detail);
+          const query=new URLSearchParams({host_id,job_id,node_id:node,kind,index:String(index)});
+          const url="/api/host/jobs/artifact?"+query.toString();
+          if(kind==="images"){
+            const img=document.createElement("img");img.alt=item.filename;
+            img.loading="lazy";card.append(img);
+            fetch(url,{headers:{Authorization:"Bearer "+credential},cache:"no-store"})
+              .then(r=>{if(!r.ok)throw Error("image_unavailable");return r.blob();})
+              .then(blob=>{const objectUrl=URL.createObjectURL(blob);artifactObjectUrls.push(objectUrl);img.src=objectUrl;})
+              .catch(()=>{img.alt="Vorschau nicht verfügbar: "+item.filename;});
+          }else if(kind==="3d"){
+            const note=document.createElement("small");note.textContent="3D-Modell (GLB) – Download; interaktiver Viewer folgt.";
+            card.append(note);
+          }
+          const link=document.createElement("a");link.href=url;
+          link.textContent="Herunterladen";link.download=item.filename;link.href="#";
+          link.onclick=async event=>{event.preventDefault();
+            const response=await fetch(url,{headers:{Authorization:"Bearer "+credential},cache:"no-store"});
+            if(!response.ok){alert("Download fehlgeschlagen: "+response.status);return;}
+            const blob=await response.blob(),objectUrl=URL.createObjectURL(blob);
+            const a=document.createElement("a");a.href=objectUrl;a.download=item.filename;a.click();
+            setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
+          };card.append(link);
+        }else{
+          const pre=document.createElement("pre");pre.textContent=typeof item==="string"?item:JSON.stringify(item,null,2);
+          card.append(pre);
+        }
+        target.append(card);
+      }
+    }
+  }
+  if(!target.childElementCount)target.textContent="Noch keine Artefakte vorhanden.";
+}
+document.getElementById("hostJobExecutionStatus").onclick=async()=>{
+  const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
+  if(!host_id||!job_id)return;
+  const result=await request("/api/host/jobs/execution?host_id="+
+    encodeURIComponent(host_id)+"&job_id="+encodeURIComponent(job_id));
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+document.getElementById("hostJobEvaluate").onclick=async()=>{
+  const result=await api("/api/host/jobs/evaluate",
+    {host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+document.getElementById("hostJobCancel").onclick=async()=>{
+  const result=await api("/api/host/jobs/cancel",
+    {host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+document.getElementById("hostJobRetry").onclick=async()=>{
+  const result=await api("/api/host/jobs/retry",
+    {host_id:hv("jobHostSelect"),job_id:hv("hostJobId")});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+document.getElementById("hostJobSelect").onchange=()=>{
+  document.getElementById("hostJobId").value=hv("hostJobSelect");
+  const id=hv("hostJobSelect");
+  if(id){allJobsSelect.value="host:"+id;showAllJob();}
+};
+document.getElementById("hostJobsRefresh").onclick=async()=>{
+  const requestedHost=hv("jobHostSelect");
+  const result=await request("/api/host/jobs?host_id="+encodeURIComponent(requestedHost));
+  if(requestedHost!==hv("jobHostSelect"))return;
+  document.getElementById("hostJobsOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200){
+    cachedHostJobs=result.data.jobs;
+    const select=document.getElementById("hostJobSelect");
+    const old=select.value;select.replaceChildren();
+    fillSelect("hostJobId",result.data.jobs.map(j=>({value:j.job_id,label:j.job_id+" · "+j.state})));
+    for(const job of result.data.jobs){
+      const opt=document.createElement("option");opt.value=job.job_id;
+      opt.textContent=job.effect_id+" · "+job.state+" · "+job.job_id;
+      select.append(opt);
+    }
+    if(result.data.jobs.some(j=>j.job_id===old))select.value=old;
+    document.getElementById("hostJobId").value=select.value;
+    showSelectedJob();renderAllJobs();
+    if(select.value){allJobsSelect.value="host:"+select.value;showAllJob();}
+  }
+};
+document.getElementById("effectSave").onclick=async()=>{
+  const result=await api("/api/host/effects",
+    {host_id:hostSelect.value,effect_id:hv("effectId"),
+     description:hv("effectDescription"),enabled:hm("effectEnabled")});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+document.getElementById("jobComfyUpload").onclick=async()=>{
+  const output=document.getElementById("jobComfyUploadOutput");
+  const files=[...document.getElementById("jobComfyFiles").files];
+  const host_id=hv("jobHostSelect"),runtime_id=hv("jobComfyRuntime");
+  if(!files.length||!host_id||!runtime_id){output.textContent="Host, Runtime und Dateien wählen.";return;}
+  const uploaded=[];
+  for(const file of files){
+    if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(file.name)){
+      output.textContent="Dateiname bitte auf ASCII-Buchstaben, Zahlen, Punkt, Bindestrich und Unterstrich begrenzen: "+file.name;return;
+    }
+    output.textContent="Upload läuft: "+file.name+" ("+file.size+" Bytes)";
+    const result=await request("/api/host/comfy/upload",{
+      method:"POST",headers:{"Content-Type":"application/octet-stream",
+        "X-Minglefield-Host":host_id,"X-Minglefield-Runtime":runtime_id,
+        "X-Minglefield-Filename":file.name},body:file});
+    if(result.status!==200){output.textContent=JSON.stringify({uploaded,error:result.data},null,2);return;}
+    uploaded.push(result.data);
+    await refreshJobFileChoices();
+    output.textContent=JSON.stringify({uploaded,note:"Dateien liegen in ComfyUI. Noch keine automatische Workflow-/Job-Bindung."},null,2);
+  }
+};
+document.getElementById("effectManual").onclick=async()=>{
+  const parameters={};
+  for(const field of document.querySelectorAll("#jobParameterFields input, #jobParameterFields select, #jobParameterFields textarea")){
+    if(!field.dataset.binding)continue;
+    let value;
+    if(field.dataset.kind==="boolean")value=field.checked;
+    else if(field.dataset.kind==="integer"||field.dataset.kind==="number"){
+      if(!field.value.trim()){document.getElementById("jobActionOutput").textContent=
+        "Pflichtparameter fehlt: "+field.dataset.binding;return;}
+      value=Number(field.value);
+      if(!Number.isFinite(value)||(field.dataset.kind==="integer"&&!Number.isInteger(value))){
+        document.getElementById("jobActionOutput").textContent="Ungültige Zahl: "+field.dataset.binding;return;
+      }
+    }else value=field.value;
+    parameters[field.dataset.binding]=value;
+  }
+  const result=await api("/api/host/effects/manual",
+    {host_id:hv("jobHostSelect"),effect_id:hv("jobEffectSelect"),parameters});
+  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
+  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+};
+let hostSettingsRequestId=0;
+async function loadHostStorageSettings(){
+  const host_id=hv("hostSelect");
+  const requestId=++hostSettingsRequestId;
+  const save=document.getElementById("hostSettingsSave");
+  const staging=document.getElementById("hostStagingRoot");
+  const output=document.getElementById("hostOutputRoot");
+  save.disabled=true;
+  staging.disabled=true;output.disabled=true;
+  staging.value="";output.value="";
+  if(!host_id){
+    document.getElementById("hostSettingsStatus").textContent="Kein Host ausgewählt.";
+    return;
+  }
+  document.getElementById("hostSettingsStatus").textContent="Einstellungen werden geladen…";
+  try{
+    const result=await request("/api/host/settings?host_id="+encodeURIComponent(host_id));
+    if(requestId!==hostSettingsRequestId||host_id!==hv("hostSelect"))return;
+    document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
+    if(result.status===200){
+      staging.value=result.data.settings.staging_root||"";
+      output.value=result.data.settings.output_root||"";
+      save.disabled=false;staging.disabled=false;output.disabled=false;
+    }
+  }catch(error){
+    if(requestId===hostSettingsRequestId)
+      document.getElementById("hostSettingsStatus").textContent="Laden fehlgeschlagen: "+String(error);
+  }
+}
+document.getElementById("hostSettingsLoad").onclick=loadHostStorageSettings;
+document.getElementById("hostSettingsSave").onclick=async()=>{
+  const result=await api("/api/host/settings",{
+    host_id:hv("hostSelect"),
+    settings:{staging_root:document.getElementById("hostStagingRoot").value.trim(),
+              output_root:document.getElementById("hostOutputRoot").value.trim()}
+  });
+  document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
+};
+document.getElementById("hostSave").onclick=async()=>{
+  const result=await api("/api/host/rules",{host_id:hostSelect.value,
+    rule_id:hv("hostRuleId"),priority:Number(hv("hostPriority")),
+    enabled:hm("hostEnabled"),config:hostConfig()});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+document.getElementById("hostRuleDelete").onclick=async()=>{
+  const result=await api("/api/host/rules/delete",
+    {host_id:hostSelect.value,rule_id:hv("hostRuleId")});
+  hostOut.textContent=JSON.stringify(result,null,2);
+  if(result.status===200)await refreshHosts();
+};
+document.getElementById("hostToggle").onclick=async()=>{
+  document.getElementById("hostEnabled").checked=!hm("hostEnabled");
+  document.getElementById("hostSave").click();
+};
+hostOut.onclick=e=>{
+  if(!e.target)return;
+};
+const gameHostSelect=document.getElementById("gameHostSelect");
+async function loadGameProjects(){
+  const response=await request("/api/hosts");
+  const previous=gameHostSelect.value;
+  gameHostSelect.replaceChildren();
+  if(response.status!==200){
+    document.getElementById("gameProjectStatus").textContent="Hosts konnten nicht geladen werden ("+response.status+").";
+    return;
+  }
+  for(const host of response.data.hosts||[]){
+    const option=document.createElement("option");
+    option.value=host.host_id;option.textContent=host.host_id;
+    gameHostSelect.append(option);
+  }
+  if([...gameHostSelect.options].some(x=>x.value===previous))gameHostSelect.value=previous;
+  await refreshGameProjectList();
+  await loadGameGitProfiles();
+}
+let gameGitProfiles=[];
+async function loadGameGitProfiles(){
+  const select=document.getElementById("gameGitProfileSelect");
+  select.replaceChildren();
+  gameGitProfiles=[];
+  if(!gameHostSelect.value)return;
+  const response=await request("/api/git/profiles?host_id="+encodeURIComponent(gameHostSelect.value));
+  document.getElementById("gameGitStatus").textContent=JSON.stringify(response.data,null,2);
+  if(response.status!==200)return;
+  gameGitProfiles=response.data.profiles||[];
+  const fresh=document.createElement("option");fresh.value="";fresh.textContent="+ Neues Profil";
+  select.append(fresh);
+  for(const profile of gameGitProfiles){
+    const option=document.createElement("option");
+    option.value=profile.profile_id;option.textContent=profile.label+" ("+profile.profile_id+")";
+    select.append(option);
+  }
+}
+document.getElementById("gameGitProfileSelect").onchange=()=>{
+  const profile=gameGitProfiles.find(x=>x.profile_id===document.getElementById("gameGitProfileSelect").value);
+  for(const [id,key,defaultValue] of [
+    ["gameGitProfileId","profile_id",""],["gameGitLabel","label",""],
+    ["gameGitAuthMethod","auth_method","local"],["gameGitExecutable","git_executable","git"],
+    ["gameGitAuthorName","author_name",""],["gameGitAuthorEmail","author_email",""]]){
+    document.getElementById(id).value=profile?profile[key]:defaultValue;
+  }
+};
+document.getElementById("gameGitReload").onclick=loadGameGitProfiles;
+document.getElementById("gameGitSave").onclick=async()=>{
+  const profile={};
+  for(const [key,id] of [
+    ["profile_id","gameGitProfileId"],["label","gameGitLabel"],
+    ["auth_method","gameGitAuthMethod"],["git_executable","gameGitExecutable"],
+    ["author_name","gameGitAuthorName"],["author_email","gameGitAuthorEmail"]]){
+    profile[key]=document.getElementById(id).value.trim();
+  }
+  const response=await request("/api/git/profiles",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,profile})});
+  if(response.status===200)await loadGameGitProfiles();
+  document.getElementById("gameGitStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+function gameUpdateSignal(data,status){
+  if(status!==200||!data||typeof data!=="object")return "unknown";
+  const updates=Array.isArray(data.updates)?data.updates:[];
+  if(updates.some(x=>x.verification_state==="invalid"||x.state==="invalid"))return "red";
+  if(data.installation_state==="manual_review_required"||
+     updates.some(x=>x.version_comparison==="newer_release_than_declared"))return "yellow";
+  return "unknown";
+}
+function setGameUpdateSignal(signal){
+  const indicator=document.getElementById("gameUpdateIndicator");
+  indicator.dataset.signal=signal;
+  indicator.title=signal==="red"?"Integrationsnachweis ungültig":
+    signal==="yellow"?"Prüfung erforderlich; kein verifiziertes Update":
+    "Game-Update: Status unbekannt oder nicht verifiziert";
+}
+function renderGameUpdatePreview(data,status){
+  const target=document.getElementById("gameUpdateStatus");
+  const updates=Array.isArray(data?.updates)?data.updates:[];
+  const lines=["HTTP-Status: "+status,"Projekt: "+(data?.project_id||"unbekannt"),
+    "Installationsstatus: "+(data?.installation_state||"unbekannt"),
+    "Prüfstatus: "+(data?.state||"unbekannt")];
+  if(data?.reason)lines.push("Grund: "+data.reason);
+  if(!updates.length)lines.push("Keine prüfbaren Integrationsupdates vorhanden.");
+  for(const item of updates){
+    lines.push("","Integration: "+(item.integration_id||"unbekannt"),
+      "Prüfung: "+(item.state||"unbekannt"),
+      "Deklarierte Version: "+(item.declared_version||item.installed_version||"unbekannt"),
+      "Verfügbare Release: "+(item.available_version||"unbekannt"),
+      "Versionsvergleich: "+(item.version_comparison||"unbekannt"),
+      "Installation verifiziert: "+(item.verification_state==="installation_verified"?"ja":"nein"),
+      "Kompatibilität: "+(item.preview?.compatibility?.state||"unbekannt"),
+      "Migration: "+(item.preview?.migration?.state||"unbekannt"),
+      "Integrität: "+(item.preview?.artifact_integrity?.state||"unbekannt"),
+      "Installation erlaubt: "+(item.preview?.installation_allowed===true?"ja":"nein"));
+    if(item.release_notes)lines.push("Release Notes: "+item.release_notes);
+    if(item.preview?.changed_files?.state)lines.push("Dateivergleich: "+item.preview.changed_files.state);
+  }
+  target.textContent=lines.join("\\n");
+}
+let gameUpdateRequestId=0;
+async function refreshSelectedGameUpdateSignal(){
+  const indicator=document.getElementById("gameUpdateIndicator");
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  const host=gameHostSelect.value;
+  const requestId=++gameUpdateRequestId;
+  setGameUpdateSignal("unknown");
+  if(!project||!host)return;
+  const query="?host_id="+encodeURIComponent(host)+"&project_id="+encodeURIComponent(project.project_id);
+  try{
+    const response=await request("/api/game/integrations"+query);
+    if(requestId!==gameUpdateRequestId)return;
+    const state=response.data?.installation_state;
+    if(response.status===200&&state==="manual_review_required"){
+      setGameUpdateSignal("yellow");
+    }
+  }catch(error){if(requestId===gameUpdateRequestId)indicator.title="Game-Update: Prüfung nicht möglich";}
+}
+let gameProjects=[];
+async function refreshGameProjectList(){
+  const host=gameHostSelect.value;
+  const select=document.getElementById("gameProjectSelect");
+  const previous=select.value;
+  select.replaceChildren();gameProjects=[];
+  refreshSelectedGameUpdateSignal();
+  if(!host){
+    document.getElementById("gameProjectStatus").textContent="Kein eigener Host verfügbar.";
+    return;
+  }
+  const response=await request("/api/game/projects?host_id="+encodeURIComponent(host));
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(response.data,null,2);
+  if(response.status!==200)return;
+  gameProjects=response.data.projects;
+  for(const project of gameProjects){
+    const option=document.createElement("option");
+    option.value=project.project_id;
+    option.textContent=project.name+" ("+project.project_id+")";
+    select.append(option);
+  }
+  if([...select.options].some(x=>x.value===previous))select.value=previous;
+  showSelectedGameProject();
+}
+function showSelectedGameProject(){
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  refreshSelectedGameUpdateSignal();
+  if(!project)return;
+  for(const [id,value] of [["gameProjectId",project.project_id],["gameProjectName",project.name],
+      ["gameRepositoryRoot",project.repository_root],["gameStagingRoot",project.staging_root],
+      ["gameOutputRoot",project.output_root]])document.getElementById(id).value=value;
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(project,null,2);
+}
+document.getElementById("gameProjectSelect").onchange=showSelectedGameProject;
+gameHostSelect.onchange=async()=>{await refreshGameProjectList();await loadGameGitProfiles();};
+document.getElementById("gameProjectRefresh").onclick=loadGameProjects;
+document.getElementById("gameProjectUpdate").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project){document.getElementById("gameProjectStatus").textContent="Kein Projekt ausgewählt.";return;}
+  const payload={
+    host_id:gameHostSelect.value,project_id:project.project_id,
+    settings_revision:project.settings_revision,
+    name:document.getElementById("gameProjectName").value.trim(),
+    repository_root:document.getElementById("gameRepositoryRoot").value.trim(),
+    staging_root:document.getElementById("gameStagingRoot").value.trim(),
+    output_root:document.getElementById("gameOutputRoot").value.trim()
+  };
+  const response=await request("/api/game/projects/update",{
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  if(response.status===200)await refreshGameProjectList();
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+function setGameCreateMode(creating){
+  document.getElementById("gameCreatePanel").hidden=!creating;
+  document.getElementById("gameManagePanel").hidden=creating;
+}
+document.getElementById("gameProjectNew").onclick=()=>{
+  for(const id of ["gameNewProjectId","gameNewProjectName","gameNewRepositoryRoot",
+                   "gameNewStagingRoot","gameNewOutputRoot"])document.getElementById(id).value="";
+  setGameCreateMode(true);
+};
+document.getElementById("gameProjectCancel").onclick=()=>setGameCreateMode(false);
+document.getElementById("gameProjectPrepare").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const message="Für "+project.project_id+" fehlende Projektverzeichnisse anlegen?\\n"+
+    "Repository: "+project.repository_root+"\\nStaging: "+project.staging_root+"\\nOutput: "+project.output_root+
+    "\\nBereits vorhandene Verzeichnisse bleiben erhalten.";
+  if(!window.confirm(message))return;
+  const response=await request("/api/game/projects/prepare",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+                         settings_revision:project.settings_revision})});
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameManifestPrepare").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  if(!window.confirm("Minglefield-Projektkonfiguration für "+project.project_id+
+    " einrichten?\\nEs wird nur eine fehlende .minglefield/project.json erstellt; vorhandene Dateien bleiben erhalten."))return;
+  const response=await request("/api/game/projects/manifest/prepare",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+                         settings_revision:project.settings_revision})});
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameIntegrationRegistryInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+    "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/integrations"+query);
+  const data=response.data||{};
+  const entries=data.registry?.integrations||[];
+  const summary={
+    status:response.status,project_id:data.project_id,
+    installations:data.installation_state==="installation_unknown"?"Unbekannt":
+      data.installation_state==="setup_required"?"Einrichtung erforderlich":
+      data.installation_state==="manual_review_required"?"Manuelle Prüfung erforderlich":
+      data.installation_state==="declarations_unverified"?"Installationsangaben nicht verifiziert":data.installation_state,
+    registry_status:data.registry?.state,
+    lockfile:data.lockfile,
+    deklarierte_installationen:data.installed_integrations,
+    integrations:entries.map(x=>({id:x.integration_id,name:x.name,
+      publisher:x.publisher,vertrauensstufe:x.trust_tier,release_source:x.release_source})),
+    hinweis:data.notes,error:data.error
+  };
+  document.getElementById("gameUpdateStatus").textContent=JSON.stringify(summary,null,2);
+};
+document.getElementById("platformUpdateIndicator").onclick=()=>document.getElementById("platformUpdateDialog").showModal();
+document.getElementById("gameUpdateIndicator").onclick=()=>document.getElementById("gameUpdateDialog").showModal();
+document.getElementById("gameIntegrationUpdateInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+    "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/integration/releases"+query);
+  if(project.project_id!==document.getElementById("gameProjectSelect").value)return;
+  setGameUpdateSignal(gameUpdateSignal(response.data,response.status));
+  renderGameUpdatePreview(response.data,response.status);
+};
+document.getElementById("gameCompatibilityInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+    "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/compatibility"+query);
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameGitInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+    "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/git/status"+query);
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameGitInit").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  await loadGameGitProfiles();
+  const options=gameGitProfiles.map(p=>p.profile_id).join(", ");
+  const profileId=window.prompt("Git-Profil-ID für Initialisierung wählen: "+options,
+                                gameGitProfiles[0]?.profile_id||"");
+  if(!profileId||!gameGitProfiles.some(p=>p.profile_id===profileId))return;
+  if(!window.confirm("Git-Repository in diesem Verzeichnis initialisieren?\\n"+
+                     project.repository_root+"\\nEs wird git init ausgeführt. Kein Commit, kein Remote."))return;
+  const response=await request("/api/game/git/init",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+      settings_revision:project.settings_revision,profile_id:profileId})});
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameProjectInspect").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
+              "&project_id="+encodeURIComponent(project.project_id);
+  const response=await request("/api/game/projects/paths"+query);
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameProjectDelete").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const entered=window.prompt("Nur die Minglefield-Registrierung wird entfernt; Dateien bleiben erhalten. Zur Bestätigung Projekt-ID eingeben:",project.project_id);
+  if(entered!==project.project_id)return;
+  const response=await request("/api/game/projects/delete",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+                         settings_revision:project.settings_revision})});
+  if(response.status===200)await refreshGameProjectList();
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("gameProjectCreate").onclick=async()=>{
+  const host=gameHostSelect.value;
+  if(!host){
+    document.getElementById("gameProjectStatus").textContent="Bitte zuerst einen Host wählen.";
+    return;
+  }
+  const payload={
+    host_id:host,
+    project_id:document.getElementById("gameNewProjectId").value.trim(),
+    name:document.getElementById("gameNewProjectName").value.trim(),
+    repository_root:document.getElementById("gameNewRepositoryRoot").value.trim(),
+    staging_root:document.getElementById("gameNewStagingRoot").value.trim(),
+    output_root:document.getElementById("gameNewOutputRoot").value.trim()
+  };
+  const response=await request("/api/game/projects",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)});
+  if(response.status===201){await refreshGameProjectList();setGameCreateMode(false);}
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
+document.getElementById("logout").onclick=async()=>{
+  const result=credential?await request("/api/logout",{method:"POST"}):{status:401};
+  credential="";expiresAt=0;updateStatus();
+  show(result,"login");
+};
+</script></html>"""
+
+
+@dataclass(frozen=True)
+class TestPrincipal:
+    user_id: str
+    agent_id: str
+
+
+class AlphaSimulation:
+    def __init__(self, tokens):
+        """Caller supplies generated test-only bearer tokens."""
+        if (type(tokens) is not dict or not tokens
+                or any(type(t) is not str or len(t) < 32
+                       or type(p) is not TestPrincipal or not p.user_id or not p.agent_id
+                       for t, p in tokens.items())):
+            raise ValueError("invalid test-only identities")
+        if len(set(tokens)) != len(tokens):
+            raise ValueError("duplicate token")
+        self._digests = {hashlib.sha256(t.encode()).digest(): p for t, p in tokens.items()}
+        self._jobs = {}
+        from threading import Lock
+        self._lock = Lock()
+
+    def principal(self, authorization):
+        if type(authorization) is not str or not authorization.startswith("Bearer "):
+            return None
+        token = authorization[7:]
+        if not token or len(token) > 256:
+            return None
+        digest = hashlib.sha256(token.encode()).digest()
+        for known, principal in self._digests.items():
+            if hmac.compare_digest(digest, known):
+                return principal
+        return None
+
+    def agents(self, principal):
+        return [{"agent_id": principal.agent_id, "owner": principal.user_id,
+                 "allowed_actions": ["demo.echo"]}]
+
+    def jobs(self, principal):
+        with self._lock:
+            return [dict(value) for (user, _), value in self._jobs.items()
+                    if user == principal.user_id]
+
+    def submit(self, principal, payload):
+        if (type(payload) is not dict or set(payload) != {"action", "idempotency_key"}
+                or payload["action"] != "demo.echo"
+                or type(payload["idempotency_key"]) is not str
+                or not 1 <= len(payload["idempotency_key"]) <= 128):
+            return 400, {"error": "invalid_simulated_action"}
+        with self._lock:
+            key = (principal.user_id, payload["idempotency_key"])
+            if key in self._jobs:
+                return 200, dict(self._jobs[key])
+            if sum(u == principal.user_id for u, _ in self._jobs) >= MAX_JOBS_PER_USER:
+                return 429, {"error": "simulation_quota_exceeded"}
+            record = {"job_id": "sim." + secrets.token_hex(12),
+                      "user_id": principal.user_id, "agent_id": principal.agent_id,
+                      "action": "demo.echo", "state": "simulated_no_effect"}
+            self._jobs[key] = record
+            return 201, dict(record)
+
+
+from private_alpha_delete import ROUTES as DELETE_ROUTES, delete_resource
+
+
+def handler_for(service, *, local_bootstrap_secret=None):
+    # In-memory abuse throttle for the LOCAL browser onboarding prototype.
+    attempts = {}
+    throttle = Lock()
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            # Never log Authorization or request bodies.
+            return
+
+        def reply(self, status, payload):
+            body = json.dumps(payload, separators=(",", ":")).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "default-src 'none'")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            path = urlsplit(self.path).path
+            if path == "/":
+                page = PAGE.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(page)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Security-Policy",
+                                 "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
+                self.end_headers()
+                self.wfile.write(page)
+                return
+            if path == "/health":
+                self.reply(200, {"status": "simulation_only"})
+                return
+            principal = service.principal(self.headers.get("Authorization"))
+            if not principal:
+                self.reply(401, {"error": "unauthorized"})
+                return
+            if path == "/api/agents":
+                if hasattr(service, "available_agents"):
+                    self.reply(200, {"agents": service.available_agents(
+                        self.headers.get("Authorization"))})
+                else:
+                    self.reply(200, {"agents": service.agents(principal)})
+            elif path == "/api/agent-grants":
+                agent_ids=parse_qs(urlsplit(self.path).query).get("agent_id",[])
+                if len(agent_ids)!=1 or not hasattr(service,"owned_agent_grants"):
+                    self.reply(400,{"error":"invalid_agent_grants_query"})
+                else:
+                    status,result=service.owned_agent_grants(
+                        self.headers.get("Authorization"),agent_ids[0])
+                    self.reply(status,result)
+            elif path == "/api/grantable-users":
+                if hasattr(service, "grantable_users"):
+                    users=service.grantable_users(self.headers.get("Authorization"))
+                    self.reply(200, {"users":users if users is not None else []})
+                else:
+                    self.reply(200, {"users":[]})
+            elif path == "/api/jobs":
+                self.reply(200, {"jobs": service.jobs(principal)})
+            elif path == "/api/host/jobs":
+                policy=getattr(service,"_host_policy",None)
+                host_id=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_id)!=1:
+                    self.reply(400,{"error":"invalid_host_jobs_query"})
+                else:
+                    jobs=policy.list_host_jobs(host_id[0],principal.user_id)
+                    self.reply(403 if jobs is None else 200,
+                        {"error":"not_host_owner"} if jobs is None else
+                        {"jobs":jobs,"simulation_only":True})
+            elif path == "/api/host/jobs/artifact":
+                policy=getattr(service,"_host_policy",None)
+                params=parse_qs(urlsplit(self.path).query)
+                required=("host_id","job_id","node_id","kind","index")
+                if policy is None or any(len(params.get(k,[]))!=1 for k in required):
+                    self.reply(400,{"error":"invalid_artifact_query"})
+                    return
+                host_id,job_id,node_id,kind,index=(params[k][0] for k in required)
+                context=policy.comfy_execution_context(host_id,principal.user_id,job_id)
+                if context is None or not context["prompt_id"]:
+                    self.reply(404,{"error":"artifact_not_found"})
+                    return
+                try:
+                    from urllib.request import urlopen,Request
+                    from urllib.parse import urlencode,quote
+                    with urlopen(context["runtime"]["endpoint"]+"/history/"+
+                            quote(context["prompt_id"],safe=""),timeout=10) as response:
+                        history=json.loads(response.read(4*1024*1024+1))
+                    items=history[context["prompt_id"]]["outputs"][node_id][kind]
+                    item=items[int(index)]
+                    if (type(item) is not dict or type(item.get("filename")) is not str
+                            or item.get("type") not in ("temp","output","input")
+                            or type(item.get("subfolder","")) is not str):
+                        raise ValueError("not_file_artifact")
+                    query=urlencode({k:item.get(k,"") for k in ("filename","subfolder","type")})
+                    with urlopen(Request(context["runtime"]["endpoint"]+"/view?"+query),
+                            timeout=30) as response:
+                        mime=response.headers.get("Content-Type","application/octet-stream")
+                        if not (mime.startswith("image/") or mime.startswith("application/")):
+                            mime="application/octet-stream"
+                        self.send_response(200)
+                        self.send_header("Content-Type",mime)
+                        self.send_header("Content-Disposition","attachment; filename*=UTF-8''"+
+                            quote(item["filename"],safe=""))
+                        self.send_header("Cache-Control","private, no-store")
+                        self.send_header("X-Content-Type-Options","nosniff")
+                        self.end_headers()
+                        while True:
+                            chunk=response.read(256*1024)
+                            if not chunk:break
+                            self.wfile.write(chunk)
+                except (OSError,ValueError,KeyError,TypeError,IndexError):
+                    self.reply(404,{"error":"artifact_unavailable"})
+            elif path == "/api/host/jobs/execution":
+                policy=getattr(service,"_host_policy",None)
+                params=parse_qs(urlsplit(self.path).query)
+                hosts=params.get("host_id",[])
+                jobs=params.get("job_id",[])
+                if policy is None or len(hosts)!=1 or len(jobs)!=1:
+                    self.reply(400,{"error":"invalid_execution_query"})
+                else:
+                    context=policy.comfy_execution_context(hosts[0],principal.user_id,jobs[0])
+                    if context is None:
+                        self.reply(404,{"error":"execution_not_found"})
+                    elif not context["prompt_id"]:
+                        self.reply(200,{"state":context["state"],
+                            "prompt_id":None,"error":context["error"]})
+                    else:
+                        try:
+                            from urllib.request import urlopen
+                            from urllib.parse import quote
+                            with urlopen(context["runtime"]["endpoint"]+
+                                    "/history/"+quote(context["prompt_id"],safe=""),
+                                    timeout=10) as response:
+                                history=json.loads(response.read(4*1024*1024+1))
+                            entry=history.get(context["prompt_id"])
+                            if entry is None:
+                                self.reply(200,{"state":context["state"],
+                                    "prompt_id":context["prompt_id"],"history":"pending"})
+                            else:
+                                status=entry.get("status",{})
+                                completed=status.get("completed") is True
+                                messages=status.get("messages",[])
+                                failed=any(type(m) is list and m and m[0]=="execution_error"
+                                    for m in messages)
+                                if completed or failed:
+                                    policy.finish_comfy_execution(hosts[0],jobs[0],
+                                        "completed" if completed else "failed")
+                                self.reply(200,{"state":"completed" if completed else
+                                    "failed" if failed else context["state"],
+                                    "prompt_id":context["prompt_id"],
+                                    "status":status,"outputs":entry.get("outputs",{})})
+                        except (OSError,ValueError,TypeError,KeyError):
+                            self.reply(502,{"error":"comfy_status_unavailable",
+                                "prompt_id":context["prompt_id"]})
+            elif path == "/api/host/runtime/status":
+                policy=getattr(service,"_host_policy",None)
+                params=parse_qs(urlsplit(self.path).query)
+                hosts=params.get("host_id",[])
+                ids=params.get("runtime_id",[])
+                if policy is None or len(hosts)!=1 or len(ids)!=1:
+                    self.reply(400,{"error":"invalid_runtime_status_query"})
+                else:
+                    runtimes=policy.list_runtimes(hosts[0],principal.user_id)
+                    if runtimes is None:
+                        self.reply(403,{"error":"not_host_owner"})
+                    else:
+                        runtime=next((r for r in runtimes if r["id"]==ids[0]),None)
+                        if runtime is None:
+                            self.reply(404,{"error":"runtime_missing"})
+                        elif not runtime["enabled"]:
+                            self.reply(200,{"reachable":False,"error":"runtime_disabled"})
+                        else:
+                            from urllib.request import urlopen
+                            try:
+                                # Validated loopback-only endpoint; no redirect-following.
+                                from urllib.request import build_opener, HTTPHandler
+                                from urllib.error import HTTPError, URLError
+                                from urllib.request import Request, HTTPRedirectHandler
+                                class NoRedirect(HTTPRedirectHandler):
+                                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                                        return None
+                                opener=build_opener(HTTPHandler(),NoRedirect())
+                                with opener.open(Request(runtime["endpoint"]+"/object_info",
+                                                        headers={"Accept":"application/json"}),timeout=2) as response:
+                                    ok=response.status==200
+                                self.reply(200,{"reachable":ok,"error":None if ok else "http_error"})
+                            except (OSError, ValueError, HTTPError, URLError):
+                                self.reply(200,{"reachable":False,"error":"connection_failed"})
+            elif path == "/api/host/comfy/file-choices":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                host=query.get("host_id",[])
+                effect=query.get("effect_id",[])
+                if policy is None or len(host)!=1 or len(effect)!=1:
+                    self.reply(400,{"error":"invalid_file_choices_query"})
+                else:
+                    context=policy.comfy_file_parameter_context(host[0],principal.user_id,effect[0])
+                    if context is None:
+                        self.reply(403,{"error":"workflow_unavailable"})
+                    elif not context["parameters"]:
+                        self.reply(200,{"choices":{}})
+                    elif not context["runtime"].get("enabled"):
+                        self.reply(403,{"error":"runtime_unavailable"})
+                    else:
+                        from urllib.request import Request,urlopen
+                        try:
+                            classes={p["class_type"] for p in context["parameters"]}
+                            discovered={}
+                            for class_type in classes:
+                                from urllib.parse import quote
+                                with urlopen(Request(context["runtime"]["endpoint"]+"/object_info/"+
+                                                     quote(class_type,safe=""),
+                                                     headers={"Accept":"application/json"}),timeout=5) as response:
+                                    info=json.loads(response.read(4*1024*1024+1))
+                                discovered[class_type]=info.get(class_type,{})
+                            result={}
+                            for p in context["parameters"]:
+                                info=discovered.get(p["class_type"],{})
+                                inputs=info.get("input",{})
+                                spec=inputs.get("required",{}).get(p["input"])
+                                if spec is None:
+                                    spec=inputs.get("optional",{}).get(p["input"])
+                                choices=(spec[0] if isinstance(spec,(list,tuple)) and spec and isinstance(spec[0],list)
+                                         else spec[1].get("options") if isinstance(spec,(list,tuple))
+                                         and len(spec)>1 and spec[0]=="COMBO" and isinstance(spec[1],dict)
+                                         else None)
+                                if (choices is not None and len(choices)<=10000
+                                        and all(type(v) is str for v in choices)):
+                                    result[p["binding"]]=choices
+                            self.reply(200,{"choices":result})
+                        except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
+                            self.reply(502,{"error":"file_choices_unavailable"})
+            elif path == "/api/game/projects/paths":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[])
+                projects=query.get("project_id",[])
+                if policy is None or len(hosts)!=1 or len(projects)!=1:
+                    self.reply(400,{"error":"invalid_project_paths_query"})
+                else:
+                    paths=policy.inspect_game_project_paths(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if paths is None else 200,
+                               {"error":"project_not_found_or_forbidden"} if paths is None
+                               else {"paths":paths})
+            elif path == "/api/game/compatibility":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if policy is None or len(hosts)!=1 or len(projects)!=1:
+                    self.reply(400,{"error":"invalid_compatibility_query"})
+                else:
+                    report=policy.inspect_game_compatibility(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if report is None else 200,
+                               {"error":"project_not_found_or_forbidden"}
+                               if report is None else report)
+            elif path == "/api/game/integrations":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if (policy is None or len(hosts)!=1 or len(projects)!=1
+                        or len(query)!=2):
+                    self.reply(400,{"error":"invalid_integrations_query"})
+                else:
+                    report=policy.inspect_game_integrations(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if report is None else 200,
+                               {"error":"project_not_found_or_forbidden"}
+                               if report is None else report)
+            elif path == "/api/game/integration/releases":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if (policy is None or len(hosts)!=1 or len(projects)!=1 or len(query)!=2):
+                    self.reply(400,{"error":"invalid_integration_releases_query"})
+                else:
+                    report=policy.inspect_game_integration_releases(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if report is None else 200,
+                               {"error":"project_not_found_or_forbidden"}
+                               if report is None else report)
+            elif path == "/api/game/integration/update-status":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                sources=query.get("release_repository",[])
+                if (policy is None or len(hosts)!=1 or len(projects)!=1
+                        or len(sources)>1):
+                    self.reply(400,{"error":"invalid_integration_update_query"})
+                else:
+                    report=policy.inspect_game_integration_update(
+                        hosts[0],principal.user_id,projects[0],
+                        release_repository=sources[0] if sources else None)
+                    self.reply(404 if report is None else 200,
+                               {"error":"project_not_found_or_forbidden"}
+                               if report is None else report)
+            elif path == "/api/game/git/status":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[]); projects=query.get("project_id",[])
+                if policy is None or len(hosts)!=1 or len(projects)!=1:
+                    self.reply(400,{"error":"invalid_git_status_query"})
+                else:
+                    status=policy.inspect_game_git(hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if status is None else 200,
+                               {"error":"project_not_found_or_forbidden"} if status is None else status)
+            elif path == "/api/git/profiles":
+                policy=getattr(service,"_host_policy",None)
+                hosts=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(hosts)!=1:
+                    self.reply(400,{"error":"invalid_git_profile_query"})
+                else:
+                    profiles=policy.list_git_profiles(hosts[0],principal.user_id)
+                    self.reply(403 if profiles is None else 200,
+                               {"error":"not_host_owner"} if profiles is None else
+                               {"profiles":profiles})
+            elif path == "/api/game/projects":
+                policy=getattr(service,"_host_policy",None)
+                host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_ids)!=1 or not host_ids[0]:
+                    self.reply(400,{"error":"invalid_project_query"})
+                else:
+                    projects=policy.list_game_projects(host_ids[0],principal.user_id)
+                    self.reply(403 if projects is None else 200,
+                               {"error":"not_host_owner"} if projects is None else
+                               {"projects":projects})
+            elif path == "/api/host/settings":
+                policy=getattr(service,"_host_policy",None)
+                host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_ids)!=1:
+                    self.reply(400,{"error":"invalid_settings_query"})
+                else:
+                    settings=policy.host_settings(host_ids[0],principal.user_id)
+                    self.reply(403 if settings is None else 200,
+                               {"error":"not_host_owner"} if settings is None else {"settings":settings})
+            elif path == "/api/host/runtimes":
+                policy=getattr(service,"_host_policy",None)
+                host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(host_ids)!=1:
+                    self.reply(400, {"error":"invalid_runtime_query"})
+                else:
+                    runtimes=policy.list_runtimes(host_ids[0],principal.user_id)
+                    self.reply(403 if runtimes is None else 200,
+                        {"error":"not_host_owner"} if runtimes is None else
+                        {"runtimes":runtimes})
+            elif path == "/api/hosts":
+                if not hasattr(service,"_host_policy"):
+                    self.reply(200, {"hosts":[],"simulation_only":True})
+                else:
+                    self.reply(200, {"hosts":service._host_policy.list_hosts(
+                        principal.user_id),"simulation_only":True})
+            else:
+                self.reply(404, {"error": "not_found"})
+
+        def do_POST(self):
+            path = urlsplit(self.path).path
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/game/projects", "/api/game/projects/update", "/api/game/projects/delete", "/api/game/projects/prepare", "/api/game/projects/manifest/prepare", "/api/git/profiles", "/api/game/git/init"):
+                self.reply(404, {"error": "not_found"})
+                return
+            if path in ("/api/redeem", "/api/login", "/api/password/set"):
+                # Local test only: no reverse-proxy trust or remote registration.
+                if self.client_address[0] not in ("127.0.0.1", "::1"):
+                    self.reply(404, {"error": "unavailable"})
+                    return
+                origin = self.headers.get("Origin")
+                host = self.headers.get("Host", "")
+                allowed = ("127.0.0.1:" + str(self.server.server_port),
+                           "localhost:" + str(self.server.server_port))
+                if (host not in allowed
+                        or (origin is not None and origin not in
+                            tuple("http://" + name for name in allowed))):
+                    self.reply(403, {"error": "local_origin_required"})
+                    return
+                with throttle:
+                    now = time.monotonic()
+                    recent = [t for t in attempts.get("local", []) if now - t < 60]
+                    if len(recent) >= 5:
+                        attempts["local"] = recent
+                        self.reply(429, {"error": "try_again_later"})
+                        return
+                    recent.append(now)
+                    attempts["local"] = recent
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "json_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length.isdecimal() or int(raw_length) > MAX_BODY:
+                    self.reply(413, {"error": "invalid_body_length"})
+                    return
+                try:
+                    data = json.loads(self.rfile.read(int(raw_length)))
+                except (UnicodeDecodeError, ValueError):
+                    self.reply(400, {"error": "invalid_json"})
+                    return
+                if type(data) is not dict:
+                    self.reply(400, {"error": "invalid_request"})
+                    return
+                if path == "/api/redeem":
+                    if not hasattr(service, "redeem") or set(data) not in (
+                            {"invitation", "agent_id"}, {"invitation", "agent_id", "password"},
+                            {"invitation"}, {"invitation", "password"}):
+                        self.reply(400, {"error": "invalid_registration"})
+                        return
+                    session = service.redeem(data["invitation"], agent_id=data.get("agent_id"),
+                                             password=data.get("password"))
+                    if session is None:
+                        self.reply(400, {"error": "invitation_invalid_or_used"})
+                        return
+                    self.reply(201, {"session_token": session, "expires_in": 900})
+                    return
+                if path == "/api/login":
+                    if not hasattr(service, "login") or set(data) != {"user_id", "password"}:
+                        self.reply(400, {"error": "invalid_login"})
+                        return
+                    session = service.login(data["user_id"], data["password"])
+                    if session is None:
+                        self.reply(401, {"error": "invalid_credentials"})
+                        return
+                    self.reply(200, {"session_token": session, "expires_in": 900})
+                    return
+                if (not hasattr(service, "set_password_authenticated")
+                        or set(data) != {"password"}):
+                    self.reply(400, {"error": "invalid_password_change"})
+                    return
+                if not service.set_password_authenticated(
+                        self.headers.get("Authorization"), data["password"]):
+                    self.reply(403, {"error": "invalid_session_or_password"})
+                    return
+                self.reply(200, {"status": "password_set"})
+                return
+            principal = service.principal(self.headers.get("Authorization"))
+            if not principal:
+                self.reply(401, {"error": "unauthorized"})
+                return
+            if path == "/api/logout":
+                revoke = getattr(service, "revoke_session", None)
+                if revoke is None:
+                    self.reply(404, {"error": "unavailable"})
+                else:
+                    revoke(self.headers.get("Authorization"))
+                    self.reply(200, {"status": "session_revoked"})
+                return
+            if path == "/api/host/assets/stage":
+                from pathlib import Path
+                from game_asset_staging import ProjectAssetStaging, StagingError, MAX_ASSET_BYTES
+                policy=getattr(service,"_host_policy",None)
+                host_id=self.headers.get("X-Minglefield-Host","")
+                filename=self.headers.get("X-Minglefield-Filename","")
+                length=self.headers.get("Content-Length","")
+                settings=policy.host_settings(host_id,principal.user_id) if policy else None
+                configured=(settings or {}).get("staging_root","")
+                if self.headers.get("Content-Type","").split(";")[0].strip()!="application/octet-stream":
+                    self.reply(415,{"error":"binary_upload_required"})
+                    return
+                if not configured:
+                    self.reply(409,{"error":"staging_root_not_configured"})
+                    return
+                if not length.isdecimal() or int(length)>MAX_ASSET_BYTES:
+                    self.reply(413,{"error":"invalid_asset_size"})
+                    return
+                if not policy or policy.list_runtimes(host_id,principal.user_id) is None:
+                    self.reply(403,{"error":"host_not_owned"})
+                    return
+                try:
+                    staging=ProjectAssetStaging(host_id,Path(configured))
+                    record=staging.stage(filename,self.rfile,int(length))
+                    self.reply(201,{"state":"staged","asset":record,"comfy_transferred":False})
+                except (StagingError,OSError,ValueError) as exc:
+                    self.reply(400,{"error":"staging_failed","detail":str(exc)[:160]})
+                return
+            if path == "/api/host/comfy/upload":
+                if self.headers.get("Content-Type","").split(";")[0].strip()!="application/octet-stream":
+                    self.reply(415,{"error":"binary_upload_required"})
+                    return
+            if path == "/api/host/comfy/upload":
+                import http.client
+                import re
+                import uuid
+                from urllib.parse import urlsplit as split_url
+                policy=getattr(service,"_host_policy",None)
+                host_id=self.headers.get("X-Minglefield-Host","")
+                runtime_id=self.headers.get("X-Minglefield-Runtime","")
+                filename=self.headers.get("X-Minglefield-Filename","")
+                length=self.headers.get("Content-Length","")
+                if (not length.isdecimal() or type(host_id) is not str
+                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}",filename)
+                        or filename in (".","..")):
+                    self.reply(400,{"error":"invalid_upload_request"})
+                    return
+                runtimes=policy.list_runtimes(host_id,principal.user_id) if policy else None
+                runtime=next((x for x in runtimes or [] if x["id"]==runtime_id
+                              and x["type"]=="comfyui" and x["enabled"]),None)
+                if runtime is None:
+                    self.reply(403,{"error":"runtime_unavailable"})
+                    return
+                conn=None
+                try:
+                    boundary="minglefield"+uuid.uuid4().hex
+                    prefix=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"image\"; filename=\""+
+                            filename+"\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode()
+                    suffix=("\r\n--"+boundary+"--\r\n").encode()
+                    url=split_url(runtime["endpoint"])
+                    conn=http.client.HTTPConnection(url.hostname,url.port,timeout=120)
+                    conn.putrequest("POST","/upload/image")
+                    conn.putheader("Content-Type","multipart/form-data; boundary="+boundary)
+                    conn.putheader("Content-Length",str(len(prefix)+int(length)+len(suffix)))
+                    conn.endheaders()
+                    conn.send(prefix)
+                    remaining=int(length)
+                    while remaining:
+                        chunk=self.rfile.read(min(1024*1024,remaining))
+                        if not chunk:
+                            raise ConnectionError("incomplete_upload")
+                        conn.send(chunk)
+                        remaining-=len(chunk)
+                    conn.send(suffix)
+                    response=conn.getresponse()
+                    if response.status!=200:
+                        raise ValueError("comfy_http_"+str(response.status))
+                    answer=json.loads(response.read(65537))
+                    if type(answer) is not dict or type(answer.get("name")) is not str:
+                        raise ValueError("invalid_comfy_upload_response")
+                    self.reply(200,{"state":"uploaded","runtime_id":runtime_id,
+                                    "name":answer["name"],"subfolder":answer.get("subfolder",""),
+                                    "type":answer.get("type","input"),"job_binding":"not_assigned"})
+                except (ValueError,OSError,TypeError) as exc:
+                    self.reply(400,{"error":"comfy_upload_failed","detail":str(exc)[:160]})
+                finally:
+                    if conn: conn.close()
+                return
+                return
+            if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                self.reply(415, {"error": "json_required"})
+                return
+            length = self.headers.get("Content-Length", "")
+            if not length.isdecimal() or int(length) > (2 * 1024 * 1024 + 65536 if path in ("/api/host/comfy/inspect","/api/host/comfy/import") else (12 * 1024 * 1024 if path=="/api/host/comfy/upload" else MAX_BODY)):
+                self.reply(413, {"error": "invalid_body_length"})
+                return
+            try:
+                body = json.loads(self.rfile.read(int(length)))
+            except (UnicodeDecodeError, ValueError):
+                self.reply(400, {"error": "invalid_json"})
+                return
+            if path=="/api/game/git/init":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision","profile_id"}
+                if policy is None or type(body) is not dict or set(body)!=fields:
+                    self.reply(400,{"error":"invalid_git_init_request"})
+                    return
+                decision=policy.initialize_game_git(body["host_id"],principal.user_id,
+                    body["project_id"],body["settings_revision"],body["profile_id"])
+                self.reply(200 if decision["state"]=="initialized" else 409,
+                           decision)
+                return
+            if path=="/api/git/profiles":
+                policy=getattr(service,"_host_policy",None)
+                if (policy is None or type(body) is not dict or
+                        set(body)!={"host_id","profile"} or type(body["host_id"]) is not str):
+                    self.reply(400,{"error":"invalid_git_profile_request"})
+                    return
+                decision=policy.save_git_profile(body["host_id"],principal.user_id,body["profile"])
+                self.reply(200 if decision.state=="saved" else
+                           403 if decision.reason=="not_host_owner" else 400,
+                           {"state":decision.state,"reason":decision.reason})
+                return
+            if path=="/api/game/projects/manifest/prepare":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or type(body["host_id"]) is not str
+                        or type(body["project_id"]) is not str
+                        or type(body["settings_revision"]) is not int):
+                    self.reply(400,{"error":"invalid_manifest_prepare"})
+                    return
+                result=policy.prepare_game_manifest(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["settings_revision"])
+                status=200 if result["state"] in ("created","unchanged") else (
+                    403 if result["reason"]=="not_host_owner" else
+                    409 if result["reason"] in ("revision_conflict","project_not_found") else 400)
+                self.reply(status,result)
+                return
+            if path=="/api/game/projects/prepare":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or type(body["host_id"]) is not str
+                        or type(body["project_id"]) is not str
+                        or type(body["settings_revision"]) is not int):
+                    self.reply(400,{"error":"invalid_project_prepare"})
+                    return
+                result=policy.prepare_game_project_directories(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["settings_revision"])
+                status=200 if result["state"]=="prepared" else (
+                    403 if result["reason"]=="not_host_owner" else
+                    409 if result["reason"] in ("revision_conflict","project_not_found") else 400)
+                self.reply(status,result)
+                return
+            if path=="/api/game/projects/delete":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or type(body["host_id"]) is not str
+                        or type(body["project_id"]) is not str
+                        or type(body["settings_revision"]) is not int):
+                    self.reply(400,{"error":"invalid_project_delete"})
+                    return
+                decision=policy.delete_game_project(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["settings_revision"])
+                status=200 if decision.state=="deleted" else (
+                    403 if decision.reason=="not_host_owner" else
+                    409 if decision.reason in ("revision_conflict","project_not_found") else 400)
+                self.reply(status,{"state":decision.state,"reason":decision.reason})
+                return
+            if path=="/api/game/projects/update":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","settings_revision","name",
+                        "repository_root","staging_root","output_root"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or any(type(body[key]) is not str for key in fields-{"settings_revision"})
+                        or type(body["settings_revision"]) is not int):
+                    self.reply(400,{"error":"invalid_project_update"})
+                    return
+                decision=policy.update_game_project(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["settings_revision"],body["name"],body["repository_root"],
+                    body["staging_root"],body["output_root"])
+                status=200 if decision.state=="saved" else (
+                    403 if decision.reason=="not_host_owner" else
+                    409 if decision.reason in ("revision_conflict","project_not_found") else 400)
+                self.reply(status,{"state":decision.state,"reason":decision.reason})
+                return
+            if path=="/api/game/projects":
+                policy=getattr(service,"_host_policy",None)
+                fields={"host_id","project_id","name","repository_root",
+                        "staging_root","output_root"}
+                if (policy is None or type(body) is not dict or set(body)!=fields
+                        or any(type(body[key]) is not str for key in fields)):
+                    self.reply(400,{"error":"invalid_project_request"})
+                    return
+                decision=policy.create_game_project(
+                    body["host_id"],principal.user_id,body["project_id"],
+                    body["name"],body["repository_root"],body["staging_root"],
+                    body["output_root"])
+                status=201 if decision.state=="created" else (
+                    403 if decision.reason=="not_host_owner" else
+                    409 if decision.reason=="project_id_exists" else 400)
+                self.reply(status,{"state":decision.state,"reason":decision.reason})
+                return
+            if path=="/api/host/settings":
+                policy=getattr(service,"_host_policy",None)
+                if (policy is None or type(body) is not dict or
+                        set(body)!={"host_id","settings"} or type(body["host_id"]) is not str):
+                    self.reply(400,{"error":"invalid_settings_request"})
+                    return
+                decision=policy.save_host_settings(body["host_id"],principal.user_id,body["settings"])
+                self.reply(200 if decision.state=="saved" else 400,
+                           {"state":decision.state,"reason":decision.reason})
+                return
+            if path=="/api/host/jobs/execute":
+                policy=getattr(service,"_host_policy",None)
+                if (policy is None or type(body) is not dict
+                        or set(body)!={"host_id","job_id"}
+                        or any(type(body[k]) is not str for k in body)):
+                    self.reply(400,{"error":"invalid_execution_request"})
+                    return
+                context=policy.claim_comfy_execution(
+                    body["host_id"],principal.user_id,body["job_id"])
+                if context is None:
+                    self.reply(409,{"error":"job_not_reserved_or_not_authorized"})
+                    return
+                prompt_attempted=False
+                try:
+                    from urllib.request import Request, urlopen
+                    workflow=context["workflow"]
+                    if type(workflow) is not dict:
+                        raise ValueError("invalid_workflow")
+                    from staged_comfy_assets import ASSET_PREFIX, staged_record, upload_staged_asset
+                    from game_asset_staging import StagingError
+                    settings=policy.host_settings(body["host_id"],principal.user_id)
+                    root=(settings or {}).get("staging_root","")
+                    file_bindings={p["binding"] for p in context["metadata"].get("parameters",[])
+                                   if p.get("type")=="file"}
+                    for binding,value in context["parameters"].items():
+                        if type(value) is str and value.startswith(ASSET_PREFIX):
+                            if binding not in file_bindings or not root:
+                                raise ValueError("invalid_staged_asset_binding")
+                            asset_path,record=staged_record(body["host_id"],root,value)
+                            value=upload_staged_asset(context["runtime"]["endpoint"],asset_path,record)
+                        node_id,field=binding.split(".",1)
+                        if node_id not in workflow or field not in workflow[node_id].get("inputs",{}):
+                            raise ValueError("missing_workflow_binding")
+                        workflow[node_id]["inputs"][field]=value
+                    payload=json.dumps({"prompt":workflow},ensure_ascii=False).encode("utf-8")
+                    endpoint=context["runtime"]["endpoint"]
+                    prompt_attempted=True
+                    with urlopen(Request(endpoint+"/prompt",data=payload,
+                            headers={"Content-Type":"application/json"},
+                            method="POST"),timeout=30) as response:
+                        result=json.loads(response.read(1024*1024+1))
+                    prompt_id=result.get("prompt_id")
+                    if type(prompt_id) is not str or not prompt_id:
+                        raise ValueError("missing_prompt_id")
+                    policy.record_comfy_submission(body["host_id"],body["job_id"],prompt_id)
+                    self.reply(200,{"state":"submitted","prompt_id":prompt_id})
+                except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
+                    if not prompt_attempted:
+                        policy.record_comfy_preflight_failure(body["host_id"],body["job_id"],
+                            type(exc).__name__)
+                        self.reply(502,{"state":"failed","error":"comfy_preflight_failed",
+                            "detail":type(exc).__name__,
+                            "note":"No /prompt request was attempted; job is terminal."})
+                    else:
+                        policy.record_comfy_submission(body["host_id"],body["job_id"],None,
+                            type(exc).__name__)
+                        self.reply(502,{"state":"submission_unknown",
+                            "error":"comfy_submission_unconfirmed",
+                            "detail":type(exc).__name__,
+                            "note":"Do not retry automatically; ComfyUI may have accepted the request."})
+                return
+            if path in DELETE_ROUTES:
+                if not hasattr(service, "_active_user"):
+                    self.reply(404, {"error": "unavailable"})
+                    return
+                status, result = delete_resource(service, self.headers.get("Authorization"),
+                    DELETE_ROUTES[path][0], body)
+                self.reply(status, result)
+                return
+            if path in ("/api/host/comfy/inspect", "/api/host/comfy/import"):
+                policy=getattr(service,"_host_policy",None)
+                required={"host_id","runtime_id","workflow"}
+                if path.endswith("/import"):
+                    required |= {"effect_id","description","bindings"}
+                if policy is None or type(body) is not dict or set(body)!=required:
+                    self.reply(400,{"error":"invalid_comfy_request"})
+                    return
+                host_id,runtime_id=body["host_id"],body["runtime_id"]
+                if type(host_id) is not str or type(runtime_id) is not str:
+                    self.reply(400,{"error":"invalid_runtime_identity"})
+                    return
+                runtimes=policy.list_runtimes(host_id,principal.user_id)
+                runtime=next((r for r in runtimes if r["id"]==runtime_id
+                              and r["type"]=="comfyui" and r["enabled"]),None)
+                if runtime is None:
+                    self.reply(403,{"error":"runtime_unavailable"})
+                    return
+                from urllib.request import build_opener, HTTPHandler, Request, HTTPRedirectHandler
+                from comfy_workflow_inspection import inspect_api_workflow, WorkflowError
+                class NoRedirect(HTTPRedirectHandler):
+                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                        return None
+                try:
+                    opener=build_opener(HTTPHandler(),NoRedirect())
+                    with opener.open(Request(runtime["endpoint"]+"/object_info",
+                                            headers={"Accept":"application/json"}),timeout=5) as response:
+                        metadata=json.loads(response.read(4*1024*1024+1))
+                    if type(metadata) is not dict:
+                        raise ValueError("invalid_object_info")
+                    inspected=inspect_api_workflow(json.dumps(body["workflow"]),metadata)
+                    if path.endswith("/inspect"):
+                        self.reply(200,inspected)
+                    else:
+                        result=policy.import_comfy_workflow(host_id,principal.user_id,
+                            runtime_id,body["effect_id"],body["description"],
+                            body["workflow"],metadata,body["bindings"])
+                        self.reply(200 if result.state=="saved" else 400,
+                                   {"state":result.state,"reason":result.reason})
+                except (OSError, ValueError, TypeError, WorkflowError) as exc:
+                    self.reply(400,{"error":"comfy_inspection_failed","detail":str(exc)[:160]})
+                return
+            if path in ("/api/host/runtimes", "/api/host/runtimes/delete"):
+                policy=getattr(service,"_host_policy",None)
+                if policy is None or type(body) is not dict:
+                    self.reply(404, {"error":"host_management_unavailable"})
+                    return
+                if path == "/api/host/runtimes":
+                    if set(body)!={"host_id","runtime"}:
+                        self.reply(400, {"error":"invalid_runtime_request"})
+                        return
+                    result=policy.upsert_runtime(body["host_id"],principal.user_id,body["runtime"])
+                else:
+                    if set(body)!={"host_id","runtime_id"}:
+                        self.reply(400, {"error":"invalid_runtime_request"})
+                        return
+                    result=policy.delete_runtime(body["host_id"],principal.user_id,body["runtime_id"])
+                self.reply(200 if result.state in ("saved","deleted") else 403,
+                           {"state":result.state,"reason":result.reason})
+                return
+            if path in ("/api/host/claim","/api/host/effects",
+                        "/api/host/effects/manual","/api/host/jobs/cancel",
+                        "/api/host/jobs/retry", "/api/host/jobs/delete",
+                        "/api/host/jobs/evaluate", "/api/host/jobs/reserve",
+                        "/api/host/jobs/release"):
+                policy=getattr(service,"_host_policy",None)
+                if policy is None or type(body) is not dict:
+                    self.reply(404,{"error":"host_management_unavailable"})
+                    return
+                if path in ("/api/host/jobs/reserve","/api/host/jobs/release"):
+                    if set(body)!={"host_id","job_id"}:
+                        self.reply(400,{"error":"invalid_job_reservation"})
+                        return
+                    if path=="/api/host/jobs/reserve":
+                        result=policy.reserve_waiting_host_job_mock(
+                            body["host_id"],principal.user_id,body["job_id"],
+                            now=int(time.time()))
+                    else:
+                        result=policy.release_reserved_host_job_mock(
+                            body["host_id"],principal.user_id,body["job_id"])
+                    self.reply(200 if result.state in ("reserved_mock","waiting_mock")
+                               else 409 if result.state=="waiting" else 403,
+                        {"state":result.state,"reason":result.reason,
+                         "simulation_only":True})
+                    return
+                if path=="/api/host/jobs/evaluate":
+                    if set(body)!={"host_id","job_id"}:
+                        self.reply(400,{"error":"invalid_job_evaluation"})
+                        return
+                    result=policy.evaluate_queued_host_job(
+                        body["host_id"],principal.user_id,body["job_id"],
+                        now=int(time.time()))
+                    self.reply(200 if result.state=="waiting" else 403,
+                        {"state":result.state,"reason":result.reason,
+                         "simulation_only":True})
+                    return
+                if path=="/api/host/jobs/retry":
+                    if set(body)!={"host_id","job_id"}:
+                        self.reply(400,{"error":"invalid_job_retry"})
+                        return
+                    result=policy.retry_cancelled_host_job(
+                        body["host_id"],principal.user_id,body["job_id"])
+                    self.reply(200 if result.state=="queued_mock" else 403,
+                        {"state":result.state,"reason":result.reason,
+                         "simulation_only":True})
+                    return
+                if path=="/api/host/jobs/cancel":
+                    if set(body)!={"host_id","job_id"}:
+                        self.reply(400,{"error":"invalid_job_cancel"})
+                        return
+                    result=policy.cancel_queued_host_job(
+                        body["host_id"],principal.user_id,body["job_id"])
+                    self.reply(200 if result.state=="cancelled_mock" else 403,
+                        {"state":result.state,"reason":result.reason,
+                         "simulation_only":True})
+                    return
+                if path=="/api/host/claim":
+                    if set(body)!={"host_id","bootstrap_secret"}:
+                        self.reply(400,{"error":"invalid_host_claim"})
+                        return
+                    # Loopback-only plus exact local Host/Origin AND console secret.
+                    host_header=self.headers.get("Host","")
+                    allowed=("127.0.0.1:"+str(self.server.server_port),
+                             "localhost:"+str(self.server.server_port))
+                    origin=self.headers.get("Origin")
+                    if (self.client_address[0] not in ("127.0.0.1","::1")
+                            or host_header not in allowed
+                            or (origin is not None and origin not in
+                                tuple("http://"+h for h in allowed))):
+                        self.reply(403,{"error":"local_origin_required"})
+                        return
+                    supplied=body["bootstrap_secret"]
+                    if (local_bootstrap_secret is None or type(supplied) is not str
+                            or not hmac.compare_digest(supplied,local_bootstrap_secret)):
+                        self.reply(403,{"error":"local_bootstrap_required"})
+                        return
+                    result=policy.claim_local_host(body["host_id"],principal.user_id)
+                elif path=="/api/host/effects":
+                    if set(body)!={"host_id","effect_id","description","enabled"}:
+                        self.reply(400,{"error":"invalid_effect_definition"})
+                        return
+                    result=policy.define_effect(body["host_id"],principal.user_id,
+                        body["effect_id"],body["description"],body["enabled"])
+                else:
+                    if set(body) not in ({"host_id","effect_id"},{"host_id","effect_id","parameters"}):
+                        self.reply(400,{"error":"invalid_manual_intent"})
+                        return
+                    context=policy.comfy_file_parameter_context(
+                        body["host_id"],principal.user_id,body["effect_id"])
+                    current_choices={}
+                    supplied=body.get("parameters") or {}
+                    from staged_comfy_assets import ASSET_PREFIX, staged_record
+                    from game_asset_staging import StagingError
+                    file_bindings={p["binding"] for p in (context or {}).get("parameters",[])
+                                   if p.get("type")=="file"}
+                    staged_bindings={k for k,v in supplied.items()
+                                     if type(v) is str and v.startswith(ASSET_PREFIX)}
+                    if staged_bindings:
+                        settings=policy.host_settings(body["host_id"],principal.user_id)
+                        root=(settings or {}).get("staging_root","")
+                        if not root or not staged_bindings.issubset(file_bindings):
+                            self.reply(400,{"error":"invalid_staged_asset_binding"})
+                            return
+                        try:
+                            for binding in staged_bindings:
+                                staged_record(body["host_id"],root,supplied[binding])
+                        except (StagingError,OSError,ValueError):
+                            self.reply(400,{"error":"staged_asset_unavailable"})
+                            return
+                    if context and context["parameters"]:
+                        if not context["runtime"].get("enabled"):
+                            self.reply(403,{"error":"runtime_unavailable"})
+                            return
+                        from urllib.request import Request,urlopen
+                        from urllib.parse import quote
+                        try:
+                            needed=[p for p in context["parameters"]
+                                    if p["binding"] not in staged_bindings and p.get("type")=="enum"]
+                            for class_type in {p["class_type"] for p in needed}:
+                                with urlopen(Request(context["runtime"]["endpoint"]+
+                                        "/object_info/"+quote(class_type,safe=""),
+                                        headers={"Accept":"application/json"}),timeout=5) as response:
+                                    info=json.loads(response.read(4*1024*1024+1)).get(class_type,{})
+                                for spec in needed:
+                                    if spec["class_type"]!=class_type:continue
+                                    inputs=info.get("input",{})
+                                    definition=inputs.get("required",{}).get(spec["input"])
+                                    if definition is None:
+                                        definition=inputs.get("optional",{}).get(spec["input"])
+                                    options=(definition[0] if isinstance(definition,(list,tuple))
+                                             and definition and isinstance(definition[0],list)
+                                             else definition[1].get("options") if isinstance(definition,(list,tuple))
+                                             and len(definition)>1 and definition[0]=="COMBO"
+                                             and isinstance(definition[1],dict) else None)
+                                    if options is None or any(type(v) is not str for v in options):
+                                        raise ValueError("invalid_file_choices")
+                                    current_choices[spec["binding"]]=options
+                        except (OSError,ValueError,KeyError,TypeError,IndexError):
+                            self.reply(502,{"error":"file_choices_unavailable"})
+                            return
+                    result=policy.manual_start_mock(body["host_id"],principal.user_id,
+                        body["effect_id"],body.get("parameters"),current_choices)
+                self.reply(200 if result.state in ("claimed","saved","requested_mock","queued_mock")
+                           else 403,{"state":result.state,"reason":result.reason,
+                                    "simulation_only":True})
+                return
+            if path in ("/api/host/rules","/api/host/rules/delete"):
+                policy=getattr(service,"_host_policy",None)
+                if policy is None:
+                    self.reply(404, {"error":"host_policy_unavailable"})
+                    return
+                if type(body) is not dict:
+                    self.reply(400, {"error":"invalid_host_rule"})
+                    return
+                if path.endswith("/delete"):
+                    if set(body)!={"host_id","rule_id"}:
+                        self.reply(400, {"error":"invalid_host_rule"})
+                        return
+                    result=policy.delete_rule(body["host_id"],principal.user_id,
+                                              body["rule_id"])
+                else:
+                    if set(body)!={"host_id","rule_id","priority","enabled","config"}:
+                        self.reply(400, {"error":"invalid_host_rule"})
+                        return
+                    result=policy.upsert_rule(body["host_id"],principal.user_id,
+                        body["rule_id"],priority=body["priority"],
+                        enabled=body["enabled"],config=body["config"])
+                self.reply(200 if result.state in ("saved","deleted") else 403,
+                           {"state":result.state,"reason":result.reason,
+                            "simulation_only":True})
+                return
+            if path == "/api/agents":
+                if not hasattr(service, "create_agent") or set(body) != {"agent_id"}:
+                    self.reply(400, {"error":"invalid_agent_request"})
+                    return
+                status,result=service.create_agent(self.headers.get("Authorization"),
+                                                  body["agent_id"])
+            elif path == "/api/grants":
+                if not hasattr(service, "grant_agent") or set(body) != {
+                        "agent_id","grantee_user_id","revoke"}:
+                    self.reply(400, {"error":"invalid_grant_request"})
+                    return
+                status,result=service.grant_agent(
+                    self.headers.get("Authorization"),
+                    agent_id=body["agent_id"],grantee_user_id=body["grantee_user_id"],
+                    revoke=body["revoke"])
+            elif hasattr(service,"submit_agent") and "agent_id" in body:
+                status,result=service.submit_agent(self.headers.get("Authorization"),body)
+            else:
+                status, result = service.submit(principal, body)
+            self.reply(status, result)
+    return Handler
+
+
+def default_alpha_database():
+    """Stable per-user database outside the Git checkout; auto-created on first run."""
+    import os
+    from pathlib import Path
+    if os.name=="nt":
+        base=Path(os.environ.get("LOCALAPPDATA") or (Path.home()/"AppData"/"Local"))
+    else:
+        base=Path.home()/".local"/"share"
+    directory=base/"Minglefield"
+    directory.mkdir(parents=True,exist_ok=True)
+    return str(directory/"alpha.sqlite3")
+
+
+def run_local():
+    parser = argparse.ArgumentParser(description="LOCAL simulation only; NEVER publish as-is")
+    parser.add_argument("--port", type=int, default=8767)
+    parser.add_argument("--auth-db", help="local-only SQLite test identity store")
+    args = parser.parse_args()
+    if not 1024 <= args.port <= 65535:
+        parser.error("port must be 1024..65535")
+    from private_alpha_auth import AlphaAuthStore
+    from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+    from sec01_host_commit_policy_sim import HostCommitPolicy
+    service = AlphaAuthStore(args.auth_db or default_alpha_database())
+    service._host_policy = HostCommitPolicy(IntegratedAlphaAdmission(service))
+    token = None
+    bootstrap = secrets.token_urlsafe(32)
+    server = ThreadingHTTPServer(("127.0.0.1", args.port),
+                                 handler_for(service,local_bootstrap_secret=bootstrap))
+    print("LOCAL-ONLY simulation, no real effects. DO NOT EXPOSE VIA SERVE YET.")
+    if token:
+        print("Local test token (do not share):", token, flush=True)
+    else:
+        print("Auth v4 SQLite mode: create invitations with private_alpha_admin.py.", flush=True)
+        print("LOCAL host claim bootstrap code (do not share):",bootstrap,flush=True)
+    print("URL: http://127.0.0.1:" + str(args.port), flush=True)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    run_local()

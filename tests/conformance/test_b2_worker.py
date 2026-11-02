@@ -1,5 +1,6 @@
 """B2.1 claim-only worker tests."""
 import sqlite3
+import json
 from concurrent.futures import ThreadPoolExecutor
 import unittest
 
@@ -13,6 +14,47 @@ class WorkerClaimTests(unittest.TestCase):
     new_service = fixture.SubmissionTests.new_service
     query = fixture.SubmissionTests.query
     counts = fixture.SubmissionTests.counts
+
+    def _assert_mutated_request_denied(self, key, value, expected):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            request = json.loads(db.execute(
+                "SELECT request_json FROM action_jobs").fetchone()[0])
+            request[key] = value
+            db.execute("UPDATE action_jobs SET request_json=?",
+                       (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", expected))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_mutated_request_action_type_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "action_type", "unknown.action", "action_rule_changed")
+
+    def test_mutated_request_scope_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "scope", "game.other", "action_rule_changed")
+
+    def test_mutated_request_user_binding_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "user_id", "user.other", "request_binding_mismatch")
+
+    def test_mutated_request_agent_binding_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "agent_id", "agent.other", "request_binding_mismatch")
+
+    def test_mutated_request_delegation_binding_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "delegation_id", "grant.other", "request_binding_mismatch")
+
+    def test_mutated_request_target_denies_claim(self):
+        self._assert_mutated_request_denied(
+            "target_id", "game.other", "target_denied")
 
     def test_claim_is_atomic_and_never_reclaimed(self):
         job = self.service.submit(**self.args)
@@ -183,6 +225,246 @@ class WorkerClaimTests(unittest.TestCase):
         self.assertEqual(worker.claim_next("worker.last").state, "empty")
         self.assertEqual(self.counts(), (2, 4, 200))
 
+
+    def test_corrupt_grant_delegation_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["delegation_id"] = "grant.other"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_string_scopes_do_not_authorize_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["scopes"] = "game.test_feedback"
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+
+    def test_changed_agent_policy_revision_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["revision"] += 1
+            # The allowed scopes remain unchanged: revision mismatch alone must deny.
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason),
+                         ("denied", "policy_revision_changed"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_invalid_agent_revision_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["revision"] = True
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_invalid_grant_expiry_type_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["expires_at"] = ["invalid"]
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+
+    def test_non_object_request_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE action_jobs SET request_json='[]'")
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_missing_request_binding_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            del request["delegation_id"]
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_mismatched_request_binding_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            request["delegation_id"] = "grant.other"
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "request_binding_mismatch"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_corrupt_grant_budget_limit_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            grant["max_spend_minor"] = True
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_corrupt_request_version_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            request["version"] = True
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_corrupt_request_parameters_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            request = json.loads(db.execute("SELECT request_json FROM action_jobs").fetchone()[0])
+            request["parameters"] = []
+            db.execute("UPDATE action_jobs SET request_json=?", (json.dumps(request),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_missing_grant_issuer_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            grant = json.loads(db.execute("SELECT grant_json FROM grants").fetchone()[0])
+            del grant["issuer_user_id"]
+            db.execute("UPDATE grants SET grant_json=?", (json.dumps(grant),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_corrupt_agent_concurrency_limit_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["policy"]["max_concurrent_tasks"] = True
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_malformed_agent_operators_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["operators"] = [{"user_id": "user.alice", "roles": ["unknown_role"]}]
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
+
+    def test_inconsistent_agent_state_denies_claim(self):
+        job = self.service.submit(**self.args)
+        self.assertTrue(job.allowed)
+        db = sqlite3.connect(self.db)
+        try:
+            import json
+            agent = json.loads(db.execute("SELECT descriptor FROM agents").fetchone()[0])
+            agent["state"] = "suspended"
+            db.execute("UPDATE agents SET descriptor=?", (json.dumps(agent),))
+            db.commit()
+        finally:
+            db.close()
+        result = ClaimWorker(self.service).claim_next("worker.one")
+        self.assertEqual((result.state, result.reason), ("denied", "invalid_policy"))
+        self.assertEqual(self.counts(), (1, 2, 100))
 
 if __name__ == "__main__":
     unittest.main()

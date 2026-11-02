@@ -1,7 +1,6 @@
-"""Phase A fixes and executable, explicitly unresolved P1 reproductions.
+"""Phase A fixes and executable P1 regression reproductions.
 
-Expected failures assert the desired security property. An unexpected success
-requires reviewing/removing the marker; it must not silently hide a later fix.
+Security properties are enforced as regular regression tests.
 """
 import copy
 import json
@@ -9,6 +8,7 @@ import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 from sys import path
 from unittest.mock import patch
@@ -96,7 +96,6 @@ class PhaseARegressions(unittest.TestCase):
                 with self.subTest(engine=type(engine).__name__, operation_id=operation_id):
                     self.assertTrue(engine.authorize(**self.args, operation_id=operation_id).allowed)
 
-    @unittest.expectedFailure
     def test_known_p1_revocation_between_verify_and_policy_must_deny(self):
         original = self.sessions.verify
 
@@ -110,7 +109,15 @@ class PhaseARegressions(unittest.TestCase):
         with patch.object(self.sessions, "verify", side_effect=verify_then_revoke):
             result = ActionGateway(self.sessions, self.policy).authorize(**self.gateway_args(self.token))
         self.assertIsNone(original(self.token))
-        self.assertFalse(result.allowed, "P1: revoked session still authorizes and reserves")
+        self.assertFalse(result.allowed, "revoked session must not reserve")
+        self.assertEqual(result.reason, "invalid_session")
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT spent_minor FROM grants WHERE delegation_id='grant.01'"
+            ).fetchone()[0], 0)
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM operations WHERE operation_id='op.binding'"
+            ).fetchone()[0], 0)
 
     def reserve_across_grants(self, engine):
         for index in range(6):
@@ -120,7 +127,6 @@ class PhaseARegressions(unittest.TestCase):
             engine.authorize(**(self.args | dict(delegation_id=grant["delegation_id"])),
                              cost_minor=200, operation_id="budget")
 
-    @unittest.expectedFailure
     def test_known_p1_sqlite_agent_budget_must_cover_all_grants(self):
         self.reserve_across_grants(self.policy)
         db = sqlite3.connect(self.db)
@@ -132,7 +138,6 @@ class PhaseARegressions(unittest.TestCase):
         self.assertLessEqual(total, self.agent["policy"]["max_spend_minor"],
                              "P1: agent cap is currently applied separately per grant")
 
-    @unittest.expectedFailure
     def test_known_p1_memory_agent_budget_must_cover_all_grants(self):
         self.reserve_across_grants(self.memory)
         self.assertLessEqual(sum(self.memory.spent.values()),

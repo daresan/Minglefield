@@ -68,6 +68,8 @@ dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);
 </style>
 <header class="app-heading"><h1>Minglefield Private Alpha</h1><button id="platformUpdateIndicator" class="signal-indicator" data-signal="unknown" type="button" aria-haspopup="dialog" title="Minglefield-Update: Status unbekannt"><span class="signal-lamp" aria-hidden="true"></span><span>Minglefield-Update</span></button></header>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
+<dialog id="platformUpdateDialog" aria-labelledby="platformUpdateTitle"><h3 id="platformUpdateTitle">Minglefield-Update</h3><p>Derzeit ist keine verifizierte Plattform-Updatequelle angebunden. Status: unbekannt. Es wird kein Update gestartet.</p><form method="dialog"><button>Schließen</button></form></dialog>
+
 <p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
 <fieldset><legend>1. Einladung einlösen (nur Auth-v2-Test)</legend>
 <label>Einladungscode <input id="invite" type="password" autocomplete="off"></label>
@@ -262,7 +264,6 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
 <button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
 
-<dialog id="platformUpdateDialog" aria-labelledby="platformUpdateTitle"><h3 id="platformUpdateTitle">Minglefield-Update</h3><p>Derzeit ist keine verifizierte Plattform-Updatequelle angebunden. Status: unbekannt. Es wird kein Update gestartet.</p><form method="dialog"><button>Schließen</button></form></dialog>
 <dialog id="gameUpdateDialog" aria-labelledby="gameUpdateTitle"><h3 id="gameUpdateTitle">Game-Projekt: Updates</h3><p>Release-Vergleiche mit deklarierten Versionen sind keine Installationsnachweise.</p><div class="action-row"><button id="gameIntegrationUpdateInspect" type="button">Integrationsupdates prüfen</button><button id="gameIntegrationRegistryInspect" type="button">Integrationen anzeigen / aktualisieren</button></div><pre id="gameUpdateStatus" aria-live="polite">Noch nicht geprüft.</pre><form method="dialog"><button>Schließen</button></form></dialog>
 <div id="gameManagePanel">
 <h3>Bestehendes Projekt verwalten</h3>

@@ -85,25 +85,21 @@ def inspect_api_workflow(raw, object_info=None):
                     limits = {k: v for k, v in spec[1].items()
                               if k in ("min", "max", "step") and
                               type(v) in (int, float) and math.isfinite(v)}
-            # ComfyUI Load3D uses a custom file widget for model_file.
-            # Some versions expose a non-scalar type in /object_info; the
-            # workflow value itself remains a string path under input/3d/.
-            if (cls == "Load3D" and name == "model_file"
-                    and type(value) is str and type(info) is dict
-                    and name in fields):
-                kind = "file"
+            verified = kind is not None
             if kind is None:
                 kind = {str: "string", int: "integer", float: "number",
                         bool: "boolean"}[type(value)]
-                verified = False
-            # File picker widgets often publish STRING metadata with file-oriented
-            # options; do not infer file permissions from the input name alone.
+            # Only metadata-declared upload widgets qualify as generic file inputs.
             if (kind == "string" and verified and type(spec) in (list, tuple)
                     and len(spec) >= 2 and type(spec[1]) is dict
                     and (spec[1].get("image_upload") or spec[1].get("file_upload")
                          or spec[1].get("upload") or spec[1].get("folder_paths"))):
                 kind = "file"
-            else:
+            # Load3D exposes model_file through a custom widget in current ComfyUI.
+            if (cls == "Load3D" and name == "model_file"
+                    and type(value) is str and type(info) is dict
+                    and name in fields):
+                kind = "file"
                 verified = True
             candidate = {"binding": f"{node_id}.{name}", "node_id": node_id,
                          "class_type": cls, "input": name, "type": kind,

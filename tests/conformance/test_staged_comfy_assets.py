@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from game_asset_staging import ProjectAssetStaging, StagingError
-from staged_comfy_assets import staged_record, upload_staged_asset
+from server.game_asset_staging import ProjectAssetStaging, StagingError
+from server.staged_comfy_assets import staged_record, upload_staged_asset
 
 
 class StagedComfyAssetsTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class StagedComfyAssetsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
             record=ProjectAssetStaging("host.alpha",root).stage("model.glb",io.BytesIO(b"glb"),3)
-            with patch("staged_comfy_assets.http.client.HTTPConnection") as conn:
+            with patch("server.staged_comfy_assets.http.client.HTTPConnection") as conn:
                 response=conn.return_value.getresponse.return_value
                 response.status=200
                 response.read.return_value=b'{"name":"model.glb","type":"input","subfolder":""}'

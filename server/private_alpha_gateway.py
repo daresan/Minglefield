@@ -232,17 +232,32 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 </fieldset>
 <section id="gameProjectPanel" class="alphaPanel" hidden>
 <h2>Game-Projekte (P1 Alpha)</h2>
-<p>Projektregistrierung ohne automatischen Git-Import, Dateitransfer oder Jobstart.</p>
+<p>Projektregistrierung und Einstellungen; keine Dateisystemänderungen.</p>
 <label>Host <select id="gameHostSelect"></select></label>
-<label>Projekt-ID <input id="gameProjectId" placeholder="game.demo"></label>
-<label>Name <input id="gameProjectName" placeholder="Mein Spiel"></label>
+<div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
+<button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
+<div id="gameManagePanel">
+<h3>Bestehendes Projekt verwalten</h3>
+<label>Projekt auswählen <select id="gameProjectSelect"></select></label>
+<label>Projekt-ID (nicht änderbar) <input id="gameProjectId" readonly></label>
+<label>Name <input id="gameProjectName"></label>
 <label>Repository-Pfad (absolut) <input id="gameRepositoryRoot"></label>
 <label>Staging-Pfad (absolut) <input id="gameStagingRoot"></label>
 <label>Output-Pfad (absolut) <input id="gameOutputRoot"></label>
-<button id="gameProjectCreate" type="button">Projekt registrieren</button>
-<button id="gameProjectRefresh" type="button">Projekte laden</button>
-<button id="gameProjectUpdate" type="button">Ausgewähltes Projekt speichern</button>
-<label>Registrierte Projekte <select id="gameProjectSelect"></select></label>
+<div class="action-row"><button id="gameProjectUpdate" type="button">Änderungen speichern</button>
+<button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button></div>
+<p><small>Entfernen löscht nur die Registrierung, niemals lokale Dateien oder Ordner.</small></p>
+</div>
+<div id="gameCreatePanel" hidden>
+<h3>Neues Projekt registrieren</h3>
+<label>Neue Projekt-ID <input id="gameNewProjectId" placeholder="game.demo"></label>
+<label>Name <input id="gameNewProjectName"></label>
+<label>Repository-Pfad (absolut) <input id="gameNewRepositoryRoot"></label>
+<label>Staging-Pfad (absolut) <input id="gameNewStagingRoot"></label>
+<label>Output-Pfad (absolut) <input id="gameNewOutputRoot"></label>
+<div class="action-row"><button id="gameProjectCreate" type="button">Neues Projekt registrieren</button>
+<button id="gameProjectCancel" type="button">Abbrechen</button></div>
+</div>
 <pre id="gameProjectStatus" aria-live="polite">Host wählen und Projekte laden.</pre>
 </section>
 <p id="sessionStatus" role="status" aria-live="polite">Keine aktive Session.</p>
@@ -1390,6 +1405,29 @@ document.getElementById("gameProjectUpdate").onclick=async()=>{
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
+function setGameCreateMode(creating){
+  document.getElementById("gameCreatePanel").hidden=!creating;
+  document.getElementById("gameManagePanel").hidden=creating;
+}
+document.getElementById("gameProjectNew").onclick=()=>{
+  for(const id of ["gameNewProjectId","gameNewProjectName","gameNewRepositoryRoot",
+                   "gameNewStagingRoot","gameNewOutputRoot"])document.getElementById(id).value="";
+  setGameCreateMode(true);
+};
+document.getElementById("gameProjectCancel").onclick=()=>setGameCreateMode(false);
+document.getElementById("gameProjectDelete").onclick=async()=>{
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  if(!project)return;
+  const entered=window.prompt("Nur die Minglefield-Registrierung wird entfernt; Dateien bleiben erhalten. Zur Bestätigung Projekt-ID eingeben:",project.project_id);
+  if(entered!==project.project_id)return;
+  const response=await request("/api/game/projects/delete",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({host_id:gameHostSelect.value,project_id:project.project_id,
+                         settings_revision:project.settings_revision})});
+  if(response.status===200)await refreshGameProjectList();
+  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+    {status:response.status,...response.data},null,2);
+};
 document.getElementById("gameProjectCreate").onclick=async()=>{
   const host=gameHostSelect.value;
   if(!host){
@@ -1398,16 +1436,16 @@ document.getElementById("gameProjectCreate").onclick=async()=>{
   }
   const payload={
     host_id:host,
-    project_id:document.getElementById("gameProjectId").value.trim(),
-    name:document.getElementById("gameProjectName").value.trim(),
-    repository_root:document.getElementById("gameRepositoryRoot").value.trim(),
-    staging_root:document.getElementById("gameStagingRoot").value.trim(),
-    output_root:document.getElementById("gameOutputRoot").value.trim()
+    project_id:document.getElementById("gameNewProjectId").value.trim(),
+    name:document.getElementById("gameNewProjectName").value.trim(),
+    repository_root:document.getElementById("gameNewRepositoryRoot").value.trim(),
+    staging_root:document.getElementById("gameNewStagingRoot").value.trim(),
+    output_root:document.getElementById("gameNewOutputRoot").value.trim()
   };
   const response=await request("/api/game/projects",{
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify(payload)});
-  if(response.status===201)await refreshGameProjectList();
+  if(response.status===201){await refreshGameProjectList();setGameCreateMode(false);}
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };

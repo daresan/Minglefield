@@ -257,6 +257,76 @@ class HostCommitPolicy:
         except (OSError,ValueError):
             return {"state":"denied","reason":"filesystem_error"}
 
+    def inspect_game_git(self, host_id, owner_id, project_id):
+        """Read-only Git status; distinguish uninitialized and nested repositories."""
+        import subprocess
+        from pathlib import Path
+        if not ident(project_id):
+            return None
+        with self.authority.store._tx() as db:
+            if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                              (host_id,owner_id)).fetchone():
+                return None
+            row=db.execute("""SELECT repository_root FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+        if row is None:
+            return None
+        root=Path(row[0])
+        if not root.is_dir():
+            return {"state":"missing_directory"}
+        try:
+            result=subprocess.run(["git","-C",str(root),"rev-parse","--show-toplevel"],
+                                  capture_output=True,text=True,timeout=8,
+                                  stdin=subprocess.DEVNULL)
+            if result.returncode!=0:
+                return {"state":"not_initialized"}
+            actual=Path(result.stdout.strip()).resolve()
+            return {"state":"initialized" if actual==root.resolve() else "nested_in_repository",
+                    "git_root":str(actual)}
+        except (OSError,subprocess.TimeoutExpired,ValueError):
+            return {"state":"git_unavailable"}
+
+    def initialize_game_git(self, host_id, owner_id, project_id, revision, profile_id):
+        """Explicit, owner-scoped git init; never commits or changes remotes."""
+        import subprocess
+        from pathlib import Path
+        if not ident(project_id) or not ident(profile_id) or type(revision) is not int:
+            return {"state":"denied","reason":"invalid_git_init"}
+        with self.authority.store._tx() as db:
+            if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                              (host_id,owner_id)).fetchone():
+                return {"state":"denied","reason":"not_host_owner"}
+            row=db.execute("""SELECT repository_root,settings_revision FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone()
+            profile=db.execute("""SELECT git_executable FROM alpha_git_profiles
+                WHERE host_id=? AND owner_id=? AND profile_id=?""",
+                (host_id,owner_id,profile_id)).fetchone()
+        if row is None:
+            return {"state":"denied","reason":"project_not_found"}
+        if profile is None:
+            return {"state":"denied","reason":"git_profile_not_found"}
+        root=Path(row[0])
+        if revision!=row[1]:
+            return {"state":"denied","reason":"revision_conflict"}
+        if not root.is_dir() or root.is_symlink():
+            return {"state":"denied","reason":"repository_directory_invalid"}
+        status=self.inspect_game_git(host_id,owner_id,project_id)
+        if status is None or status["state"]!="not_initialized":
+            return {"state":"denied","reason":"repository_not_uninitialized",
+                    "git_status":status}
+        try:
+            command=[profile[0],"-C",str(root),"init"]
+            result=subprocess.run(command,capture_output=True,text=True,timeout=20,
+                                  stdin=subprocess.DEVNULL,
+                                  env=__import__("os").environ.copy())
+            if result.returncode:
+                return {"state":"denied","reason":"git_init_failed"}
+            return {"state":"initialized","reason":"git_init_completed"}
+        except (OSError,subprocess.TimeoutExpired,ValueError):
+            return {"state":"denied","reason":"git_unavailable"}
+
     def delete_game_project(self, host_id, owner_id, project_id, revision):
         """Remove only a registry row, never project directories or files."""
         if not ident(project_id) or type(revision) is not int or revision < 1:

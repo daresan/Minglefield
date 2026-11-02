@@ -1757,6 +1757,19 @@ def handler_for(service, *, local_bootstrap_secret=None):
                             self.reply(200,{"choices":result})
                         except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
                             self.reply(502,{"error":"file_choices_unavailable"})
+            elif path == "/api/game/projects/paths":
+                policy=getattr(service,"_host_policy",None)
+                query=parse_qs(urlsplit(self.path).query)
+                hosts=query.get("host_id",[])
+                projects=query.get("project_id",[])
+                if policy is None or len(hosts)!=1 or len(projects)!=1:
+                    self.reply(400,{"error":"invalid_project_paths_query"})
+                else:
+                    paths=policy.inspect_game_project_paths(
+                        hosts[0],principal.user_id,projects[0])
+                    self.reply(404 if paths is None else 200,
+                               {"error":"project_not_found_or_forbidden"} if paths is None
+                               else {"paths":paths})
             elif path == "/api/game/projects":
                 policy=getattr(service,"_host_policy",None)
                 host_ids=parse_qs(urlsplit(self.path).query).get("host_id",[])

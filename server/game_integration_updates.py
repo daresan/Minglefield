@@ -4,6 +4,7 @@ Version comparison uses packaging.version (PEP 440), pending a SemVer-specific
 dependency decision. This module never claims artifact integrity or installation.
 """
 from packaging.version import Version, InvalidVersion
+from urllib.parse import quote
 from game_release_metadata import fetch_releases
 
 
@@ -58,6 +59,16 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
     if not versions:
         return {"state":"unknown","reason":"no_comparable_releases"}
     latest,release=max(versions,key=lambda item:item[0])
+    comparison_url=None
+    if latest>installed:
+        # A link is only a navigation aid, not evidence of actual installed bytes.
+        repository=source.get("repository")
+        old_tag=entry.get("declared_version")
+        new_tag=release.get("tag_name")
+        if (isinstance(repository,str) and isinstance(old_tag,str)
+                and isinstance(new_tag,str) and old_tag and new_tag):
+            comparison_url=("https://github.com/"+repository+"/compare/"
+                            +quote(old_tag,safe="")+"..."+quote(new_tag,safe=""))
     return {"state":"update_available" if latest>installed else "up_to_date",
             "installed_version":entry["declared_version"],
             "available_version":release["tag_name"],
@@ -66,7 +77,8 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases):
             "published_at":release.get("published_at"),
             "verification_state":"unknown",
             "preview":{"state":"incomplete","release_notes":release.get("release_notes",""),
-                       "changed_files":{"state":"unknown","files":[]},
+                       "changed_files":{"state":"unknown","files":[],
+                                        "comparison_url":comparison_url},
                        "compatibility":{"state":"unknown"},
                        "migration":{"state":"unknown"},
                        "artifact_integrity":{"state":"unknown"},

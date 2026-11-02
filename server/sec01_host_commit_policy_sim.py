@@ -49,6 +49,12 @@ class HostCommitPolicy:
                 auth_method TEXT NOT NULL, label TEXT NOT NULL,
                 git_executable TEXT NOT NULL, author_name TEXT NOT NULL,
                 author_email TEXT NOT NULL, PRIMARY KEY(host_id,profile_id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_installation_evidence(
+                host_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                integration_id TEXT NOT NULL, installer_run_id TEXT NOT NULL,
+                evidence_json TEXT NOT NULL, recorded_at TEXT NOT NULL,
+                PRIMARY KEY(host_id,project_id,integration_id,installer_run_id),
+                FOREIGN KEY(project_id) REFERENCES alpha_game_projects(project_id))""")
             db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_projects(
                 project_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 owner_id TEXT NOT NULL, name TEXT NOT NULL,

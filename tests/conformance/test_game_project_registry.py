@@ -37,6 +37,27 @@ class GameProjectRegistryTests(unittest.TestCase):
         self.assertEqual(projects[0]["project_id"], "game.one")
         self.assertEqual(projects[0]["settings_revision"], 1)
 
+    def test_read_only_directory_inspection(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        file_path = self.root / "not_a_directory"
+        file_path.write_text("keep")
+        stage = self.root / "missing_stage"
+        self.assertEqual(self.policy.create_game_project(
+            "host.one", "user.owner", "game.paths", "Paths",
+            str(repo), str(stage), str(file_path)).state, "created")
+        self.assertIsNone(self.policy.inspect_game_project_paths(
+            "host.one", "user.other", "game.paths"))
+        self.assertIsNone(self.policy.inspect_game_project_paths(
+            "host.one", "user.owner", "missing.game"))
+        result = self.policy.inspect_game_project_paths(
+            "host.one", "user.owner", "game.paths")
+        self.assertEqual(result["repository_root"]["state"], "directory")
+        self.assertEqual(result["staging_root"]["state"], "missing")
+        self.assertEqual(result["output_root"]["state"], "not_directory")
+        self.assertFalse(stage.exists())
+        self.assertEqual(file_path.read_text(), "keep")
+
     def test_update_revision_and_owner_isolation(self):
         paths = tuple(str(self.root / part) for part in ("game", "stage", "output"))
         self.assertEqual(self.policy.create_game_project(

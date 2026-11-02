@@ -183,7 +183,26 @@ class HostCommitPolicy:
                 (host_id,effect_id,description,int(enabled)))
             return HostDecision("saved","effect_metadata_only")
 
-    def manual_start_mock(self, host_id, owner_id, effect_id, parameters=None):
+    def comfy_file_parameter_context(self, host_id, owner_id, effect_id):
+        """Owner-scoped file enum bindings and configured ComfyUI runtime."""
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return None
+            row=db.execute("""SELECT w.runtime_id,w.metadata,r.config
+                FROM sec01_host_comfy_workflows w JOIN sec01_host_runtimes r
+                ON w.host_id=r.host_id AND w.runtime_id=r.runtime_id
+                WHERE w.host_id=? AND w.effect_id=?""",(host_id,effect_id)).fetchone()
+            if not row:
+                return None
+            runtime_id,raw,config=row
+            metadata=json.loads(raw)
+            specs=[p for p in metadata.get("parameters",[])
+                   if p.get("type")=="enum" and p.get("class_type")=="LoadImage"
+                   and p.get("input")=="image"]
+            return {"runtime":json.loads(config),"parameters":specs}
+
+    def manual_start_mock(self, host_id, owner_id, effect_id, parameters=None, current_file_choices=None):
         """Persist validated parameter snapshot as a queued mock intent; never execute."""
         import secrets
         if type(parameters) is not dict and parameters is not None:
@@ -217,7 +236,7 @@ class HostCommitPolicy:
                     if kind in ("string","enum") and type(value) is not str:
                         return HostDecision("denied","invalid_parameter_type")
                     constraints=spec.get("constraints",spec.get("limits",{}))
-                    if kind=="enum" and value not in constraints.get("choices",spec.get("choices",[])):
+                    if kind=="enum" and value not in ((current_file_choices or {}).get(key, constraints.get("choices",spec.get("choices",[])))):
                         return HostDecision("denied","invalid_parameter_choice")
                     if kind in ("integer","number"):
                         minimum=constraints.get("min")

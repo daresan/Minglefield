@@ -73,12 +73,12 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(self.request("GET", path, self.other)[0], 403)
 
     def test_game_tab_markup_and_api_wiring(self):
-        status, _ = self.request("GET", "/")
-        self.assertEqual(status, 200)
         connection = http.client.HTTPConnection("127.0.0.1", self.http.server_port, timeout=5)
         try:
             connection.request("GET", "/")
             response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertIn("text/html", response.getheader("Content-Type"))
             html = response.read().decode("utf-8")
         finally:
             connection.close()

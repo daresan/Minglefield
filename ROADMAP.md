@@ -128,6 +128,7 @@ Agreed design:
 ## P1.4f — Game integration update management (in progress)
 
 - [x] P1.4f.1: Read-only project integration status; report unknown update availability when no release source is configured (22 focused tests passed on Windows).
+- [ ] P1.4f.2 first slice (Windows tests pending): `server/game_integration_updates.py` performs registry-bound, read-only GitHub Release version comparison with `packaging.version`; offline/mismatched sources remain unknown. This is not yet wired to Game HTTP/UI, and PEP 440 versus strict SemVer policy needs explicit review before update installation.
 - [ ] P1.4f.2: Read-only release discovery and version comparison, based on **GitHub Releases and Git tags**, not a proprietary release catalog. Use the existing release `tag_name`, `body` (release notes), `html_url`, and published timestamp; link commits via GitHub's existing comparison URLs. Treat untrusted release text as display data only.
 - [ ] Define the first published **game integration** version independently from the Minglefield platform version and `.minglefield/project.json` schema version. Do not infer an installed integration version from `schema_version: 1`; currently it is unknown.
 - [ ] Use a standard SemVer implementation or an existing project dependency, rather than implementing a custom version parser. Do not guess release tags, repository origins, or available updates.

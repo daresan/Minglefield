@@ -1853,6 +1853,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 if context is None:
                     self.reply(409,{"error":"job_not_reserved_or_not_authorized"})
                     return
+                prompt_attempted=False
                 try:
                     from urllib.request import Request, urlopen
                     workflow=context["workflow"]
@@ -1876,6 +1877,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         workflow[node_id]["inputs"][field]=value
                     payload=json.dumps({"prompt":workflow},ensure_ascii=False).encode("utf-8")
                     endpoint=context["runtime"]["endpoint"]
+                    prompt_attempted=True
                     with urlopen(Request(endpoint+"/prompt",data=payload,
                             headers={"Content-Type":"application/json"},
                             method="POST"),timeout=30) as response:
@@ -1886,12 +1888,19 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     policy.record_comfy_submission(body["host_id"],body["job_id"],prompt_id)
                     self.reply(200,{"state":"submitted","prompt_id":prompt_id})
                 except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
-                    policy.record_comfy_submission(body["host_id"],body["job_id"],None,
-                        type(exc).__name__)
-                    self.reply(502,{"state":"submission_unknown",
-                        "error":"comfy_submission_unconfirmed",
-                        "detail":type(exc).__name__,
-                        "note":"Do not retry automatically; ComfyUI may have accepted the request."})
+                    if not prompt_attempted:
+                        policy.record_comfy_preflight_failure(body["host_id"],body["job_id"],
+                            type(exc).__name__)
+                        self.reply(502,{"state":"failed","error":"comfy_preflight_failed",
+                            "detail":type(exc).__name__,
+                            "note":"No /prompt request was attempted; job is terminal."})
+                    else:
+                        policy.record_comfy_submission(body["host_id"],body["job_id"],None,
+                            type(exc).__name__)
+                        self.reply(502,{"state":"submission_unknown",
+                            "error":"comfy_submission_unconfirmed",
+                            "detail":type(exc).__name__,
+                            "note":"Do not retry automatically; ComfyUI may have accepted the request."})
                 return
             if path in DELETE_ROUTES:
                 if not hasattr(service, "_active_user"):

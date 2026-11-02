@@ -1225,6 +1225,48 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(403 if jobs is None else 200,
                         {"error":"not_host_owner"} if jobs is None else
                         {"jobs":jobs,"simulation_only":True})
+            elif path == "/api/host/jobs/execution":
+                policy=getattr(service,"_host_policy",None)
+                params=parse_qs(urlsplit(self.path).query)
+                hosts=params.get("host_id",[])
+                jobs=params.get("job_id",[])
+                if policy is None or len(hosts)!=1 or len(jobs)!=1:
+                    self.reply(400,{"error":"invalid_execution_query"})
+                else:
+                    context=policy.comfy_execution_context(hosts[0],principal.user_id,jobs[0])
+                    if context is None:
+                        self.reply(404,{"error":"execution_not_found"})
+                    elif not context["prompt_id"]:
+                        self.reply(200,{"state":context["state"],
+                            "prompt_id":None,"error":context["error"]})
+                    else:
+                        try:
+                            from urllib.request import urlopen
+                            from urllib.parse import quote
+                            with urlopen(context["runtime"]["endpoint"]+
+                                    "/history/"+quote(context["prompt_id"],safe=""),
+                                    timeout=10) as response:
+                                history=json.loads(response.read(4*1024*1024+1))
+                            entry=history.get(context["prompt_id"])
+                            if entry is None:
+                                self.reply(200,{"state":context["state"],
+                                    "prompt_id":context["prompt_id"],"history":"pending"})
+                            else:
+                                status=entry.get("status",{})
+                                completed=status.get("completed") is True
+                                messages=status.get("messages",[])
+                                failed=any(type(m) is list and m and m[0]=="execution_error"
+                                    for m in messages)
+                                if completed or failed:
+                                    policy.finish_comfy_execution(hosts[0],jobs[0],
+                                        "completed" if completed else "failed")
+                                self.reply(200,{"state":"completed" if completed else
+                                    "failed" if failed else context["state"],
+                                    "prompt_id":context["prompt_id"],
+                                    "status":status,"outputs":entry.get("outputs",{})})
+                        except (OSError,ValueError,TypeError,KeyError):
+                            self.reply(502,{"error":"comfy_status_unavailable",
+                                "prompt_id":context["prompt_id"]})
             elif path == "/api/host/runtime/status":
                 policy=getattr(service,"_host_policy",None)
                 params=parse_qs(urlsplit(self.path).query)
@@ -1308,7 +1350,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -1466,6 +1508,47 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 body = json.loads(self.rfile.read(int(length)))
             except (UnicodeDecodeError, ValueError):
                 self.reply(400, {"error": "invalid_json"})
+                return
+            if path=="/api/host/jobs/execute":
+                policy=getattr(service,"_host_policy",None)
+                if (policy is None or type(body) is not dict
+                        or set(body)!={"host_id","job_id"}
+                        or any(type(body[k]) is not str for k in body)):
+                    self.reply(400,{"error":"invalid_execution_request"})
+                    return
+                context=policy.claim_comfy_execution(
+                    body["host_id"],principal.user_id,body["job_id"])
+                if context is None:
+                    self.reply(409,{"error":"job_not_reserved_or_not_authorized"})
+                    return
+                try:
+                    from urllib.request import Request, urlopen
+                    workflow=context["workflow"]
+                    if type(workflow) is not dict:
+                        raise ValueError("invalid_workflow")
+                    for binding,value in context["parameters"].items():
+                        node_id,field=binding.split(".",1)
+                        if node_id not in workflow or field not in workflow[node_id].get("inputs",{}):
+                            raise ValueError("missing_workflow_binding")
+                        workflow[node_id]["inputs"][field]=value
+                    payload=json.dumps({"prompt":workflow},ensure_ascii=False).encode("utf-8")
+                    endpoint=context["runtime"]["endpoint"]
+                    with urlopen(Request(endpoint+"/prompt",data=payload,
+                            headers={"Content-Type":"application/json"},
+                            method="POST"),timeout=30) as response:
+                        result=json.loads(response.read(1024*1024+1))
+                    prompt_id=result.get("prompt_id")
+                    if type(prompt_id) is not str or not prompt_id:
+                        raise ValueError("missing_prompt_id")
+                    policy.record_comfy_submission(body["host_id"],body["job_id"],prompt_id)
+                    self.reply(200,{"state":"submitted","prompt_id":prompt_id})
+                except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
+                    policy.record_comfy_submission(body["host_id"],body["job_id"],None,
+                        type(exc).__name__)
+                    self.reply(502,{"state":"submission_unknown",
+                        "error":"comfy_submission_unconfirmed",
+                        "detail":type(exc).__name__,
+                        "note":"Do not retry automatically; ComfyUI may have accepted the request."})
                 return
             if path in DELETE_ROUTES:
                 if not hasattr(service, "_active_user"):

@@ -63,6 +63,7 @@ small{font-size:14px;color:var(--muted)}#sessionStatus,#deleteStatus{border-left
 .artifact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;margin:12px 0}.artifact-card{border:1px solid var(--line);border-radius:9px;padding:12px;min-width:0;overflow-wrap:anywhere}.artifact-card img{display:block;max-width:100%;height:170px;object-fit:contain;background:#0b1020}.artifact-card a{display:inline-block;margin:8px 8px 0 0}.artifact-card small{display:block;color:var(--muted)}
 #jobResultsDialog{width:min(1100px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);padding:22px}#jobResultsDialog::backdrop{background:rgba(0,0,0,.75)}.results-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.results-dialog-head h2{margin:0}
 .job-table-scroll{width:100%;overflow-x:auto}.job-table-scroll table{width:100%;border-collapse:collapse;min-width:650px}.job-table-scroll th,.job-table-scroll td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:middle}.job-table-scroll td:first-child{overflow-wrap:anywhere;max-width:280px}.job-table-scroll td button{min-height:34px;padding:5px 9px;font-size:13px;margin:2px}.job-table-scroll tr[aria-selected=true]{background:var(--raised)}.job-toolbar,.job-actions{display:flex;flex-wrap:wrap;gap:8px;width:100%}.legacy-job-select{display:none!important}.job-diagnostics,#jobParametersDetails{width:100%;flex-basis:100%;border:1px solid var(--line);padding:12px;border-radius:10px}.job-diagnostics>summary,#jobParametersDetails>summary{cursor:pointer;font-weight:700;padding:8px}.job-diagnostics>fieldset{margin-top:16px}#jobParameterFields{margin-top:14px}#unifiedJobsPanel>pre{width:100%}
+dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:min(760px,92vw);width:100%}dialog::backdrop{background:#000a}dialog .action-row{margin:12px 0}#gameUpdateStatus{max-height:55vh;overflow:auto}
 </style>
 <h1>Minglefield Private Alpha</h1>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
@@ -260,6 +261,9 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <div class="action-row"><button id="gameProjectRefresh" type="button">Projekte laden</button>
 <button id="gameProjectNew" type="button">+ Neues Projekt</button></div>
 
+<div class="action-row" aria-label="Update-Status"><button id="platformUpdateIndicator" type="button" aria-haspopup="dialog">⚪ Minglefield-Update · ungeprüft</button><button id="gameUpdateIndicator" type="button" aria-haspopup="dialog">⚪ Game-Update · ungeprüft</button></div>
+<dialog id="platformUpdateDialog" aria-labelledby="platformUpdateTitle"><h3 id="platformUpdateTitle">Minglefield-Update</h3><p>Derzeit ist keine verifizierte Plattform-Updatequelle angebunden. Status: unbekannt. Es wird kein Update gestartet.</p><form method="dialog"><button>Schließen</button></form></dialog>
+<dialog id="gameUpdateDialog" aria-labelledby="gameUpdateTitle"><h3 id="gameUpdateTitle">Game-Projekt: Updates</h3><p>Release-Vergleiche mit deklarierten Versionen sind keine Installationsnachweise.</p><div class="action-row"><button id="gameIntegrationUpdateInspect" type="button">Integrationsupdates prüfen</button><button id="gameIntegrationRegistryInspect" type="button">Integrationen anzeigen / aktualisieren</button></div><pre id="gameUpdateStatus" aria-live="polite">Noch nicht geprüft.</pre><form method="dialog"><button>Schließen</button></form></dialog>
 <div id="gameManagePanel">
 <h3>Bestehendes Projekt verwalten</h3>
 <label>Projekt auswählen <select id="gameProjectSelect"></select></label>
@@ -273,8 +277,6 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <button id="gameProjectInspect" type="button">Verzeichnisse prüfen</button>
 <button id="gameGitInspect" type="button">Git-Status prüfen</button>
 <button id="gameCompatibilityInspect" type="button">Minglefield-Kompatibilität prüfen</button>
-<button id="gameIntegrationUpdateInspect" type="button">Integrationsupdates prüfen</button>
-<button id="gameIntegrationRegistryInspect" type="button">Integrationen anzeigen / aktualisieren</button>
 <button id="gameManifestPrepare" type="button">Minglefield-Konfiguration einrichten</button>
 <button id="gameGitInit" type="button">Git initialisieren</button>
 <button id="gameProjectPrepare" type="button">Fehlende Arbeitsverzeichnisse anlegen</button></div>
@@ -1540,13 +1542,15 @@ document.getElementById("gameIntegrationRegistryInspect").onclick=async()=>{
   };
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(summary,null,2);
 };
+document.getElementById("platformUpdateIndicator").onclick=()=>document.getElementById("platformUpdateDialog").showModal();
+document.getElementById("gameUpdateIndicator").onclick=()=>document.getElementById("gameUpdateDialog").showModal();
 document.getElementById("gameIntegrationUpdateInspect").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
   const query="?host_id="+encodeURIComponent(gameHostSelect.value)+
     "&project_id="+encodeURIComponent(project.project_id);
   const response=await request("/api/game/integration/releases"+query);
-  document.getElementById("gameProjectStatus").textContent=JSON.stringify(
+  document.getElementById("gameUpdateStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
 document.getElementById("gameCompatibilityInspect").onclick=async()=>{

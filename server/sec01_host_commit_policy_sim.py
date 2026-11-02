@@ -512,19 +512,33 @@ class HostCommitPolicy:
         unified=root/"minglefield.lock"
         lock_report={"state":"missing"}
         installed=None
-        if root.is_symlink() or directory.is_symlink() or lock.is_symlink():
+        if root.is_symlink() or directory.is_symlink() or lock.is_symlink() or unified.is_symlink():
             lock_report={"state":"unsafe_symlink"}
-        elif lock.exists():
+        elif lock.exists() and unified.exists():
+            lock_report={"state":"conflicting_lock_sources"}
+        elif unified.exists() and not unified.is_file():
+            lock_report={"state":"not_file"}
+        elif lock.exists() or unified.exists():
+            if unified.exists():
+                lock=unified
             if not lock.is_file():
                 lock_report={"state":"not_file"}
             else:
                 try:
                     import json
-                    data=validate_integration_lock(json.loads(lock.read_text(encoding="utf-8")),
-                                                   project_id=project_id)
+                    raw=json.loads(lock.read_text(encoding="utf-8"))
+                    if lock==unified:
+                        from game_package_lock import validate_package_lock
+                        data=validate_package_lock(raw,project_id=project_id)
+                        entries=[{"integration_id":e["package_id"],"installed_version":e["version"],
+                                  "publisher":e["publisher"],"release_source":e["release_source"]}
+                                 for e in data["packages"] if e["kind"]=="game_integration"]
+                    else:
+                        data=validate_integration_lock(raw,project_id=project_id)
+                        entries=data["integrations"]
                     installed=[]
                     trusted={e["integration_id"]:e for e in catalog["integrations"]}
-                    for entry in data["integrations"]:
+                    for entry in entries:
                         match=trusted.get(entry["integration_id"])
                         if catalog["state"]!="available":
                             source_state="registry_unavailable"
@@ -538,14 +552,14 @@ class HostCommitPolicy:
                         installed.append({
                             "integration_id":entry["integration_id"],
                             "declared_version":entry["installed_version"],
-                            "declared_verification_status":entry["verification_status"],
+                            "declared_verification_status":entry.get("verification_status","unknown"),
                             "trusted_verification_status":"unknown",
                             "source_state":source_state,
                             "release_source":entry["release_source"]})
-                    lock_report={"state":"valid_declarations","record_count":len(installed)}
+                    lock_report={"state":"valid_declarations","format":"unified" if lock==unified else "legacy_alpha","record_count":len(installed)}
                 except (OSError,UnicodeError,ValueError,TypeError,KeyError) as exc:
                     lock_report={"state":"invalid","reason":str(exc)[:200]}
-        if lock_report["state"]=="unsafe_symlink" or lock_report["state"]=="not_file" or lock_report["state"]=="invalid":
+        if lock_report["state"] in ("unsafe_symlink","not_file","invalid","conflicting_lock_sources"):
             state="manual_review_required"
         elif lock_report["state"]=="valid_declarations":
             state="declarations_unverified"

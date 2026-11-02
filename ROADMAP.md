@@ -47,6 +47,14 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [ ] Local Git project import/create, manifest and dependency validation, versioned asset output and reviewable changes.
 - [ ] First reproducible human + agent game-asset creation workflow; no remote hosting or autonomous external effects before independent security gates.
 
+## Near-term design — Game tab and managed local assets (approved direction; not shipped)
+- [x] Record requirements and staged implementation gates in [Game Workspace and Asset Lifecycle v0.1 draft](docs/GAME-WORKSPACE-AND-ASSET-LIFECYCLE-v0.1-DRAFT.md).
+- [ ] Game tab: create/import/select Git-backed games; edit per-project staging and output paths.
+- [ ] Persistent local asset staging via native file dialog; store asset IDs and job bindings without premature ComfyUI transfer.
+- [ ] Transfer staged inputs to ComfyUI **only when the job starts**, using generic file-input capabilities rather than node-specific UI functions.
+- [ ] Game build, test, launch and logs; browser preview when supported, otherwise controlled local application launch.
+- [ ] Re-run full conformance suite and first-workflow regression tests before expanding execution behavior.
+
 ## Stage 2 — First independent game integration (planned)
 - [ ] Validate MAP through a reproducible playable example.
 - [ ] Accept implementations from independent human or AI contributors and mixed teams.

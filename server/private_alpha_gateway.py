@@ -1433,12 +1433,33 @@ document.getElementById("gameGitSave").onclick=async()=>{
   document.getElementById("gameGitStatus").textContent=JSON.stringify(
     {status:response.status,...response.data},null,2);
 };
+let gameUpdateRequestId=0;
+async function refreshSelectedGameUpdateSignal(){
+  const indicator=document.getElementById("gameUpdateIndicator");
+  const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  const host=gameHostSelect.value;
+  const requestId=++gameUpdateRequestId;
+  indicator.dataset.signal="unknown";
+  indicator.title="Game-Update: Status unbekannt oder nicht verifiziert";
+  if(!project||!host)return;
+  const query="?host_id="+encodeURIComponent(host)+"&project_id="+encodeURIComponent(project.project_id);
+  try{
+    const response=await request("/api/game/integrations"+query);
+    if(requestId!==gameUpdateRequestId)return;
+    const state=response.data?.installation_state;
+    if(response.status===200&&state==="manual_review_required"){
+      indicator.dataset.signal="yellow";
+      indicator.title="Game-Integration: Manuelle Prüfung erforderlich";
+    }
+  }catch(error){if(requestId===gameUpdateRequestId)indicator.title="Game-Update: Prüfung nicht möglich";}
+}
 let gameProjects=[];
 async function refreshGameProjectList(){
   const host=gameHostSelect.value;
   const select=document.getElementById("gameProjectSelect");
   const previous=select.value;
   select.replaceChildren();gameProjects=[];
+  refreshSelectedGameUpdateSignal();
   if(!host){
     document.getElementById("gameProjectStatus").textContent="Kein eigener Host verfügbar.";
     return;
@@ -1458,6 +1479,7 @@ async function refreshGameProjectList(){
 }
 function showSelectedGameProject(){
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
+  refreshSelectedGameUpdateSignal();
   if(!project)return;
   for(const [id,value] of [["gameProjectId",project.project_id],["gameProjectName",project.name],
       ["gameRepositoryRoot",project.repository_root],["gameStagingRoot",project.staging_root],

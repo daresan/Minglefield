@@ -9,7 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 from game_integration_install_cleanup_windows import (inspect_windows_directory_handle,
                                                       inspect_windows_staging_binding,
-                                                      inspect_windows_staged_file)
+                                                      inspect_windows_staged_file,
+                                                      inspect_windows_staging_snapshot)
 
 
 class WindowsCleanupHandleTests(unittest.TestCase):
@@ -141,6 +142,51 @@ class WindowsCleanupHandleTests(unittest.TestCase):
             result = inspect_windows_staged_file(tmp)
             self.assertEqual(result["state"], "blocked")
             self.assertFalse(result["deletion_performed"])
+
+    def test_snapshot_never_authorizes_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "staging"
+            operation = root / "op1"
+            operation.mkdir(parents=True)
+            (operation / "blob-000000").write_bytes(b"keep")
+            (operation / "manifest.json").write_text("{}")
+            result = inspect_windows_staging_snapshot(
+                root, "op1", ["blob-000000", "manifest.json"])
+            self.assertFalse(result["cleanup_allowed"])
+            self.assertFalse(result["deletion_performed"])
+            self.assertEqual((operation / "blob-000000").read_bytes(), b"keep")
+            if os.name == "nt":
+                self.assertEqual(result["state"], "candidate_snapshot")
+            else:
+                self.assertEqual(result["reason"], "windows_only")
+
+    @unittest.skipUnless(os.name == "nt", "Windows native handle test")
+    def test_snapshot_rejects_unexpected_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "staging"
+            operation = root / "op1"
+            operation.mkdir(parents=True)
+            (operation / "manifest.json").write_text("{}")
+            (operation / "unexpected").write_bytes(b"foreign")
+            result = inspect_windows_staging_snapshot(
+                root, "op1", ["manifest.json"])
+            self.assertEqual(result["reason"], "operation_contents_changed")
+            self.assertEqual((operation / "unexpected").read_bytes(), b"foreign")
+
+    @unittest.skipUnless(os.name == "nt", "Windows native handle test")
+    def test_snapshot_rejects_hardlinked_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "staging"
+            operation = root / "op1"
+            operation.mkdir(parents=True)
+            file = operation / "blob-000000"
+            file.write_bytes(b"keep")
+            outside = Path(tmp) / "outside"
+            os.link(file, outside)
+            result = inspect_windows_staging_snapshot(
+                root, "op1", ["blob-000000"])
+            self.assertEqual(result["reason"], "unsafe_staging_hardlink")
+            self.assertEqual(outside.read_bytes(), b"keep")
 
     @unittest.skipUnless(os.name == "nt", "Windows native handle test")
     def test_file_is_not_directory(self):

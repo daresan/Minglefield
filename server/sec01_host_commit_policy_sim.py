@@ -752,16 +752,29 @@ class HostCommitPolicy:
                 return None
             row=db.execute("SELECT settings FROM sec01_host_settings WHERE host_id=?",
                            (host_id,)).fetchone()
-            return json.loads(row[0]) if row else {"staging_root":"","output_root":""}
+            settings = json.loads(row[0]) if row else {}
+            return {"staging_root": settings.get("staging_root", ""),
+                    "output_root": settings.get("output_root", ""),
+                    "trusted_integration_sources": settings.get("trusted_integration_sources", [])}
 
     def save_host_settings(self, host_id, owner_id, settings):
         from pathlib import Path
-        if type(settings) is not dict or set(settings)!={"staging_root","output_root"}:
+        if type(settings) is not dict or not {"staging_root","output_root"} <= set(settings) or (
+                set(settings) - {"staging_root","output_root","trusted_integration_sources"}):
             return HostDecision("denied","invalid_settings")
-        for value in settings.values():
+        for value in (settings["staging_root"],settings["output_root"]):
             if type(value) is not str or (value and
                     (not Path(value).is_absolute() or len(value)>1024)):
                 return HostDecision("denied","invalid_host_path")
+        sources = settings.get("trusted_integration_sources", [])
+        import re
+        if (type(sources) is not list or len(sources)>32 or
+                any(type(source) is not str or not re.fullmatch(
+                    r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",source) or
+                    ".." in source or len(source)>160 for source in sources) or
+                len(set(sources))!=len(sources)):
+            return HostDecision("denied","invalid_integration_sources")
+        settings = {**settings, "trusted_integration_sources": sources}
         with self.authority.store._tx() as db:
             if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
                               (host_id,owner_id)).fetchone():

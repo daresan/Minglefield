@@ -1,5 +1,7 @@
 import sys
 import json
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import unittest
 from pathlib import Path
@@ -150,6 +152,34 @@ class GameInstallJournalTests(unittest.TestCase):
             *args, "rollback_required", "committed",
             executor_authorized=True, plan_verified=True)["reason"],
             "invalid_journal_transition")
+
+    def test_parallel_preparations_across_independent_sqlite_connections(self):
+        def prepare(i):
+            store = AlphaAuthStore(self.root / "db.sqlite3")
+            policy = HostCommitPolicy(IntegratedAlphaAdmission(store))
+            return policy.prepare_game_install_journal(
+                "host.one", "user.owner", "game.one", f"op.parallel.{i}",
+                f"{i + 1:064x}")
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(prepare, range(6)))
+        self.assertEqual(sum(r["state"] == "prepared" for r in results), 1)
+        self.assertEqual(sum(r.get("reason") == "project_install_operation_pending"
+                             for r in results), 5)
+        self.assertEqual(len(self.policy.game_install_journal_status(
+            "host.one", "user.owner", "game.one")), 1)
+
+    def test_unique_active_project_index_blocks_out_of_band_insertion(self):
+        args = ("host.one", "user.owner", "game.one", "op.index", "a" * 64)
+        self.policy.prepare_game_install_journal(*args)
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.store._tx() as db:
+                db.execute("""INSERT INTO sec01_game_install_journal
+                    (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+                    VALUES(?,?,?,?,?,?)""",
+                    ("op.duplicate", "host.one", "user.owner", "game.one",
+                     "prepared", "b" * 64))
+        self.assertEqual(len(self.policy.game_install_journal_status(
+            *args[:3])), 1)
 
     def test_preparation_is_persistent_and_idempotent(self):
         args = ("host.one", "user.owner", "game.one", "op.one", "a" * 64)

@@ -20,7 +20,8 @@ pub fn user_paths(
     let home = home.trim_end_matches(['/', '\\']);
     match platform {
         "win32" => {
-            let local = local_app_data.filter(|value| !value.is_empty())
+            let local = local_app_data
+                .filter(|value| !value.is_empty())
                 .ok_or("LOCALAPPDATA must be an absolute directory on Windows")?;
             // Windows absolute paths require a drive prefix or UNC share.
             let bytes = local.as_bytes();

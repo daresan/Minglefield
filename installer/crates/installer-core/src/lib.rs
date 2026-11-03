@@ -78,8 +78,8 @@ pub fn default_user_paths() -> Result<UserPaths, &'static str> {
     } else {
         return Err("unsupported operating system");
     };
-    let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .unwrap_or_default();
+    let home =
+        std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap_or_default();
     let local = std::env::var("LOCALAPPDATA").ok();
     let xdg = std::env::var("XDG_DATA_HOME").ok();
     user_paths(platform, local.as_deref(), &home, xdg.as_deref())
@@ -164,15 +164,27 @@ mod tests {
 
     #[test]
     fn platform_paths_match_python_reference_contract() {
-        let win = user_paths("win32", Some("C:\\Users\\Shadow\\AppData\\Local"), "C:\\Users\\Other", None).unwrap();
-        assert_eq!(win.install, "C:\\Users\\Shadow\\AppData\\Local\\Programs\\Minglefield");
+        let win = user_paths(
+            "win32",
+            Some("C:\\Users\\Shadow\\AppData\\Local"),
+            "C:\\Users\\Other",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            win.install,
+            "C:\\Users\\Shadow\\AppData\\Local\\Programs\\Minglefield"
+        );
         assert_eq!(win.data, "C:\\Users\\Shadow\\AppData\\Local\\Minglefield");
         assert!(user_paths("win32", None, "C:\\Users\\Shadow", None).is_err());
         assert!(user_paths("win32", Some("relative"), "C:\\Users\\Shadow", None).is_err());
 
         let mac = user_paths("darwin", None, "/Users/test", None).unwrap();
         assert_eq!(mac.install, "/Users/test/Applications/Minglefield.app");
-        assert_eq!(mac.data, "/Users/test/Library/Application Support/Minglefield");
+        assert_eq!(
+            mac.data,
+            "/Users/test/Library/Application Support/Minglefield"
+        );
 
         let linux = user_paths("linux", None, "/home/test", Some("/var/tmp/xdg")).unwrap();
         assert_eq!(linux.install, "/home/test/.local/opt/minglefield");

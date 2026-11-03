@@ -4,6 +4,21 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 > **Platform UI and federation:** See [Minglefield Platform Vision](docs/MINGLEFIELD-PLATFORM-VISION.md) for the proposed Hub, agent/character management, game library/editor, public stores, job offers, community nodes and rewards research. This is a contributor-facing roadmap, not a deployed product or committed implementation stack.
 
+## Active next phase — Minglefield Platform Installer & First-Run Onboarding (priority override)
+
+**Approved 2026-11-03:** This is the **next binding development phase**. All unfinished feature plans below are **deferred in execution order**, not cancelled; blocking security fixes and required prerequisites remain permitted. This priority supersedes earlier roadmap ordering, including the prior P1.4f/P1.4g/P1.5 sequencing. Do not mistake third-party game/integration installation for the Minglefield platform installer.
+
+**Requirements and implementation gates:** [Platform Installer & First-Run Onboarding phase](docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md).
+
+- [ ] Complete branch-aware repository inventory of dependencies, packaging, gateway startup, Host claim/auth/persistence and platform-update surfaces.
+- [ ] Select a cross-platform graphical installer architecture for Windows, Linux and macOS that launches without preinstalled Python or Conda.
+- [ ] Deliver standard and advanced setup flows: install location, verified Python acquisition/reuse, optional Conda and ComfyUI detection/manual selection/consented installation.
+- [ ] Automatically provision **this computer** as the authenticated local Host on first install, without manual claim-token entry; retain the secure manual claim flow for remote Hosts.
+- [ ] Reuse existing Hosts settings and persistence for all installer-configured Host controls; no parallel settings database.
+- [ ] Implement safe launch, update, repair, recovery and data-preserving migration; validate on all supported platforms and measure the 80% unaided-onboarding goal.
+
+**Completion gate:** runnable, independently tested installers on all three platforms, secure local Host onboarding, optional component workflows, recovery, and documented usability evidence. No implementation or acceptance is implied by this roadmap entry.
+
 ## Stage 0 — Public foundation (in progress)
 - [x] Establish the public repository.
 - [x] Publish the initial project vision, roadmap and contribution guidelines.
@@ -149,7 +164,7 @@ Agreed design:
 - [ ] P1.4f.3: Preview release notes, changed files, compatibility requirements and migration steps before modifying a game repository.
 - [x] P1.4f.4 **Alpha foundation only**: validated game-integration manifests, isolated staging, journal-bound authorization, read-only recovery and experimental internal cleanup with synthetic acceptance tests. **No production game installation or updater is enabled.** See [alpha scope and deferred work](docs/GAME-INSTALLATION-ALPHA-BOUNDARY.md).
 - [ ] Future game integration (deferred until a real game/partner): explicitly approved installation, conflict detection, rollback/recovery, audit trail, and preservation of independent game Git remotes, branches and history.
-- [ ] Separate priority: **Minglefield platform installer/updater** (Minglefield itself, Python dependencies, migrations and configured host services); not covered by game-integration P1.4f.4.
+- [ ] **Superseded in priority by the active Platform Installer & First-Run Onboarding phase above:** Minglefield platform installer/updater is distinct from game-integration P1.4f.4.
 - [ ] For offline or inaccessible release sources, distinguish `unknown` from `up_to_date`. A missing or invalid release is not proof that no update exists.
 
 ## Post-P1.5 — Development continuity and chat handover (deferred)

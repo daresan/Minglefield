@@ -110,6 +110,10 @@ class GameInstallJournalTests(unittest.TestCase):
         settings = self.policy.host_settings("host.one", "user.owner")
         self.assertEqual(settings["job_attachments_root"], legacy_root)
         self.assertNotIn("staging_root", settings)
+        with self.store._tx() as db:
+            persisted = json.loads(db.execute("SELECT settings FROM sec01_host_settings WHERE host_id=?", ("host.one",)).fetchone()[0])
+        self.assertEqual(persisted["job_attachments_root"], legacy_root)
+        self.assertNotIn("staging_root", persisted)
         self.assertFalse(Path(legacy_root).exists())
 
     def test_game_project_reports_job_attachments_alias_without_moving_files(self):

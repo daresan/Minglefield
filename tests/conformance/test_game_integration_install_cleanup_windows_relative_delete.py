@@ -184,6 +184,42 @@ class WindowsRelativeDeleteTests(unittest.TestCase):
             self.assertFalse(result["cleanup_allowed"])
 
     @unittest.skipUnless(os.name == "nt", "Windows-only")
+    def test_deterministic_parent_swap_at_disposition_boundary(self):
+        """Attempt the swap exactly after the child handle and identity checks."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            operation = root / "operation"
+            operation.mkdir()
+            blob = operation / "blob"
+            blob.write_bytes(b"original")
+            expected = self.identities(operation, blob)
+            foreign = root / "foreign"
+            foreign.mkdir()
+            sentinel = foreign / "blob"
+            sentinel.write_bytes(b"foreign-sentinel")
+            displaced = root / "displaced"
+            attempts = []
+
+            def inject():
+                try:
+                    operation.rename(displaced)
+                except OSError:
+                    attempts.append("rename_denied")
+                    return
+                attempts.append("rename_succeeded")
+                try:
+                    foreign.rename(operation)
+                except OSError:
+                    attempts.append("foreign_swap_denied")
+
+            result = delete_relative_test_file(
+                operation, "blob", _test_before_disposition=inject, **expected)
+            self.assertTrue(attempts, "injection point was not reached")
+            self.assertEqual(sentinel.read_bytes(), b"foreign-sentinel", result)
+            self.assertFalse(result["cleanup_allowed"])
+            self.assertIn(result["state"], ("removed", "blocked"), result)
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_missing_identity_and_traversal_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "blob"

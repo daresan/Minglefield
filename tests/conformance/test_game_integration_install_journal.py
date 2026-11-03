@@ -1,4 +1,5 @@
 import sys
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -80,7 +81,7 @@ class GameInstallJournalTests(unittest.TestCase):
         self.assertEqual(self.policy.game_install_journal_status(*args[:3])[0]["state"],
                          "prepared")
 
-    def test_host_settings_accept_job_attachments_alias_without_losing_legacy(self):
+    def test_host_settings_persist_canonical_key_and_reject_conflicts(self):
         root = str(self.root / "jobattachments")
         result = self.policy.save_host_settings(
             "host.one", "user.owner",
@@ -88,13 +89,28 @@ class GameInstallJournalTests(unittest.TestCase):
         self.assertEqual(result.state, "saved")
         settings = self.policy.host_settings("host.one", "user.owner")
         self.assertEqual(settings["job_attachments_root"], root)
-        self.assertEqual(settings["staging_root"], root)
+        self.assertNotIn("staging_root", settings)
+        with self.store._tx() as db:
+            saved = json.loads(db.execute("SELECT settings FROM sec01_host_settings WHERE host_id=?", ("host.one",)).fetchone()[0])
+        self.assertEqual(saved["job_attachments_root"], root)
+        self.assertNotIn("staging_root", saved)
         self.assertEqual(self.policy.save_host_settings(
             "host.one", "user.owner",
             {"staging_root": root, "job_attachments_root": str(self.root / "other"),
              "output_root": ""}).state, "denied")
         self.assertEqual(self.policy.host_settings(
             "host.one", "user.owner")["job_attachments_root"], root)
+
+    def test_legacy_host_settings_remain_readable_without_filesystem_changes(self):
+        legacy_root = str(self.root / "old-attachments")
+        with self.store._tx() as db:
+            db.execute("INSERT INTO sec01_host_settings(host_id,settings) VALUES(?,?)",
+                       ("host.one", json.dumps({"staging_root": legacy_root,
+                                                "output_root": ""})))
+        settings = self.policy.host_settings("host.one", "user.owner")
+        self.assertEqual(settings["job_attachments_root"], legacy_root)
+        self.assertNotIn("staging_root", settings)
+        self.assertFalse(Path(legacy_root).exists())
 
     def test_game_project_reports_job_attachments_alias_without_moving_files(self):
         projects = self.policy.list_game_projects("host.one", "user.owner")

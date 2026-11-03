@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from server.game_asset_staging import ProjectAssetStaging, StagingError
+from server.game_job_attachments import ProjectJobAttachments, JobAttachmentsError
 from server.staged_comfy_assets import staged_record, upload_staged_asset
 
 
@@ -13,24 +13,24 @@ class StagedComfyAssetsTests(unittest.TestCase):
     def test_resolves_only_verified_host_asset(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
-            a=ProjectAssetStaging("host.alpha",root/"a")
+            a=ProjectJobAttachments("host.alpha",root/"a")
             record=a.stage("model.glb",io.BytesIO(b"glb data"),8)
             token="minglefield-asset:"+record["asset_id"]
             path,loaded=staged_record("host.alpha",root/"a",token)
             self.assertEqual(path.read_bytes(),b"glb data")
             self.assertEqual(loaded["sha256"],record["sha256"])
-            with self.assertRaises(StagingError):
+            with self.assertRaises(JobAttachmentsError):
                 staged_record("host.beta",root/"a",token)
-            with self.assertRaises(StagingError):
+            with self.assertRaises(JobAttachmentsError):
                 staged_record("host.alpha",root/"a","minglefield-asset:../../etc")
             path.write_bytes(b"tampered")
-            with self.assertRaises(StagingError):
+            with self.assertRaises(JobAttachmentsError):
                 staged_record("host.alpha",root/"a",token)
 
     def test_upload_is_explicit(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
-            record=ProjectAssetStaging("host.alpha",root).stage("model.glb",io.BytesIO(b"glb"),3)
+            record=ProjectJobAttachments("host.alpha",root).stage("model.glb",io.BytesIO(b"glb"),3)
             with patch("server.staged_comfy_assets.http.client.HTTPConnection") as conn:
                 response=conn.return_value.getresponse.return_value
                 response.status=200

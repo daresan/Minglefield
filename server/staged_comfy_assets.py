@@ -6,9 +6,9 @@ import secrets
 from pathlib import Path
 from urllib.parse import urlsplit
 try:
-    from .game_asset_staging import ProjectAssetStaging, StagingError
+    from .game_job_attachments import ProjectJobAttachments, JobAttachmentsError
 except ImportError:  # Direct gateway execution: python server/private_alpha_gateway.py
-    from game_asset_staging import ProjectAssetStaging, StagingError
+    from game_job_attachments import ProjectJobAttachments, JobAttachmentsError
 
 ASSET_PREFIX = "minglefield-asset:"
 ASSET_ID = re.compile(r"^[0-9a-f]{32}$")
@@ -16,11 +16,11 @@ ASSET_ID = re.compile(r"^[0-9a-f]{32}$")
 
 def staged_record(host_id, root, token):
     if not isinstance(token, str) or not token.startswith(ASSET_PREFIX):
-        raise StagingError("invalid_asset_reference")
+        raise JobAttachmentsError("invalid_asset_reference")
     asset_id = token[len(ASSET_PREFIX):]
     if not ASSET_ID.fullmatch(asset_id):
-        raise StagingError("invalid_asset_reference")
-    staging = ProjectAssetStaging(host_id, root)
+        raise JobAttachmentsError("invalid_asset_reference")
+    staging = ProjectJobAttachments(host_id, root)
     record = staging.verify(asset_id)
     return staging.assets / asset_id, record
 

@@ -49,6 +49,53 @@ class InstallJournalTransitionTests(unittest.TestCase):
                     plan_verified=True)["state"], "blocked")
 
 
+class InstallJournalMigrationTests(unittest.TestCase):
+    def test_existing_rows_preserved_by_index_migration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AlphaAuthStore(Path(tmp) / "db.sqlite3")
+            with store._tx() as db:
+                db.execute("""CREATE TABLE sec01_game_install_journal(
+                    operation_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                    owner_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                    state TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+                db.execute("""INSERT INTO sec01_game_install_journal
+                    (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+                    VALUES(?,?,?,?,?,?)""",
+                    ("legacy.one", "host.one", "user.owner", "game.one",
+                     "applying", "a" * 64))
+            HostCommitPolicy(IntegratedAlphaAdmission(store))
+            HostCommitPolicy(IntegratedAlphaAdmission(store))
+            with store._tx() as db:
+                row = db.execute("""SELECT operation_id,state,plan_sha256
+                    FROM sec01_game_install_journal""").fetchone()
+            self.assertEqual(row, ("legacy.one", "applying", "a" * 64))
+
+    def test_duplicate_active_legacy_rows_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AlphaAuthStore(Path(tmp) / "db.sqlite3")
+            with store._tx() as db:
+                db.execute("""CREATE TABLE sec01_game_install_journal(
+                    operation_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                    owner_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                    state TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+                for i in range(2):
+                    db.execute("""INSERT INTO sec01_game_install_journal
+                        (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+                        VALUES(?,?,?,?,?,?)""",
+                        (f"legacy.{i}", "host.one", "user.owner",
+                         "game.one", "prepared", f"{i+1:064x}"))
+            with self.assertRaises(sqlite3.IntegrityError):
+                HostCommitPolicy(IntegratedAlphaAdmission(store))
+            with store._tx() as db:
+                count = db.execute("""SELECT count(*) FROM sec01_game_install_journal
+                    WHERE project_id='game.one'""").fetchone()[0]
+            self.assertEqual(count, 2)
+
+
 class GameInstallJournalTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()

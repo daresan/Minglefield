@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod integrity;
+pub mod manifest;
 
 use std::path::{Component, Path};
 

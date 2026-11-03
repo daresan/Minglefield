@@ -56,6 +56,18 @@ class InstallationPathTests(unittest.TestCase):
                          "symlink_in_destination")
         self.assertFalse((outside / "evil.txt").exists())
 
+    def test_portable_path_policy_rejects_windows_aliases_on_all_hosts(self):
+        # Portable archives must not install differently on Windows and POSIX.
+        for name in ("folder/NUL.txt", "folder/com1.log", "folder/trailing ",
+                     "folder/other:stream"):
+            with self.subTest(name=name):
+                self.assertEqual(self.inspect([name])["reason"],
+                                 "invalid_destination_path")
+
+    def test_case_distinct_names_are_portably_colliding(self):
+        self.assertEqual(self.inspect(["Textures/Stone.png", "textures/stone.PNG"])[
+            "reason"], "duplicate_destination_path")
+
     def test_missing_or_unsafe_repository_is_denied(self):
         self.assertEqual(inspect_installation_paths(self.root / "missing", ["x"])["reason"],
                          "unsafe_repository_root")

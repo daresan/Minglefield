@@ -112,19 +112,32 @@ class JournalBoundCleanupTests(unittest.TestCase):
         self.policy.cancel_prepared_game_install(*self.args, self.digest)
         from game_integration_install_cleanup_windows import (
             inspect_windows_directory_handle)
+        from game_integration_install_cleanup_windows import (
+            inspect_windows_staging_snapshot)
         calls = [0]
+        snapshot_complete = [False]
+
+        def snapshot_then_enable(*args, **kwargs):
+            result = inspect_windows_staging_snapshot(*args, **kwargs)
+            snapshot_complete[0] = result["state"] == "candidate_snapshot"
+            return result
+
         def altered(path):
             result = inspect_windows_directory_handle(path)
-            if result["state"] == "inspected":
+            if snapshot_complete[0] and result["state"] == "inspected":
                 calls[0] += 1
                 if calls[0] >= 2:
                     return dict(result, file_index=result["file_index"] ^ 1)
             return result
+
         with mock.patch(
+            "game_integration_install_cleanup_windows.inspect_windows_staging_snapshot",
+            side_effect=snapshot_then_enable), mock.patch(
             "game_integration_install_cleanup_windows.inspect_windows_directory_handle",
             side_effect=altered):
             result = self.policy.inspect_game_install_cleanup_windows_relative(
                 *self.args, self.entries, self.staging)
+        self.assertGreaterEqual(calls[0], 2)
         self.assertEqual(result["reason"],
                          "windows_relative_parent_identity_changed", result)
         self.assertFalse(result["deletion_performed"])

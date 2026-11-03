@@ -629,6 +629,8 @@ class HostCommitPolicy:
         if settings is None:
             return None
         approved=set(settings["trusted_integration_sources"])
+        from game_integration_local_trust import local_discovery_catalog
+        local_catalog, entries=local_discovery_catalog(report["registry"],entries,approved)
         updates=[]
         for entry in entries:
             source=entry.get("release_source")
@@ -644,11 +646,11 @@ class HostCommitPolicy:
                         "byte_loader":load_pinned_assessment_bytes}
                 if fetcher is not None:
                     kwargs["fetcher"]=fetcher
-                outcome=discover_with_operator_approvals(entry,report["registry"],**kwargs)
+                outcome=discover_with_operator_approvals(entry,local_catalog,**kwargs)
             elif fetcher is None:
-                outcome=discover_integration_update(entry,report["registry"])
+                outcome=discover_integration_update(entry,local_catalog)
             else:
-                outcome=discover_integration_update(entry,report["registry"],fetcher=fetcher)
+                outcome=discover_integration_update(entry,local_catalog,fetcher=fetcher)
             updates.append({"integration_id":entry["integration_id"],**outcome})
         return {"project_id":project_id,"installation_state":report["installation_state"],
                 "updates":updates,"state":"read_only",

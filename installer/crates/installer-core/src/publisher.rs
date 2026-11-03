@@ -26,13 +26,9 @@ pub struct PublisherPolicy;
 
 impl PublisherPolicy {
     /// Intentionally fails closed until repository release provenance exists.
-    pub fn verify_release(
-        &self,
-        manifest_text: &str,
-        artifact: &[u8],
-    ) -> Result<(), TrustError> {
-        let manifest = ArtifactManifest::parse(manifest_text)
-            .map_err(|_| TrustError::InvalidManifest)?;
+    pub fn verify_release(&self, manifest_text: &str, artifact: &[u8]) -> Result<(), TrustError> {
+        let manifest =
+            ArtifactManifest::parse(manifest_text).map_err(|_| TrustError::InvalidManifest)?;
         manifest
             .verify_bytes(artifact)
             .map_err(|_| TrustError::InvalidArtifact)?;

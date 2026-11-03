@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "No filesystem, shell or network plugins; commands are read-only.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

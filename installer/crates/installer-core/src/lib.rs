@@ -3,6 +3,25 @@
 
 use std::path::{Component, Path};
 
+/// Resolve the current user's default installation destination for both GUI and CLI.
+/// A missing home directory is an error, never a fallback to a relative path.
+pub fn default_destination() -> Result<String, &'static str> {
+    if cfg!(windows) {
+        std::env::var("LOCALAPPDATA")
+            .map(|v| format!("{v}\\\\Programs\\\\Minglefield"))
+            .map_err(|_| "LOCALAPPDATA is not set")
+    } else if cfg!(target_os = "macos") {
+        std::env::var("HOME")
+            .map(|v| format!("{v}/Applications/Minglefield"))
+            .map_err(|_| "HOME is not set")
+    } else {
+        std::env::var("HOME")
+            .map(|v| format!("{v}/.local/opt/Minglefield"))
+            .map_err(|_| "HOME is not set")
+    }
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Gui,

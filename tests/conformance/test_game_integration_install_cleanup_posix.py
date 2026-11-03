@@ -46,6 +46,31 @@ class PosixCleanupTests(unittest.TestCase):
         self.assertFalse((self.root / "op1").exists())
         self.assertTrue(self.repo.is_dir())
 
+    def test_shared_writable_root_is_rejected(self):
+        self.stage()
+        original = self.root.stat().st_mode & 0o777
+        try:
+            self.root.chmod(0o777)
+            result = self.cleanup()
+            self.assertEqual(result["reason"], "insecure_staging_root_permissions")
+            self.assertFalse(result["deletion_performed"])
+            self.assertTrue((self.root / "op1" / "manifest.json").exists())
+        finally:
+            self.root.chmod(original)
+
+    def test_shared_writable_operation_is_rejected(self):
+        self.stage()
+        operation = self.root / "op1"
+        original = operation.stat().st_mode & 0o777
+        try:
+            operation.chmod(0o777)
+            result = self.cleanup()
+            self.assertEqual(result["reason"], "insecure_operation_permissions")
+            self.assertFalse(result["deletion_performed"])
+            self.assertTrue((operation / "manifest.json").exists())
+        finally:
+            operation.chmod(original)
+
     def test_prepared_journal_does_not_delete(self):
         self.stage()
         result = self.cleanup(journal_state="prepared")

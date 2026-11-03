@@ -2395,16 +2395,26 @@ def handler_for(service, *, local_bootstrap_secret=None):
             if path=="/api/game/projects/update":
                 policy=getattr(service,"_host_policy",None)
                 fields={"host_id","project_id","settings_revision","name",
-                        "repository_root","staging_root","output_root"}
-                if (policy is None or type(body) is not dict or set(body)!=fields
+                        "repository_root","output_root"}
+                attachment_keys={"staging_root","job_attachments_root"}
+                if (policy is None or type(body) is not dict
+                        or not fields <= set(body)
+                        or not (set(body)-fields) <= attachment_keys
+                        or not (set(body)&attachment_keys)
                         or any(type(body[key]) is not str for key in fields-{"settings_revision"})
                         or type(body["settings_revision"]) is not int):
                     self.reply(400,{"error":"invalid_project_update"})
                     return
+                from game_job_attachments_settings import normalize_job_attachments
+                attachments=normalize_job_attachments({
+                    key:body[key] for key in attachment_keys if key in body})
+                if attachments["state"]!="normalized":
+                    self.reply(400,{"error":attachments["reason"]})
+                    return
                 decision=policy.update_game_project(
                     body["host_id"],principal.user_id,body["project_id"],
                     body["settings_revision"],body["name"],body["repository_root"],
-                    body["staging_root"],body["output_root"])
+                    attachments["settings"]["job_attachments_root"],body["output_root"])
                 status=200 if decision.state=="saved" else (
                     403 if decision.reason=="not_host_owner" else
                     409 if decision.reason in ("revision_conflict","project_not_found") else 400)
@@ -2412,15 +2422,25 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 return
             if path=="/api/game/projects":
                 policy=getattr(service,"_host_policy",None)
-                fields={"host_id","project_id","name","repository_root",
-                        "staging_root","output_root"}
-                if (policy is None or type(body) is not dict or set(body)!=fields
+                fields={"host_id","project_id","name","repository_root","output_root"}
+                attachment_keys={"staging_root","job_attachments_root"}
+                if (policy is None or type(body) is not dict
+                        or not fields <= set(body)
+                        or not (set(body)-fields) <= attachment_keys
+                        or not (set(body)&attachment_keys)
                         or any(type(body[key]) is not str for key in fields)):
                     self.reply(400,{"error":"invalid_project_request"})
                     return
+                from game_job_attachments_settings import normalize_job_attachments
+                attachments=normalize_job_attachments({
+                    key:body[key] for key in attachment_keys if key in body})
+                if attachments["state"]!="normalized":
+                    self.reply(400,{"error":attachments["reason"]})
+                    return
                 decision=policy.create_game_project(
                     body["host_id"],principal.user_id,body["project_id"],
-                    body["name"],body["repository_root"],body["staging_root"],
+                    body["name"],body["repository_root"],
+                    attachments["settings"]["job_attachments_root"],
                     body["output_root"])
                 status=201 if decision.state=="created" else (
                     403 if decision.reason=="not_host_owner" else

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Minglefield repository-managed pre-push hook.
+# Enable once per clone: git config --local core.hooksPath .githooks
+# This is a local fast check; the GitHub Actions matrix remains authoritative.
+set -eu
+repo=$(git rev-parse --show-toplevel) || exit 1
+cd "$repo"
+
+# Respect a shell-executable override; otherwise use the current Python.
+# On Git for Windows, a Windows-style MINGLEFIELD_PYTHON path may not be
+# executable by /bin/sh; fall back to python/py if so.
+if [ -n "${MINGLEFIELD_PYTHON:-}" ] && command -v "$MINGLEFIELD_PYTHON" >/dev/null 2>&1; then
+  python_cmd=$MINGLEFIELD_PYTHON
+elif command -v python >/dev/null 2>&1; then
+  python_cmd=python
+elif command -v python3 >/dev/null 2>&1; then
+  python_cmd=python3
+elif command -v py >/dev/null 2>&1; then
+  python_cmd=py
+else
+  echo "Minglefield pre-push ERROR: Python interpreter not found" >&2
+  exit 1
+fi
+
+echo "Minglefield pre-push: game installation security tests"
+"$python_cmd" -B -m unittest discover -s tests/conformance -p 'test_game_integration_install*.py'

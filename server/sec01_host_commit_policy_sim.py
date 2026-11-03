@@ -153,7 +153,10 @@ class HostCommitPolicy:
                 (host_id,owner_id)).fetchall()
             keys=("project_id","name","repository_root","staging_root",
                   "output_root","settings_revision")
-            return [dict(zip(keys,row)) for row in rows]
+            projects=[dict(zip(keys,row)) for row in rows]
+            for project in projects:
+                project["job_attachments_root"]=project["staging_root"]
+            return projects
 
     def create_game_project(self, host_id, owner_id, project_id, name,
                             repository_root, staging_root, output_root):
@@ -232,6 +235,7 @@ class HostCommitPolicy:
                     "missing" if not exists else "directory" if is_directory else "not_directory")}
             except OSError:
                 result[key]={"path":raw,"state":"unavailable"}
+        result["job_attachments_root"]=dict(result["staging_root"])
         return result
 
     @staticmethod

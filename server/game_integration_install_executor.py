@@ -2,18 +2,39 @@
 
 Writes only under a dedicated installation_staging_root. Does not modify game
 repositories, host job attachments, journal state, or existing operation dirs.
-Not an installation executor or authorization boundary.
+Not an installation executor or authorization boundary. Path identity checks\nreduce accidental replacement risks but cannot eliminate adversarial TOCTOU\nwithout platform-specific handle-relative operations and exclusive locking.
 """
 import hashlib
 import os
 import re
-import shutil
 from pathlib import Path
 
 from game_integration_install_paths import inspect_installation_paths
 from game_integration_install_staging import validate_staging_manifest
 
 _OPERATION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _has_symlink_component(path):
+    """Reject links in any existing ancestor, not only the final directory."""
+    current = Path(os.path.abspath(path))
+    while True:
+        if current.is_symlink():
+            return True
+        parent = current.parent
+        if parent == current:
+            return False
+        current = parent
+
+
+def _same_directory(path, identity):
+    """Detect directory replacement; not an atomic cross-platform lock."""
+    try:
+        stat = path.stat(follow_symlinks=False)
+        return (not path.is_symlink() and path.is_dir()
+                and (stat.st_dev, stat.st_ino) == identity)
+    except OSError:
+        return False
 
 
 def stage_installation_bytes(installation_staging_root, operation_id,
@@ -34,11 +55,11 @@ def stage_installation_bytes(installation_staging_root, operation_id,
     if not callable(byte_loader):
         return blocked("missing_staging_reader")
     root = Path(installation_staging_root)
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir() or _has_symlink_component(root):
         return blocked("unsafe_installation_staging_root")
     root = root.resolve(strict=True)
     repository = Path(repository_root)
-    if not repository.is_dir() or repository.is_symlink():
+    if not repository.is_dir() or _has_symlink_component(repository):
         return blocked("unsafe_repository_root")
     repository = repository.resolve(strict=True)
     if root == repository or root.is_relative_to(repository) or repository.is_relative_to(root):
@@ -57,6 +78,9 @@ def stage_installation_bytes(installation_staging_root, operation_id,
                 or hashlib.sha256(data).hexdigest() != item["sha256"]):
             return blocked("staged_bytes_mismatch")
         verified.append((item["path"], data))
+    root_identity = (root.stat().st_dev, root.stat().st_ino)
+    if not _same_directory(root, root_identity):
+        return blocked("staging_root_changed")
     operation = root / operation_id
     try:
         operation.mkdir(mode=0o700)
@@ -64,10 +88,17 @@ def stage_installation_bytes(installation_staging_root, operation_id,
         return blocked("operation_staging_already_exists")
     except OSError:
         return blocked("staging_directory_unavailable")
+    operation_identity = (operation.stat().st_dev, operation.stat().st_ino)
     try:
         for relative, data in verified:
+            if not _same_directory(root, root_identity) or not _same_directory(operation, operation_identity):
+                return blocked("staging_directory_changed")
             target = operation.joinpath(*relative.split("/"))
             target.parent.mkdir(parents=True, exist_ok=True)
+            if (_has_symlink_component(target.parent)
+                    or not _same_directory(root, root_identity)
+                    or not _same_directory(operation, operation_identity)):
+                return blocked("unsafe_staging_path")
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
             if hasattr(os, "O_NOFOLLOW"):
                 flags |= os.O_NOFOLLOW
@@ -81,6 +112,6 @@ def stage_installation_bytes(installation_staging_root, operation_id,
                 "files_staged": len(verified),
                 "installation_allowed": False}
     except OSError:
-        # Only remove the directory exclusively created by this call.
-        shutil.rmtree(operation)
+        # Preserve partial operation for explicit inspection. Never recursively
+        # delete a path that an attacker might have replaced during staging.
         return blocked("staging_write_failed")

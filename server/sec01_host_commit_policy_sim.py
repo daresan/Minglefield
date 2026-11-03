@@ -1069,6 +1069,74 @@ class HostCommitPolicy:
             installation_staging_root, operation_id,
             inspection["observed_files"])
 
+    def inspect_game_install_cleanup_windows_relative(self, host_id, owner_id,
+                                                      project_id, operation_id,
+                                                      entries,
+                                                      installation_staging_root):
+        """Journal-bound read-only relative-handle assessment, never delete.
+
+        The SQLite writer transaction serializes cooperating journal writers;
+        it does not exclude uncooperative filesystem writers. No caller-provided
+        boolean grants cleanup authority. Root must come from trusted config.
+        """
+        import os
+        from game_integration_install_cleanup import inspect_staging_cleanup
+        from game_integration_install_staging import validate_staging_manifest
+        from game_integration_install_cleanup_windows_relative import (
+            inspect_windows_relative_child)
+
+        def blocked(reason):
+            return {"state": "blocked", "reason": reason, "backend": "windows",
+                    "cleanup_allowed": False, "deletion_performed": False}
+        if os.name != "nt":
+            return blocked("windows_only")
+        plan = validate_staging_manifest(entries)
+        if plan["state"] != "valid":
+            return blocked(plan["reason"])
+        if not all(ident(value) for value in (
+                host_id, owner_id, project_id, operation_id)):
+            return blocked("invalid_install_operation")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                    WHERE host_id=? AND owner_id=?""",
+                    (host_id, owner_id)).fetchone() is None:
+                return blocked("not_host_owner")
+            if db.execute("""SELECT 1 FROM alpha_game_projects
+                    WHERE host_id=? AND owner_id=? AND project_id=?""",
+                    (host_id, owner_id, project_id)).fetchone() is None:
+                return blocked("project_not_found")
+            row = db.execute("""SELECT state,plan_sha256
+                    FROM sec01_game_install_journal
+                    WHERE operation_id=? AND host_id=? AND owner_id=?
+                    AND project_id=?""",
+                    (operation_id, host_id, owner_id, project_id)).fetchone()
+            if row is None:
+                return blocked("operation_not_found")
+            inspection = inspect_staging_cleanup(
+                installation_staging_root, operation_id, entries,
+                journal_operation_id=operation_id,
+                journal_plan_sha256=row[1], journal_state=row[0],
+                owner_authorized=True)
+            if inspection["state"] != "eligible_snapshot":
+                return blocked(inspection["reason"])
+            from game_integration_install_cleanup_windows import (
+                inspect_windows_staging_snapshot)
+            snapshot = inspect_windows_staging_snapshot(
+                installation_staging_root, operation_id,
+                inspection["observed_files"])
+            if snapshot["state"] != "candidate_snapshot":
+                return blocked(snapshot["reason"])
+            import os.path
+            operation_path = os.path.join(installation_staging_root, operation_id)
+            for filename in inspection["observed_files"]:
+                child = inspect_windows_relative_child(operation_path, filename)
+                if child["state"] != "inspected":
+                    return blocked(child["reason"])
+            return {"state": "relative_candidate_snapshot",
+                    "reason": "journal_and_relative_handles_inspected",
+                    "backend": "windows", "file_count": len(inspection["observed_files"]),
+                    "cleanup_allowed": False, "deletion_performed": False}
+
     def game_install_journal_status(self, host_id, owner_id, project_id):
         """Read-only owner-scoped operation history; no cross-host disclosure."""
         with self.authority.store._tx() as db:

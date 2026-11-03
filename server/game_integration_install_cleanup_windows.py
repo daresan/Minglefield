@@ -223,3 +223,53 @@ def inspect_windows_staged_file(path):
                 "cleanup_allowed": False, "deletion_performed": False}
     finally:
         close(handle)
+
+
+def inspect_windows_staging_snapshot(root, operation_id, expected_files):
+    """Read-only aggregate of directory and staged-file handle probes.
+
+    The operation contents must match the independently supplied filename
+    set. Results are snapshots only: no capability is issued and no deletion
+    is performed. The future writer must reopen handles and verify bindings.
+    """
+    def blocked(reason):
+        return {"state": "blocked", "reason": reason, "backend": "windows",
+                "cleanup_allowed": False, "deletion_performed": False}
+    if os.name != "nt":
+        return blocked("windows_only")
+    if (not isinstance(expected_files, (list, tuple, set))
+            or not expected_files
+            or any(not isinstance(name, str) or not name
+                   or name in (".", "..")
+                   or "/" in name or "\\" in name
+                   or name.endswith((".", " "))
+                   for name in expected_files)
+            or len(set(expected_files)) != len(expected_files)):
+        return blocked("invalid_expected_staging_files")
+    binding = inspect_windows_staging_binding(root, operation_id)
+    if binding["state"] != "inspected":
+        return blocked(binding["reason"])
+    operation = os.path.join(root, operation_id)
+    try:
+        observed = set(os.listdir(operation))
+    except OSError:
+        return blocked("windows_staging_listing_failed")
+    if observed != set(expected_files):
+        return blocked("operation_contents_changed")
+    for name in sorted(observed):
+        file_result = inspect_windows_staged_file(os.path.join(operation, name))
+        if file_result["state"] != "inspected":
+            return blocked(file_result["reason"])
+    # Detect obvious changes during inspection. This is not atomic.
+    try:
+        if set(os.listdir(operation)) != observed:
+            return blocked("operation_contents_changed")
+    except OSError:
+        return blocked("windows_staging_listing_failed")
+    again = inspect_windows_staging_binding(root, operation_id)
+    if again["state"] != "inspected":
+        return blocked(again["reason"])
+    return {"state": "candidate_snapshot",
+            "reason": "windows_staging_snapshot_inspected",
+            "backend": "windows", "cleanup_allowed": False,
+            "deletion_performed": False}

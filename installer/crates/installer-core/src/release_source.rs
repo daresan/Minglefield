@@ -97,7 +97,15 @@ mod tests {
         assert!(ReleaseSource::parse(&SOURCE.replace("version=1", "version=2")).is_err());
         assert!(ReleaseSource::parse(&format!("{SOURCE}commit=abc\n")).is_err());
         assert!(ReleaseSource::parse(&SOURCE.replace("12345", "0")).is_err());
-        assert!(ReleaseSource::parse(&SOURCE.replace("daresan/Minglefield", "../Minglefield")).is_err());
-        assert!(ReleaseSource::parse(&SOURCE.replace("0123456789abcdef0123456789abcdef01234567", "abc")).is_err());
+        assert!(
+            ReleaseSource::parse(&SOURCE.replace("daresan/Minglefield", "../Minglefield"))
+                .is_err()
+        );
+        assert!(
+            ReleaseSource::parse(
+                &SOURCE.replace("0123456789abcdef0123456789abcdef01234567", "abc")
+            )
+            .is_err()
+        );
     }
 }

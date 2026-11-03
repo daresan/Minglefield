@@ -893,7 +893,7 @@ class HostCommitPolicy:
                 set(canonical) - {"job_attachments_root","output_root",
                                   "trusted_integration_sources"}):
             return HostDecision("denied","invalid_settings")
-        # New writes use the canonical key; legacy rows remain readable.
+        # New API writes require the canonical key; legacy stored rows migrate on read.
         settings = canonical
         for value in (settings["job_attachments_root"],settings["output_root"]):
             if type(value) is not str or (value and

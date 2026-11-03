@@ -38,6 +38,29 @@ Status: source-backed architecture inventory; **not** a completed dependency aud
 | Update and recovery | Platform-update UI currently informational placeholder | Verified release source, transactional update, rollback and data retention |
 | CI | Python conformance workflow exists | Per-release installer builds and clean-machine launch tests on all three OSes |
 
+## Gate 1 dependency pass — confirmed source imports (partial, 2026-11-03)
+
+Branch-aware inspection of `server/private_alpha_gateway.py`, `private_alpha_auth.py`, `private_alpha_delete.py`, `sec01_integrated_alpha_admission.py`, `sec01_host_commit_policy_sim.py`, `host_runtime_config.py`, `comfy_workflow_inspection.py`, `game_job_attachments*.py`, `staged_comfy_assets.py`, `action_service.py`, `sqlite_policy_engine.py`, and relevant game integration modules shows extensive Python-standard-library usage. The inspected source also proves **non-stdlib imports in reachable feature modules**:
+
+| Distribution | Evidence in product code | Classification pending package boundary |
+| --- | --- | --- |
+| `jsonschema` | `server/game_integration_registry.py`, `server/game_integration_lock.py`, `server/game_package_lock.py` import `Draft202012Validator` | Required when integration registry / lockfile validation is included; do not silently treat as test-only |
+| `packaging` | `server/game_integration_updates.py` imports `packaging.version.Version` and `InvalidVersion` | Required when integration update discovery is included; distinct from Minglefield platform update |
+
+Current constraints in `requirements-ci.txt`: `jsonschema>=4.18,<5`, `packaging>=24,<27`. They are **not pinned runtime locks**. The local Python 3.10+ floor is documented for the reference gateway; CI runs Python 3.11. Resolve/test supported versions per OS rather than assuming these constraints alone establish cross-platform compatibility.
+
+Directory inspection: `sdk/` and `services/` currently contain README files only; `apps/` contains README only. No executable product client was found in those directories. This **does not** establish a complete distribution architecture.
+
+### Build-time dependency policy proposed for Gate 2 review
+
+1. Declare explicit product runtime requirements separately from conformance/development dependencies. Mark feature-dependent optional extras only when packaging and feature isolation truly permit it.
+2. Perform static import checks **and** isolated clean-environment startup / exercised-feature tests. Static imports alone miss dynamic imports and optional code paths.
+3. Resolve reproducible OS/Python-specific locks and verify artifact integrity/provenance for each release. Fail installer builds for unresolved or undeclared required imports.
+4. Avoid requiring Git, Conda or system Python on a clean end-user machine; do not modify preexisting user environments without consent.
+5. Maintain strict separation: game-integration install/update modules and their CI workflows do not implement Minglefield platform installation or updating.
+
+**Still unverified:** exhaustive import closure across every module, runtime-vs-optional feature reachability, complete transitive dependencies, OS packaging/signing, release executable metadata, macOS data location, and clean-machine tests. These are explicit open checks, not assumed successes.
+
 ## Next Gate 1 verification tasks
 
 1. Traverse nested `sdk/`, `services/`, `integrations/`, workflows and packaging metadata; enumerate actual Python runtime imports and optional import boundaries. Compare with declared requirements.

@@ -5,6 +5,7 @@ pub mod config;
 pub mod integrity;
 pub mod manifest;
 pub mod publisher;
+pub mod release_source;
 
 use std::path::{Component, Path};
 

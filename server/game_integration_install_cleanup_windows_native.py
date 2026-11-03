@@ -71,6 +71,10 @@ def delete_isolated_regular_file_by_handle(path, *, expected_volume_serial=None,
             return result("blocked", "not_regular_file")
         if info.links != 1:
             return result("blocked", "unsafe_staging_hardlink")
+        observed_index = (int(info.index_high) << 32) | int(info.index_low)
+        if (int(info.volume) != expected_volume_serial
+                or observed_index != expected_file_index):
+            return result("blocked", "native_file_identity_mismatch")
         disposition = Disposition(True)
         # FILE_INFO_BY_HANDLE_CLASS FileDispositionInfo = 4
         if not set_info(handle, 4, ctypes.byref(disposition),

@@ -80,3 +80,26 @@ def preview_with_operator_approvals(*, manifest_path, byte_loader,
         integration_id=integration_id, release_source=release_source,
         from_version=from_version, to_version=to_version,
         resolver=resolver)
+
+
+def discover_with_operator_approvals(entry, catalog, *, manifest_path,
+                                     byte_loader, fetcher=None,
+                                     compare_fetcher=None):
+    """Read fresh approvals per discovery call; never reuse prior authority.
+
+    Missing/invalid manifest leaves normal untrusted assessment previews.
+    Optional fetchers are intended for tests; production uses the defaults.
+    """
+    from game_integration_updates import discover_integration_update
+
+    try:
+        resolver = make_operator_assessment_resolver(
+            manifest_path, byte_loader=byte_loader)
+    except (ValueError, OSError, TypeError):
+        resolver = None
+    kwargs = {"assessment_resolver": resolver}
+    if fetcher is not None:
+        kwargs["fetcher"] = fetcher
+    if compare_fetcher is not None:
+        kwargs["compare_fetcher"] = compare_fetcher
+    return discover_integration_update(entry, catalog, **kwargs)

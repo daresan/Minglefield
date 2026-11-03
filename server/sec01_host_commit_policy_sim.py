@@ -965,6 +965,54 @@ class HostCommitPolicy:
                 journal_plan_sha256=row[1], journal_state=row[0],
                 owner_authorized=True)
 
+    def cleanup_game_install_staging_posix(self, host_id, owner_id, project_id,
+                                          operation_id, entries,
+                                          installation_staging_root):
+        """Internal journal-bound POSIX cleanup; never an HTTP capability.
+
+        Hold the SQLite writer transaction across authorization and deletion,
+        serializing cooperative journal writers. This does NOT exclude
+        uncooperative same-UID filesystem writers or make POSIX rmdir atomic
+        with identity comparison. The caller must provide an exclusively
+        controlled staging root from trusted host configuration.
+        """
+        from game_integration_install_cleanup_posix import (
+            cleanup_staged_operation_posix)
+        from game_integration_install_staging import validate_staging_manifest
+
+        def denied(reason):
+            return {"state": "blocked", "reason": reason,
+                    "deletion_performed": False, "installation_allowed": False}
+        plan = validate_staging_manifest(entries)
+        if plan["state"] != "valid":
+            return denied(plan["reason"])
+        if not all(ident(value) for value in (
+                host_id, owner_id, project_id, operation_id)):
+            return denied("invalid_install_operation")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                    WHERE host_id=? AND owner_id=?""",
+                    (host_id, owner_id)).fetchone() is None:
+                return denied("not_host_owner")
+            if db.execute("""SELECT 1 FROM alpha_game_projects
+                    WHERE host_id=? AND owner_id=? AND project_id=?""",
+                    (host_id, owner_id, project_id)).fetchone() is None:
+                return denied("project_not_found")
+            row = db.execute("""SELECT state,plan_sha256
+                    FROM sec01_game_install_journal
+                    WHERE operation_id=? AND host_id=? AND owner_id=?
+                    AND project_id=?""",
+                    (operation_id, host_id, owner_id, project_id)).fetchone()
+            if row is None:
+                return denied("operation_not_found")
+            # The journal values are read from persistent storage, never
+            # accepted from caller-supplied authorization booleans.
+            return cleanup_staged_operation_posix(
+                installation_staging_root, operation_id, entries,
+                journal_operation_id=operation_id,
+                journal_plan_sha256=row[1], journal_state=row[0],
+                owner_authorized=True)
+
     def inspect_game_install_cleanup_backend(self, host_id, owner_id, project_id,
                                              operation_id, entries,
                                              installation_staging_root):

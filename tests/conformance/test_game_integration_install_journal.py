@@ -111,6 +111,46 @@ class GameInstallJournalTests(unittest.TestCase):
         self.assertEqual(self.policy.game_install_journal_status(*args[:3])[0]["state"],
                          "prepared")
 
+    def test_restart_inspection_never_replays_interrupted_install(self):
+        args = ("host.one", "user.owner", "game.one", "op.crash", "a" * 64)
+        self.assertEqual(self.policy.prepare_game_install_journal(*args)["state"],
+                         "prepared")
+        self.assertEqual(self.policy.record_game_install_transition(
+            *args, "prepared", "applying", executor_authorized=True,
+            plan_verified=True)["state"], "applying")
+        # Reconstruct the policy using the same persisted database, as after restart.
+        restarted = HostCommitPolicy(IntegratedAlphaAdmission(self.store))
+        status = restarted.game_install_journal_status(*args[:3])
+        self.assertEqual(len(status), 1)
+        self.assertEqual(status[0]["state"], "applying")
+        self.assertEqual(status[0]["recovery"]["state"],
+                         "manual_recovery_required")
+        self.assertFalse(status[0]["recovery"]["auto_retry_allowed"])
+        self.assertEqual(restarted.prepare_game_install_journal(
+            *args[:3], "op.second", "b" * 64)["reason"],
+            "project_install_operation_pending")
+        self.assertEqual(restarted.cancel_prepared_game_install(*args)["reason"],
+                         "operation_not_cancellable")
+        self.assertEqual(restarted.game_install_journal_status(
+            *args[:3])[0]["state"], "applying")
+
+    def test_rollback_required_is_never_automatically_committed(self):
+        args = ("host.one", "user.owner", "game.one", "op.rollback", "a" * 64)
+        self.policy.prepare_game_install_journal(*args)
+        for before, after in (("prepared", "applying"),
+                              ("applying", "rollback_required")):
+            self.assertEqual(self.policy.record_game_install_transition(
+                *args, before, after, executor_authorized=True,
+                plan_verified=True)["state"], after)
+        restarted = HostCommitPolicy(IntegratedAlphaAdmission(self.store))
+        entry = restarted.game_install_journal_status(*args[:3])[0]
+        self.assertEqual(entry["recovery"]["state"], "manual_recovery_required")
+        self.assertFalse(entry["recovery"]["auto_retry_allowed"])
+        self.assertEqual(restarted.record_game_install_transition(
+            *args, "rollback_required", "committed",
+            executor_authorized=True, plan_verified=True)["reason"],
+            "invalid_journal_transition")
+
     def test_preparation_is_persistent_and_idempotent(self):
         args = ("host.one", "user.owner", "game.one", "op.one", "a" * 64)
         first = self.policy.prepare_game_install_journal(*args)

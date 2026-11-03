@@ -143,8 +143,8 @@ class GameProjectHttpTests(unittest.TestCase):
         update = dict(project, settings_revision=1, name="Attachments Updated")
         status, data = self.request("POST", endpoint + "/update", self.owner, update)
         self.assertEqual(status, 200, data)
-        conflicting = dict(update, settings_revision=2,
-                           job_attachments_root=str(self.root / "different"))
+        conflicting = dict(update, settings_revision=2)
+        conflicting["staging_root"] = str(self.root / "different")
         status, data = self.request("POST", endpoint + "/update",
                                     self.owner, conflicting)
         self.assertEqual(status, 400, data)

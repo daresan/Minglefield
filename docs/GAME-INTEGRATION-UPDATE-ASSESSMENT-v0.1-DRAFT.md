@@ -59,3 +59,27 @@ claim about every name GitHub itself might accept. The same rule applies to
 both assessment schemas. Schema acceptance is never proof of authorized source.
 
 This policy is scoped to assessment-document source identifiers; it does not rename or constrain Game project repositories. Centralization with the existing registry and lock source identifier validation should be a separate compatibility-reviewed change, not an implicit schema migration.
+
+## Read-only provenance preflight (incremental implementation)
+
+`server/game_integration_assessment_provenance.py` verifies the exact raw
+compatibility/migration document bytes against a supplied SHA-256 digest, then
+validates the schema and binds the declared integration, source and versions to
+the separately authorized context. This module performs no network access,
+installation, database writes or Git operations. A verified result never
+authorizes installation.
+
+**Trust boundary:** `independent_digest_authenticated=True` is a caller
+assertion, not cryptographic authentication. Only a server-controlled caller
+that has independently authenticated the digest and the owner-scoped release
+context may set it. Neither an HTTP request parameter nor a digest from the
+same GitHub release, a lockfile, the assessment document or release notes
+establishes independent authority. Until such a trusted caller is implemented,
+this module is a testable verifier primitive, **not** end-to-end verified
+provenance.
+
+The offline conformance fixture uses the identifiers of
+`daresan/minglefield-integration-test` for `v1.0.0` to `v1.1.0`.
+It does not yet fetch or authenticate files from that repository. The next
+integration step must establish an independent trust anchor and run read-only
+tests against actual pinned test assets, including negative tampering cases.

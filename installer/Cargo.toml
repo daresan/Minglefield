@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/installer-core", "crates/installer-cli"]
+resolver = "2"

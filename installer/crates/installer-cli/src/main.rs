@@ -29,7 +29,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             "--help" | "-h" => {
                 println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH]");
                 println!(
-                    "Config format: UTF-8 key=value; version=1 and all six keys are required."
+                    "Config: UTF-8 key=value, version=1, optional install_dir/data_dir."
                 );
                 println!("This prototype validates and prints a plan; nothing is installed.");
                 return Ok(());
@@ -74,6 +74,36 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_missing_config_and_missing_option_values() {
+        assert_eq!(
+            run(["--silent".to_string(), "--config".to_string()])
+                .unwrap_err()
+                .0,
+            2
+        );
+        assert_eq!(
+            run([
+                "--silent".to_string(),
+                "--defaults".to_string(),
+                "--install-dir".to_string()
+            ])
+                .unwrap_err()
+                .0,
+            2
+        );
+        assert_eq!(
+            run([
+                "--silent".to_string(),
+                "--config".to_string(),
+                "__minglefield_missing_config__".to_string()
+            ])
+                .unwrap_err()
+                .0,
+            3
+        );
+    }
 
     #[test]
     fn rejects_ambiguous_modes() {

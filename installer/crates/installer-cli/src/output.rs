@@ -53,6 +53,18 @@ mod tests {
     }
 
     #[test]
+    fn preview_json_is_non_executing_and_does_not_claim_host() {
+        let config = InstallerConfig::defaults().unwrap();
+        let plan = config.preview(minglefield_installer_core::Mode::Silent).unwrap();
+        let text = success(&config, &plan);
+        assert!(text.starts_with("{\"schema_version\":1"));
+        assert!(text.contains("\"status\":\"plan_only\""));
+        assert!(text.contains("\"execution_enabled\":false"));
+        assert!(text.contains("\"provision_host\":false"));
+        assert!(text.contains("\"exit_code\":0"));
+    }
+
+    #[test]
     fn error_is_machine_readable_without_secrets_or_side_effects() {
         let text = failure(3, "invalid \"path\"");
         assert!(text.contains("\"exit_code\":3"));

@@ -6,6 +6,7 @@ Windows is deliberately unsupported until a native handle backend exists.
 """
 import os
 import stat
+from pathlib import Path
 
 from game_integration_install_cleanup_backend import inspect_cleanup_backend_capabilities
 from game_integration_install_cleanup import inspect_staging_cleanup
@@ -39,11 +40,21 @@ def cleanup_staged_operation_posix(root, operation_id, entries, *,
         root_stat = os.fstat(root_fd)
         if not stat.S_ISDIR(root_stat.st_mode):
             return result("blocked", "unsafe_installation_staging_root")
+        # Reject shared-writable roots and verify the opened root identity.
+        # Same-UID writers still require exclusive runtime coordination.
+        if root_stat.st_mode & 0o022:
+            return result("blocked", "insecure_staging_root_permissions")
+        root_path_stat = Path(root).stat(follow_symlinks=False)
+        if (root_path_stat.st_dev, root_path_stat.st_ino) != (
+                root_stat.st_dev, root_stat.st_ino):
+            return result("blocked", "staging_root_identity_changed")
         before = os.stat(operation_id, dir_fd=root_fd, follow_symlinks=False)
         if not stat.S_ISDIR(before.st_mode):
             return result("blocked", "unsafe_operation_path")
         op_fd = os.open(operation_id, flags, dir_fd=root_fd)
         op_stat = os.fstat(op_fd)
+        if op_stat.st_mode & 0o022:
+            return result("blocked", "insecure_operation_permissions")
         if (op_stat.st_dev, op_stat.st_ino) != tuple(check["operation_identity"]):
             return result("blocked", "operation_identity_changed")
         if (before.st_dev, before.st_ino) != (op_stat.st_dev, op_stat.st_ino):

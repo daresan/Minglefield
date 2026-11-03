@@ -137,7 +137,11 @@ class JournalBoundCleanupTests(unittest.TestCase):
         wrong = [dict(self.entries[0], sha256="0" * 64)]
         result = self.policy.cleanup_game_install_staging_posix(
             *self.args, wrong, self.staging)
-        self.assertEqual(result["reason"], "journal_cleanup_not_authorized")
+        if os.name == "nt":
+            self.assertEqual(result["reason"], "secure_cleanup_backend_unavailable")
+        else:
+            self.assertEqual(result["reason"], "journal_cleanup_not_authorized")
+        self.assertFalse(result["deletion_performed"])
         self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
 
     def test_unknown_operation_denied(self):

@@ -1,0 +1,95 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "plan_version",
+    "integration_id",
+    "release_source",
+    "from_version",
+    "to_version",
+    "operations",
+    "recovery"
+  ],
+  "properties": {
+    "integration_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.][a-z][a-z0-9_-]*)+$",
+      "maxLength": 128
+    },
+    "release_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "repository"
+      ],
+      "properties": {
+        "provider": {
+          "const": "github"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        }
+      }
+    },
+    "from_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "to_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "plan_version": {
+      "const": "0.1"
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "path"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "add",
+              "replace",
+              "remove"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+          }
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy"
+      ],
+      "properties": {
+        "strategy": {
+          "enum": [
+            "restore_backup",
+            "atomic_swap"
+          ]
+        }
+      }
+    }
+  },
+  "title": "Game integration migration plan declaration v0.1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

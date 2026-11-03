@@ -34,3 +34,7 @@ Use `minglefield-installer-cli --silent --defaults --json` or `--silent --config
 ### Argument validation hardening
 
 The unattended preview rejects repeated `--silent`, `--defaults`, `--json`, `--config`, or `--install-dir` flags with exit code 2. A value-taking option cannot silently consume a following `--flag` as its value. A deliberately malformed invocation fails before file access or planning. The `--json` output remains a read-only preview; this is not an installation execution entrypoint.
+
+### Artifact integrity versus publisher authenticity
+
+The shared Rust core now offers `integrity::sha256_hex`, strict version-1 single-artifact `manifest::ArtifactManifest` parsing, and a separate `publisher::PublisherPolicy` release-verification boundary. A checksum that matches a supplied manifest is **not proof of publisher identity**, because an attacker can replace both. The publisher verifier deliberately returns `PublisherVerificationUnavailable` even for matching artifact bytes until a pinned-key signature verification and trusted release metadata policy have been implemented and tested. Never use `ArtifactManifest::verify_bytes` alone to authorize downloading, executing, extracting or installing a release. No installer execution is enabled.

@@ -16,6 +16,17 @@ Support Windows, macOS and Linux with self-starting installers that require no p
 - **Existing installation:** detect and offer safe reuse/repair/update without silently replacing an existing environment, Host ownership, settings, SQLite database, user data, or unrelated files.
 - **No installation detected:** provision the local Host during first run; do not require the user to manually copy or enter a Host claim token.
 
+## Existing Minglefield discovery — platform defaults and manual location
+
+On Windows, macOS and Linux, search the operating system's standard application installation locations and applicable installation registrations/metadata, including system-wide and per-user locations. Do not assume the developer's personal directory structure, shell PATH, or Conda setup. The user can always browse to a **custom directory**, especially when automatic discovery finds nothing or misses the intended installation.
+
+Classify both supported input forms independently:
+- **Source checkout:** a directory containing only a cloned Minglefield repository (or source tree). Recognize using validated project-specific structure/metadata; do not require an existing executable, Python environment, or even `.git` metadata. Detect version/source identity where possible and report unknown provenance honestly.
+- **Packaged application:** a directory containing only the platform-specific Minglefield executable or application bundle, with no repository. Recognize via platform-appropriate application metadata and verifiable product identity, not executable filename alone; validate architecture, platform, version and integrity/signature when applicable.
+- **Both forms present:** detect both, distinguish them in the UI, and let the user choose the intended target. A recognized source checkout may still need provisioning before it is runnable; detection is not proof of launch readiness.
+
+Never silently overwrite or relocate a discovered installation or change its user data. Treat manual path selection as a normal supported flow, not an exceptional developer workaround. Maintain clear separation between detecting a Minglefield application, choosing an installation target, and discovering optional Python/Conda/ComfyUI runtimes.
+
 ## Component acquisition and discovery
 
 For **Python, Conda and ComfyUI**: search known platform-specific locations, verify compatibility and actual functionality, offer user-selected directory/executable as a fallback, and offer a clearly disclosed automatic installation if absent. Explicit consent is required for optional/heavy components. The installer must explain source, version, destination, approximate size and consequences; verify downloaded artifacts and trusted release provenance before execution. Handle unavailable network, cancellation, incomplete installation, upgrade, and retry without corrupting other installations.

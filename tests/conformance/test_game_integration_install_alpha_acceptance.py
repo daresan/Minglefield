@@ -30,7 +30,7 @@ class GameInstallationAlphaAcceptanceTests(unittest.TestCase):
     def test_wrong_owner_is_rejected_without_filesystem_mutation(self):
         entries = [{"path": "game/file.txt", "sha256": DIGEST, "size": 1}]
         plan = validate_staging_manifest(entries)
-        with tempfile.TemporaryDirectory() as root:
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
             operation = Path(root) / "op.one"
             operation.mkdir()
             sentinel = operation / "sentinel"
@@ -44,7 +44,7 @@ class GameInstallationAlphaAcceptanceTests(unittest.TestCase):
 
     def test_wrong_digest_is_rejected(self):
         entries = [{"path": "game/file.txt", "sha256": DIGEST, "size": 1}]
-        with tempfile.TemporaryDirectory() as root:
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
             result = inspect_staging_cleanup(
                 root, "op.one", entries, journal_operation_id="op.one",
                 journal_plan_sha256="b" * 64,
@@ -56,7 +56,7 @@ class GameInstallationAlphaAcceptanceTests(unittest.TestCase):
                     "sha256": hashlib.sha256(b"correct").hexdigest(),
                     "size": len(b"correct")}]
         plan = validate_staging_manifest(entries)
-        with tempfile.TemporaryDirectory() as root:
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
             operation = Path(root) / "op.one"
             operation.mkdir()
             (operation / "blob-000000").write_bytes(b"tampered")

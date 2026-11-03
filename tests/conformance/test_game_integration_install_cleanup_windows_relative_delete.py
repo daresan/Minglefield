@@ -1,6 +1,7 @@
 """Disposable-only Windows relative handle disposition tests."""
 import os
 import subprocess
+import threading
 import sys
 import tempfile
 import unittest
@@ -125,6 +126,62 @@ class WindowsRelativeDeleteTests(unittest.TestCase):
                           result)
             self.assertEqual((target / "keep").read_bytes(), b"foreign")
             self.assertTrue(junction.exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only")
+    def test_concurrent_parent_replacement_preserves_foreign_sentinel(self):
+        """Adversarial rename attempts; no guarantee the scheduler hits every window."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            operation = root / "operation"
+            operation.mkdir()
+            original = operation / "blob"
+            original.write_bytes(b"original")
+            expected = self.identities(operation, original)
+            foreign = root / "foreign"
+            foreign.mkdir()
+            sentinel = foreign / "blob"
+            sentinel.write_bytes(b"foreign-sentinel")
+            displaced = root / "displaced"
+            start = threading.Event()
+            stop = threading.Event()
+            errors = []
+
+            def adversary():
+                start.wait(5)
+                while not stop.is_set():
+                    try:
+                        if operation.exists() and not displaced.exists():
+                            operation.rename(displaced)
+                            foreign.rename(operation)
+                        if operation.exists() and not foreign.exists():
+                            operation.rename(foreign)
+                        if displaced.exists() and not operation.exists():
+                            displaced.rename(operation)
+                    except OSError:
+                        # Open handles can prevent a rename on some Windows builds.
+                        continue
+                    except Exception as exc:
+                        errors.append(exc)
+                        return
+
+            worker = threading.Thread(target=adversary, daemon=True)
+            worker.start()
+            start.set()
+            try:
+                result = delete_relative_test_file(operation, "blob", **expected)
+            finally:
+                stop.set()
+                worker.join(timeout=5)
+            self.assertFalse(worker.is_alive(), "adversary did not terminate")
+            self.assertFalse(errors, errors)
+            # The foreign file may be under either name after the last swap.
+            surviving = [p for p in (root / "foreign" / "blob",
+                                     root / "operation" / "blob",
+                                     root / "displaced" / "blob")
+                         if p.exists() and p.read_bytes() == b"foreign-sentinel"]
+            self.assertTrue(surviving, result)
+            self.assertIn(result["state"], ("blocked", "removed"))
+            self.assertFalse(result["cleanup_allowed"])
 
     @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_missing_identity_and_traversal_fail_closed(self):

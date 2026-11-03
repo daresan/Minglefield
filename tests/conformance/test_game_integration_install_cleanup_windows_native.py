@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
-from game_integration_install_cleanup_windows_native import delete_isolated_regular_file_by_handle
+from game_integration_install_cleanup_windows_native import delete_isolated_regular_file_by_handle\nfrom game_integration_install_cleanup_windows import inspect_windows_staged_file
 
 
 class WindowsNativeDispositionTests(unittest.TestCase):
@@ -19,6 +19,32 @@ class WindowsNativeDispositionTests(unittest.TestCase):
             self.assertEqual(result["state"], "removed", result)
             self.assertFalse(path.exists())
             self.assertFalse(result["cleanup_allowed"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only")
+    def test_replaced_file_identity_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "disposable"
+            displaced = Path(tmp) / "displaced"
+            path.write_bytes(b"original")
+            identity = inspect_windows_staged_file(path)
+            self.assertEqual(identity["state"], "inspected")
+            path.rename(displaced)
+            path.write_bytes(b"replacement")
+            result = delete_isolated_regular_file_by_handle(
+                path, expected_volume_serial=identity["volume_serial"],
+                expected_file_index=identity["file_index"])
+            self.assertEqual(result["reason"], "native_file_identity_mismatch")
+            self.assertEqual(path.read_bytes(), b"replacement")
+            self.assertEqual(displaced.read_bytes(), b"original")
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only")
+    def test_missing_identity_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "disposable"
+            path.write_bytes(b"keep")
+            result = delete_isolated_regular_file_by_handle(path)
+            self.assertEqual(result["reason"], "expected_file_identity_required")
+            self.assertEqual(path.read_bytes(), b"keep")
 
     @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_hardlink_is_preserved(self):

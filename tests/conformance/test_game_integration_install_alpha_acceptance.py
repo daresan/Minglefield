@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 from game_integration_install_staging import validate_staging_manifest
 from game_integration_install_cleanup import inspect_staging_cleanup
+from game_integration_install_recovery import inspect_staged_installation
 from game_integration_install_cleanup_windows_progress import (
     inspect_windows_cleanup_recovery)
 from game_integration_install_cleanup_progress_journal import (
@@ -61,12 +62,24 @@ class GameInstallationAlphaAcceptanceTests(unittest.TestCase):
             (operation / "blob-000000").write_bytes(b"tampered")
             (operation / "manifest.json").write_text(
                 json.dumps({"plan_sha256": plan["plan_sha256"],
-                            "files": plan["files"]}), encoding="utf-8")
+                            "files": [
+                                {"path": item["path"], "blob": f"blob-{i:06d}",
+                                 "size": item["size"], "sha256": item["sha256"]}
+                                for i, item in enumerate(plan["files"])
+                            ]}), encoding="utf-8")
+            recovery = inspect_staged_installation(root, "op.one", entries)
+            self.assertEqual(recovery["state"], "damaged", recovery)
+            self.assertEqual(recovery["reason"], "blob_mismatch", recovery)
+            self.assertFalse(recovery["installation_allowed"])
             result = inspect_staging_cleanup(
                 root, "op.one", entries, journal_operation_id="op.one",
                 journal_plan_sha256=plan["plan_sha256"],
                 journal_state="cancelled", owner_authorized=True)
-            self.assertNotEqual(result["state"], "eligible_snapshot")
+            # Cleanup preflight can inspect damaged staging, but cannot delete.
+            self.assertEqual(result["state"], "eligible_snapshot", result)
+            self.assertEqual(result["staging_state"], "damaged")
+            self.assertFalse(result["cleanup_allowed"])
+            self.assertFalse(result["deletion_performed"])
             self.assertTrue((operation / "blob-000000").exists())
 
     def test_missing_file_without_durable_record_is_blocked(self):

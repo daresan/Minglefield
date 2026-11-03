@@ -1,3 +1,4 @@
 [workspace]
 members = ["crates/installer-core", "crates/installer-cli"]
+exclude = ["gui/src-tauri"]
 resolver = "2"

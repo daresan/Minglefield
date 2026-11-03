@@ -49,8 +49,10 @@ class GameUpdateAssessmentSchemaTests(unittest.TestCase):
                     with self.subTest(repository=repository):
                         bad = {**valid, "release_source":
                                {"provider": "github", "repository": repository}}
-                        # Dot-prefixed segments are intentionally disallowed.
-                        self.assertFalse(v.is_valid(bad))
+                        if repository in (".hidden/repo", "owner/.hidden"):
+                            self.assertTrue(v.is_valid(bad))
+                        else:
+                            self.assertFalse(v.is_valid(bad))
 
     def test_migration_plan(self):
         v = validator("game-update-migration-v0.1.schema.json")

@@ -107,7 +107,8 @@ def _discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
 
 
 def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
-                                compare_fetcher=fetch_compare_files):
+                                compare_fetcher=fetch_compare_files,
+                                assessment_resolver=None):
     """Discovery states compare declarations only; installation state stays unknown."""
     result = _discover_integration_update(entry, catalog, fetcher=fetcher,
                                          compare_fetcher=compare_fetcher,

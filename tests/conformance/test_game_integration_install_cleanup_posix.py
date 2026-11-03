@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 from game_integration_install_cleanup_posix import cleanup_staged_operation_posix
@@ -70,6 +71,57 @@ class PosixCleanupTests(unittest.TestCase):
             self.assertTrue((operation / "manifest.json").exists())
         finally:
             operation.chmod(original)
+
+    def test_operation_replaced_during_unlink_does_not_delete_replacement(self):
+        self.stage()
+        original_unlink = os.unlink
+        operation = self.root / "op1"
+        displaced = self.root / "displaced"
+        replacement = self.base / "replacement"
+        replacement.mkdir()
+        (replacement / "keep.txt").write_bytes(b"foreign")
+        switched = False
+
+        def swap_then_unlink(path, *args, **kwargs):
+            nonlocal switched
+            if not switched and kwargs.get("dir_fd") is not None:
+                switched = True
+                operation.rename(displaced)
+                replacement.rename(operation)
+            return original_unlink(path, *args, **kwargs)
+
+        with patch("game_integration_install_cleanup_posix.os.unlink",
+                   side_effect=swap_then_unlink):
+            result = self.cleanup()
+        self.assertTrue(switched)
+        self.assertEqual(result["state"], "partial")
+        self.assertEqual(result["reason"], "operation_identity_changed")
+        self.assertEqual((operation / "keep.txt").read_bytes(), b"foreign")
+        self.assertTrue(operation.is_dir())
+
+    def test_operation_symlink_swap_before_open_is_blocked(self):
+        self.stage()
+        outside = self.base / "outside"
+        outside.mkdir()
+        (outside / "keep.txt").write_bytes(b"foreign")
+        operation = self.root / "op1"
+        original_open = os.open
+        swapped = False
+
+        def swap_before_open(path, *args, **kwargs):
+            nonlocal swapped
+            if path == "op1" and kwargs.get("dir_fd") is not None and not swapped:
+                swapped = True
+                operation.rename(self.root / "displaced")
+                operation.symlink_to(outside, target_is_directory=True)
+            return original_open(path, *args, **kwargs)
+
+        with patch("game_integration_install_cleanup_posix.os.open",
+                   side_effect=swap_before_open):
+            result = self.cleanup()
+        self.assertTrue(swapped)
+        self.assertEqual(result["state"], "blocked")
+        self.assertEqual((outside / "keep.txt").read_bytes(), b"foreign")
 
     def test_prepared_journal_does_not_delete(self):
         self.stage()

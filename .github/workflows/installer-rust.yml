@@ -37,3 +37,5 @@ jobs:
       - run: cargo test --workspace --locked
       - name: Offline installer release preparation tests
         run: python -m unittest discover -s scripts -p "test_*.py" -v
+      - name: Inspect transitive Alpha runtime imports (read-only)
+        run: python scripts/audit_alpha_runtime_imports.py --json

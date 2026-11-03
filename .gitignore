@@ -7,3 +7,4 @@
 /installer/gui/dist/
 /installer/gui/src-tauri/target/
 /installer/gui/src-tauri/gen/
+/installer/gui/src-tauri/icons/icon.ico

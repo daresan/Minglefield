@@ -128,6 +128,30 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual((data["projects"][0]["name"], data["projects"][0]["settings_revision"]),
                          ("Updated", 2))
 
+    def test_job_attachments_http_create_update_and_conflict(self):
+        endpoint = "/api/game/projects"
+        project = dict(host_id="host.one", project_id="game.attachments",
+                       name="Attachments", repository_root=str(self.root / "repo"),
+                       job_attachments_root=str(self.root / "attachments"),
+                       output_root=str(self.root / "output"))
+        status, data = self.request("POST", endpoint, self.owner, project)
+        self.assertEqual(status, 201, data)
+        status, data = self.request("GET", endpoint + "?host_id=host.one", self.owner)
+        self.assertEqual(status, 200)
+        self.assertEqual(data["projects"][0]["job_attachments_root"],
+                         project["job_attachments_root"])
+        update = dict(project, settings_revision=1, name="Attachments Updated")
+        status, data = self.request("POST", endpoint + "/update", self.owner, update)
+        self.assertEqual(status, 200, data)
+        conflicting = dict(update, settings_revision=2,
+                           staging_root=str(self.root / "different"))
+        status, data = self.request("POST", endpoint + "/update",
+                                    self.owner, conflicting)
+        self.assertEqual(status, 400, data)
+        self.assertEqual(data["error"], "conflicting_job_attachments_roots")
+        status, data = self.request("GET", endpoint + "?host_id=host.one", self.owner)
+        self.assertEqual(data["projects"][0]["settings_revision"], 2)
+
     def test_git_profile_http_contract(self):
         profile=dict(profile_id="git.default",label="Default",auth_method="local",
                      git_executable="git",author_name="Tester",

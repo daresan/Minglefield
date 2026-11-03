@@ -52,6 +52,17 @@ assert.equal(gameUpdateSignal({updates:[{...item,version_comparison:'newer_relea
         result=subprocess.run([node,"-"],input=script,text=True,capture_output=True,timeout=20)
         self.assertEqual(result.returncode,0,result.stderr)
 
+    def test_readme_and_license_tab_is_read_only_and_accessible(self):
+        self.assertIn('id="projectDocsPanel"', PAGE)
+        self.assertIn('id="projectDocsReadme"', PAGE)
+        self.assertIn('id="projectDocsLicense"', PAGE)
+        self.assertIn('["documents","README & Lizenz"]', PAGE)
+        self.assertIn('["login","documents"].includes(button.dataset.tab)', PAGE)
+        self.assertIn('content.textContent=data.content', PAGE)
+        self.assertNotIn('content.innerHTML=data.content', PAGE)
+        self.assertIn('"/api/project-document?kind="', PAGE)
+        self.assertIn('Diese Ansicht ist keine Lizenzannahme', PAGE)
+
     def test_tab_navigation_and_global_update_dialog_present(self):
         self.assertIn('id="alphaNav"', PAGE)
         self.assertIn("renderAlphaTabs();", PAGE)

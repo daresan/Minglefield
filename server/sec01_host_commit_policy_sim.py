@@ -60,9 +60,17 @@ class HostCommitPolicy:
             db.execute("""CREATE TABLE IF NOT EXISTS alpha_game_projects(
                 project_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 owner_id TEXT NOT NULL, name TEXT NOT NULL,
-                repository_root TEXT NOT NULL, staging_root TEXT NOT NULL,
+                repository_root TEXT NOT NULL, job_attachments_root TEXT NOT NULL,
                 output_root TEXT NOT NULL, settings_revision INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(host_id,project_id))""")
+            # Existing alpha databases use staging_root for project job attachments.
+            # Rename the column in-place; preserve every path, row and revision.
+            columns={row[1] for row in db.execute("PRAGMA table_info(alpha_game_projects)")}
+            if "staging_root" in columns and "job_attachments_root" not in columns:
+                db.execute("""ALTER TABLE alpha_game_projects
+                    RENAME COLUMN staging_root TO job_attachments_root""")
+            elif "staging_root" in columns and "job_attachments_root" in columns:
+                raise RuntimeError("ambiguous_game_project_attachment_columns")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_game_install_journal(
                 operation_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 owner_id TEXT NOT NULL, project_id TEXT NOT NULL,
@@ -147,26 +155,24 @@ class HostCommitPolicy:
             if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
                           (host_id,owner_id)).fetchone() is None:
                 return None
-            rows=db.execute("""SELECT project_id,name,repository_root,staging_root,
+            rows=db.execute("""SELECT project_id,name,repository_root,job_attachments_root,
                 output_root,settings_revision FROM alpha_game_projects
                 WHERE host_id=? AND owner_id=? ORDER BY name,project_id""",
                 (host_id,owner_id)).fetchall()
-            keys=("project_id","name","repository_root","staging_root",
+            keys=("project_id","name","repository_root","job_attachments_root",
                   "output_root","settings_revision")
             projects=[dict(zip(keys,row)) for row in rows]
-            for project in projects:
-                project["job_attachments_root"]=project["staging_root"]
             return projects
 
     def create_game_project(self, host_id, owner_id, project_id, name,
-                            repository_root, staging_root, output_root):
+                            repository_root, job_attachments_root, output_root):
         """Register project metadata without touching the filesystem or host paths."""
         from pathlib import Path
         import sqlite3
         if (not ident(project_id) or type(name) is not str
                 or not 1 <= len(name.strip()) <= 120):
             return HostDecision("denied","invalid_project_identity")
-        paths=(repository_root,staging_root,output_root)
+        paths=(repository_root,job_attachments_root,output_root)
         if any(type(path) is not str or not path or len(path)>1024
                or not Path(path).is_absolute() for path in paths):
             return HostDecision("denied","invalid_project_path")
@@ -176,7 +182,7 @@ class HostCommitPolicy:
                 return HostDecision("denied","not_host_owner")
             try:
                 db.execute("""INSERT INTO alpha_game_projects(
-                    project_id,host_id,owner_id,name,repository_root,staging_root,output_root)
+                    project_id,host_id,owner_id,name,repository_root,job_attachments_root,output_root)
                     VALUES(?,?,?,?,?,?,?)""",
                     (project_id,host_id,owner_id,name.strip(),*paths))
             except sqlite3.IntegrityError:
@@ -184,13 +190,13 @@ class HostCommitPolicy:
         return HostDecision("created","game_project_created")
 
     def update_game_project(self, host_id, owner_id, project_id, revision,
-                            name, repository_root, staging_root, output_root):
+                            name, repository_root, job_attachments_root, output_root):
         """Optimistic, owner-scoped metadata update; never modifies files."""
         from pathlib import Path
         if (not ident(project_id) or type(revision) is not int or revision < 1
                 or type(name) is not str or not 1 <= len(name.strip()) <= 120):
             return HostDecision("denied","invalid_project_update")
-        paths=(repository_root,staging_root,output_root)
+        paths=(repository_root,job_attachments_root,output_root)
         if any(type(p) is not str or not p or len(p)>1024
                or not Path(p).is_absolute() for p in paths):
             return HostDecision("denied","invalid_project_path")
@@ -206,7 +212,7 @@ class HostCommitPolicy:
             if row[0]!=revision:
                 return HostDecision("denied","revision_conflict")
             db.execute("""UPDATE alpha_game_projects SET name=?,repository_root=?,
-                staging_root=?,output_root=?,settings_revision=settings_revision+1
+                job_attachments_root=?,output_root=?,settings_revision=settings_revision+1
                 WHERE host_id=? AND owner_id=? AND project_id=? AND settings_revision=?""",
                 (name.strip(),*paths,host_id,owner_id,project_id,revision))
         return HostDecision("saved","game_project_updated")
@@ -220,13 +226,13 @@ class HostCommitPolicy:
             if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
                           (host_id,owner_id)).fetchone() is None:
                 return None
-            row=db.execute("""SELECT repository_root,staging_root,output_root
+            row=db.execute("""SELECT repository_root,job_attachments_root,output_root
                 FROM alpha_game_projects WHERE host_id=? AND owner_id=? AND project_id=?""",
                 (host_id,owner_id,project_id)).fetchone()
         if row is None:
             return None
         result={}
-        for key,raw in zip(("repository_root","staging_root","output_root"),row):
+        for key,raw in zip(("repository_root","job_attachments_root","output_root"),row):
             path=Path(raw)
             try:
                 exists=path.exists()
@@ -235,7 +241,6 @@ class HostCommitPolicy:
                     "missing" if not exists else "directory" if is_directory else "not_directory")}
             except OSError:
                 result[key]={"path":raw,"state":"unavailable"}
-        result["job_attachments_root"]=dict(result["staging_root"])
         return result
 
     @staticmethod
@@ -298,7 +303,7 @@ class HostCommitPolicy:
             if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
                           (host_id,owner_id)).fetchone() is None:
                 return {"state":"denied","reason":"not_host_owner"}
-            row=db.execute("""SELECT repository_root,staging_root,output_root,settings_revision
+            row=db.execute("""SELECT repository_root,job_attachments_root,output_root,settings_revision
                 FROM alpha_game_projects WHERE host_id=? AND owner_id=? AND project_id=?""",
                 (host_id,owner_id,project_id)).fetchone()
         if row is None:
@@ -370,7 +375,7 @@ class HostCommitPolicy:
             if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
                           (host_id,owner_id)).fetchone() is None:
                 return None
-            row=db.execute("""SELECT repository_root,staging_root,output_root
+            row=db.execute("""SELECT repository_root,job_attachments_root,output_root
                 FROM alpha_game_projects WHERE host_id=? AND owner_id=? AND project_id=?""",
                 (host_id,owner_id,project_id)).fetchone()
         if row is None:

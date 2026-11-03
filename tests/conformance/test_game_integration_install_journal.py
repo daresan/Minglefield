@@ -63,6 +63,54 @@ class GameInstallJournalTests(unittest.TestCase):
                  str(self.root), str(self.root / "staging"),
                  str(self.root / "output"), 1))
 
+    def test_persistent_transition_cas_and_recovery(self):
+        args = ("host.one", "user.owner", "game.one", "op.transition", "a" * 64)
+        self.assertEqual(self.policy.prepare_game_install_journal(*args)["state"],
+                         "prepared")
+        transition = lambda before, after, **kw: self.policy.record_game_install_transition(
+            *args, before, after, **kw)
+        self.assertEqual(transition("prepared", "applying",
+                                    plan_verified=True)["reason"],
+                         "trusted_executor_required")
+        self.assertEqual(transition("prepared", "applying",
+                                    executor_authorized=True)["reason"],
+                         "verified_plan_required")
+        self.assertEqual(transition("prepared", "applying",
+                                    executor_authorized=True,
+                                    plan_verified=True)["state"], "applying")
+        self.assertEqual(transition("prepared", "applying",
+                                    executor_authorized=True,
+                                    plan_verified=True)["reason"],
+                         "journal_state_conflict")
+        self.assertEqual(self.policy.game_install_journal_status(*args[:3])[0]["state"],
+                         "applying")
+        self.assertEqual(transition("applying", "rollback_required",
+                                    executor_authorized=True)["state"],
+                         "rollback_required")
+        self.assertEqual(transition("rollback_required", "manual_recovery_required",
+                                    executor_authorized=True)["state"],
+                         "manual_recovery_required")
+        self.assertEqual(transition("manual_recovery_required", "rolled_back",
+                                    executor_authorized=True)["state"], "rolled_back")
+        self.assertEqual(transition("rolled_back", "applying",
+                                    executor_authorized=True,
+                                    plan_verified=True)["reason"],
+                         "invalid_journal_transition")
+
+    def test_transition_rejects_wrong_owner_or_plan(self):
+        args = ("host.one", "user.owner", "game.one", "op.scope", "a" * 64)
+        self.policy.prepare_game_install_journal(*args)
+        for bad in (
+                ("host.one", "user.other", "game.one", "op.scope", "a" * 64),
+                ("host.one", "user.owner", "game.one", "op.scope", "b" * 64),
+                ("host.one", "user.owner", "game.one", "missing", "a" * 64)):
+            result = self.policy.record_game_install_transition(
+                *bad, "prepared", "applying",
+                executor_authorized=True, plan_verified=True)
+            self.assertEqual(result["state"], "denied")
+        self.assertEqual(self.policy.game_install_journal_status(*args[:3])[0]["state"],
+                         "prepared")
+
     def test_preparation_is_persistent_and_idempotent(self):
         args = ("host.one", "user.owner", "game.one", "op.one", "a" * 64)
         first = self.policy.prepare_game_install_journal(*args)

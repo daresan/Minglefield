@@ -147,7 +147,9 @@ Agreed design:
 - [ ] Define the first published **game integration** version independently from the Minglefield platform version and `.minglefield/project.json` schema version. Do not infer an installed integration version from `schema_version: 1`; currently it is unknown.
 - [x] Use the existing `packaging.version` dependency with an explicit PEP 440 stable public-version policy for read-only discovery; no custom parser or inferred tags. Strict SemVer is not claimed. See [version decision](docs/GAME-INTEGRATION-UPDATE-DISCOVERY.md).
 - [ ] P1.4f.3: Preview release notes, changed files, compatibility requirements and migration steps before modifying a game repository.
-- [ ] P1.4f.4: Explicit user-approved installation with conflict detection, rollback/recovery and audit trail; preserve independent game Git remotes, branches and history.
+- [x] P1.4f.4 **Alpha foundation only**: validated game-integration manifests, isolated staging, journal-bound authorization, read-only recovery and experimental internal cleanup with synthetic acceptance tests. **No production game installation or updater is enabled.** See [alpha scope and deferred work](docs/GAME-INSTALLATION-ALPHA-BOUNDARY.md).
+- [ ] Future game integration (deferred until a real game/partner): explicitly approved installation, conflict detection, rollback/recovery, audit trail, and preservation of independent game Git remotes, branches and history.
+- [ ] Separate priority: **Minglefield platform installer/updater** (Minglefield itself, Python dependencies, migrations and configured host services); not covered by game-integration P1.4f.4.
 - [ ] For offline or inaccessible release sources, distinguish `unknown` from `up_to_date`. A missing or invalid release is not proof that no update exists.
 
 ## Post-P1.5 — Development continuity and chat handover (deferred)

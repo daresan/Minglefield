@@ -66,8 +66,23 @@ class PlatformPayloadBuilderTests(unittest.TestCase):
             build_inventory(self.payload)
 
     def test_case_collisions_rejected(self):
-        (self.payload / "APP").mkdir()
-        (self.payload / "APP" / "MAIN.PY").write_bytes(b"other")
+        # Inventory collision checks must run on case-insensitive Windows too.
+        doc = json.loads(build_inventory(self.payload))
+        entry = dict(doc["files"][0])
+        entry["path"] = entry["path"].upper()
+        doc["files"].append(entry)
+        from server.platform_payload_integrity import parse_inventory
+        with self.assertRaises(PayloadError):
+            parse_inventory(json.dumps(doc).encode("utf-8"))
+
+    def test_builder_rejects_real_case_collision_when_supported(self):
+        # A case-insensitive filesystem cannot contain both app/ and APP/.
+        upper = self.payload / "APP"
+        try:
+            upper.mkdir()
+        except FileExistsError:
+            self.skipTest("filesystem does not support case-distinct directories")
+        (upper / "MAIN.PY").write_bytes(b"other")
         with self.assertRaises(PayloadError):
             build_inventory(self.payload)
 

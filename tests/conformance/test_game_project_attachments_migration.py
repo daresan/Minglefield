@@ -24,6 +24,8 @@ class GameProjectAttachmentsMigrationTests(unittest.TestCase):
                     repository_root TEXT NOT NULL, staging_root TEXT NOT NULL,
                     output_root TEXT NOT NULL, settings_revision INTEGER NOT NULL DEFAULT 1,
                     UNIQUE(host_id,project_id))""")
+                db.execute("""CREATE TABLE sec01_host_owners(
+                    host_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL)""")
                 db.execute("INSERT INTO sec01_host_owners(host_id,owner_id) VALUES(?,?)",
                            ("host.one", "user.owner"))
                 db.execute("""INSERT INTO alpha_game_projects

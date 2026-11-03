@@ -4,12 +4,20 @@ on:
   push:
     paths:
       - "server/platform_release_manifest.py"
+      - "server/platform_payload_builder.py"
+      - "server/platform_payload_integrity.py"
       - "tests/conformance/test_platform_release_manifest.py"
+      - "tests/conformance/test_platform_payload_builder.py"
+      - "tests/conformance/test_platform_payload_integrity.py"
       - ".github/workflows/platform-release-manifest.yml"
   pull_request:
     paths:
       - "server/platform_release_manifest.py"
+      - "server/platform_payload_builder.py"
+      - "server/platform_payload_integrity.py"
       - "tests/conformance/test_platform_release_manifest.py"
+      - "tests/conformance/test_platform_payload_builder.py"
+      - "tests/conformance/test_platform_payload_integrity.py"
       - ".github/workflows/platform-release-manifest.yml"
   workflow_dispatch:
 
@@ -31,5 +39,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Run platform release manifest conformance
-        run: python -B -m unittest discover -s tests/conformance -p "test_platform_release_manifest.py" -v
+      - name: Run platform packaging conformance
+        run: python -B -m unittest discover -s tests/conformance -p "test_platform_*.py" -v

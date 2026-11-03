@@ -76,7 +76,13 @@ mod tests {
 
     #[test]
     fn rejects_ambiguous_modes() {
-        assert!(run(["--silent".to_string(), "--defaults".to_string(), "--config".to_string(), "x".to_string()]).is_err());
+        assert!(run([
+            "--silent".to_string(),
+            "--defaults".to_string(),
+            "--config".to_string(),
+            "x".to_string()
+        ])
+        .is_err());
         assert!(run(["--defaults".to_string()]).is_err());
         assert!(run(["--silent".to_string()]).is_err());
     }

@@ -11,7 +11,7 @@ class InstallationPathTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / "game"
+        self.root = Path(self.tmp.name).resolve(strict=True) / "game"
         self.root.mkdir()
 
     def inspect(self, paths):
@@ -46,7 +46,7 @@ class InstallationPathTests(unittest.TestCase):
         self.assertEqual(existing.read_bytes(), b"original")
 
     def test_symlink_components_are_rejected(self):
-        outside = Path(self.tmp.name) / "outside"
+        outside = Path(self.tmp.name).resolve(strict=True) / "outside"
         outside.mkdir()
         try:
             (self.root / "linked").symlink_to(outside, target_is_directory=True)

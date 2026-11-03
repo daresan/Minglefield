@@ -1,0 +1,78 @@
+"""Read-only native Windows directory-handle inspection for installer staging.
+
+No deletion or authorization. Open directory handles without FILE_SHARE_DELETE,
+so cooperative Windows rename/delete requests are denied while handles live.
+The native deletion backend is not implemented.
+"""
+import os
+
+
+def inspect_windows_directory_handle(path):
+    def result(state, reason, **extra):
+        return {"state": state, "reason": reason,
+                "cleanup_allowed": False, "deletion_performed": False, **extra}
+    if os.name != "nt":
+        return result("unavailable", "windows_only")
+    if not isinstance(path, (str, os.PathLike)) or not os.fspath(path):
+        return result("blocked", "invalid_directory_path")
+    import ctypes
+    from ctypes import wintypes
+
+    FILE_READ_ATTRIBUTES = 0x80
+    FILE_SHARE_READ = 0x1
+    FILE_SHARE_WRITE = 0x2
+    OPEN_EXISTING = 3
+    FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+    FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+    FILE_ATTRIBUTE_DIRECTORY = 0x10
+    FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+    INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+    class BY_HANDLE_FILE_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("dwFileAttributes", wintypes.DWORD),
+            ("ftCreationTime", wintypes.FILETIME),
+            ("ftLastAccessTime", wintypes.FILETIME),
+            ("ftLastWriteTime", wintypes.FILETIME),
+            ("dwVolumeSerialNumber", wintypes.DWORD),
+            ("nFileSizeHigh", wintypes.DWORD),
+            ("nFileSizeLow", wintypes.DWORD),
+            ("nNumberOfLinks", wintypes.DWORD),
+            ("nFileIndexHigh", wintypes.DWORD),
+            ("nFileIndexLow", wintypes.DWORD),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    open_handle = kernel32.CreateFileW
+    open_handle.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                            ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                            wintypes.HANDLE]
+    open_handle.restype = wintypes.HANDLE
+    get_info = kernel32.GetFileInformationByHandle
+    get_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(BY_HANDLE_FILE_INFORMATION)]
+    get_info.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+
+    handle = open_handle(os.path.abspath(path), FILE_READ_ATTRIBUTES,
+                         FILE_SHARE_READ | FILE_SHARE_WRITE, None,
+                         OPEN_EXISTING,
+                         FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                         None)
+    if handle in (None, INVALID_HANDLE_VALUE):
+        return result("blocked", "windows_directory_open_failed")
+    try:
+        info = BY_HANDLE_FILE_INFORMATION()
+        if not get_info(handle, ctypes.byref(info)):
+            return result("blocked", "windows_directory_info_failed")
+        if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT:
+            return result("blocked", "windows_reparse_point")
+        if not info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY:
+            return result("blocked", "not_directory")
+        return result("inspected", "native_directory_identity_observed",
+                      volume_serial=int(info.dwVolumeSerialNumber),
+                      file_index=(int(info.nFileIndexHigh) << 32)
+                      | int(info.nFileIndexLow))
+    finally:
+        close_handle(handle)

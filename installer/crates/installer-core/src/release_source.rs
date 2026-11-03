@@ -55,6 +55,8 @@ impl ReleaseSource {
         let valid = |s: &str| {
             !s.is_empty()
                 && s.len() <= 100
+                && s != "."
+                && s != ".."
                 && s.bytes()
                     .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
         };
@@ -97,9 +99,20 @@ mod tests {
         assert!(ReleaseSource::parse(&SOURCE.replace("version=1", "version=2")).is_err());
         assert!(ReleaseSource::parse(&format!("{SOURCE}commit=abc\n")).is_err());
         assert!(ReleaseSource::parse(&SOURCE.replace("12345", "0")).is_err());
-        assert!(
-            ReleaseSource::parse(&SOURCE.replace("daresan/Minglefield", "../Minglefield")).is_err()
-        );
+        for repository in [
+            "../Minglefield",
+            "./Minglefield",
+            "daresan/..",
+            "daresan/.",
+            "daresan/",
+            "/Minglefield",
+            "daresan/Minglefield/extra",
+        ] {
+            assert!(
+                ReleaseSource::parse(&SOURCE.replace("daresan/Minglefield", repository)).is_err(),
+                "repository should be rejected: {repository}"
+            );
+        }
         assert!(ReleaseSource::parse(
             &SOURCE.replace("0123456789abcdef0123456789abcdef01234567", "abc")
         )

@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "identifier": "org.minglefield.installer",
   "build": {
-    "frontendDist": "..",
-    "devUrl": null
+    "beforeDevCommand": "npm run web:dev",
+    "beforeBuildCommand": "npm run web:build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [

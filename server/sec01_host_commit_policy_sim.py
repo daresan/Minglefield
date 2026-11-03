@@ -77,6 +77,13 @@ class HostCommitPolicy:
                 state TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+            # Database-level invariant across separate connections and processes.
+            # Existing duplicate active operations fail migration rather than
+            # silently choosing a winner.
+            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS
+                uq_game_install_one_active_project
+                ON sec01_game_install_journal(host_id,project_id)
+                WHERE state NOT IN ('cancelled','committed','rolled_back')""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_settings(\n                host_id TEXT PRIMARY KEY, settings TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
                 host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,

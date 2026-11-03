@@ -1,5 +1,7 @@
 """Isolated staging tests; game repository must remain unchanged."""
 import hashlib
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -83,6 +85,47 @@ class IsolatedInstallationStagingTests(unittest.TestCase):
             self.staging, "operation.one", linked / "repository",
             self.entries, self.files.__getitem__)
         self.assertEqual(result["reason"], "unsafe_repository_root")
+        self.assertFalse((self.staging / "operation.one").exists())
+
+    def _junction(self, link, target):
+        if os.name != "nt":
+            self.skipTest("Windows junction-specific test")
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True, text=True)
+        if result.returncode:
+            self.skipTest("junction creation unavailable: " + result.stderr.strip())
+        self.assertTrue(link.exists())
+
+    def test_junction_staging_root_is_rejected(self):
+        link = self.root / "junction-staging"
+        self._junction(link, self.staging)
+        self.assertEqual(self.stage(root=link)["reason"],
+                         "unsafe_installation_staging_root")
+        self.assertFalse((self.staging / "operation.one").exists())
+
+    def test_junction_staging_ancestor_is_rejected(self):
+        link = self.root / "junction-parent"
+        self._junction(link, self.root)
+        self.assertEqual(self.stage(root=link / "installation-staging")["reason"],
+                         "unsafe_installation_staging_root")
+        self.assertFalse((self.staging / "operation.one").exists())
+
+    def test_junction_repository_ancestor_is_rejected(self):
+        link = self.root / "junction-parent"
+        self._junction(link, self.root)
+        result = stage_installation_bytes(
+            self.staging, "operation.one", link / "repository",
+            self.entries, self.files.__getitem__)
+        self.assertEqual(result["reason"], "unsafe_repository_root")
+        self.assertFalse((self.staging / "operation.one").exists())
+
+    def test_junction_inside_repository_destination_is_rejected(self):
+        external = self.root / "external"
+        external.mkdir()
+        self._junction(self.repo / "assets", external)
+        self.assertEqual(self.stage()["reason"], "symlink_in_destination")
+        self.assertFalse((external / "model.glb").exists())
         self.assertFalse((self.staging / "operation.one").exists())
 
     def test_existing_repository_destination_blocks_staging(self):

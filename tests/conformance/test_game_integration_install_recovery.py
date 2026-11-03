@@ -17,7 +17,7 @@ class InstallationRecoveryTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.base = Path(temp.name)
+        self.base = Path(temp.name).resolve(strict=True)
         self.repo = self.base / "repo"
         self.root = self.base / "staging"
         self.repo.mkdir()

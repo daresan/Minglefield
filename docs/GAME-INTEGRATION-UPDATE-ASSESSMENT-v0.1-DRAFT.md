@@ -102,3 +102,23 @@ both files; record its exact commit and independently approved document digests
 in a server-controlled test trust anchor. Then perform read-only fetch-by-ref,
 byte comparison, schema/release binding and tamper tests. No client-provided
 digest or release metadata may substitute for that anchor. No installation.
+
+## Pinned external fixture T4 preflight
+
+Fixture commit: `6df11272a9ca14dcfb8dc3bbe26b29c189d12253`
+in `daresan/minglefield-integration-test`; convenience branch
+`fixtures/assessment-v01-pinned` is **mutable** and must not be used as
+the verification authority. The original release tags are unchanged.
+
+Run the read-only `tests/verify_external_assessment_fixture.py` with the
+path to the local test repository after fetching the fixture commit. It
+checks exact commit identity and the two observed Git blob IDs, prints
+SHA-256 values and proves that a digest computed from the same untrusted
+document **does not** establish independent provenance.
+
+The Git commit pin is an exact content reference, not an authenticated
+publisher endorsement or independently approved SHA-256 digest. A separate
+trusted approval/anchor and authenticated server-side consumption are still
+required before `provenance_verified` may be true in an end-to-end workflow.
+No fixture is installed, and the existing v1.1.0 tag is not retroactively
+modified.

@@ -349,7 +349,11 @@ async function request(path,options={}){
   const headers={...(options.headers||{})};
   if(credential)headers.Authorization="Bearer "+credential;
   const response=await fetch(path,{...options,headers,cache:"no-store"});
-  return {status:response.status,data:await response.json()};
+  const result={status:response.status,data:await response.json()};
+  if(result.status===401 && credential && path!=="/api/login" && path!=="/api/redeem"){
+    handleUnauthorized(result);
+  }
+  return result;
 }
 const show=(v,area="agents")=>{
   const target=area==="login"?statusLine:area==="jobs"?demoJobsOut:out;
@@ -1288,7 +1292,11 @@ document.getElementById("jobComfyUpload").onclick=async()=>{
       method:"POST",headers:{"Content-Type":"application/octet-stream",
         "X-Minglefield-Host":host_id,"X-Minglefield-Runtime":runtime_id,
         "X-Minglefield-Filename":file.name},body:file});
-    if(result.status!==200){output.textContent=JSON.stringify({uploaded,error:result.data},null,2);return;}
+    if(result.status!==200){
+      output.textContent=JSON.stringify({uploaded,error:result.data,
+        ...(result.status===401?{hint:"Minglefield-Session abgelaufen oder ungültig. Erneut anmelden; ComfyUI-Verbindung ist davon unabhängig."}:{})},null,2);
+      return;
+    }
     uploaded.push(result.data);
     await refreshJobFileChoices();
     output.textContent=JSON.stringify({uploaded,note:"Dateien liegen in ComfyUI. Noch keine automatische Workflow-/Job-Bindung."},null,2);

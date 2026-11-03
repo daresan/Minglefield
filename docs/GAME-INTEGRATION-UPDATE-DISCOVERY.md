@@ -109,3 +109,17 @@ evidence to the existing journal, then explicit owner approval, conflict detecti
 audited installation, rollback/recovery and post-install reinspection. Test tampering,
 partial failures and recovery end-to-end. No installer or new update engine is added
 by P1.4f.2. The full P1.4f delivery gate remains open.
+
+
+## P1.4f.4 implementation sequence (2026-11-03)
+
+The read-only `game_integration_install_preflight.py` is an **internal contract**, not an installation API. It requires independent server-side evidence for release binding, expected and observed artifact digests, installed-byte verification, project revision, filesystem conflict analysis and explicit owner confirmation. Even with all gates satisfied it returns `ready_for_transaction` with `installation_allowed: false` until a transactional executor and recovery journal exist. Tests are in `test_game_integration_install_preflight.py`; execution is pending on Shadow.
+
+Next implementation slices, in order:
+
+1. Specify a provider-neutral, server-attested installation plan and path containment policy; reject symlinks, traversal, duplicate destinations and concurrent revision changes. A lockfile declaration is never proof of installed bytes.
+2. Introduce a durable host/project-scoped journal with states `prepared`, `applying`, `committed`, `rollback_required`, `rolled_back` and `manual_recovery_required`. Recovery must be idempotent and fail closed after interrupted writes.
+3. Implement staging, independent digest checks, collision detection, owner confirmation, atomic replacement where possible and deterministic rollback, preserving unrelated files and the game's Git history.
+4. Expose preview/confirm/recovery status through existing Games and Hosts architecture, with an actual browser test before milestone acceptance. Do not introduce a central approval requirement or hardcoded local machine paths.
+
+Do not claim P1.4f.4 complete until tampering, partial failures, crash recovery and UI confirmation have been exercised.

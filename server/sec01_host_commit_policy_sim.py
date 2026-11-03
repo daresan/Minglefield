@@ -803,6 +803,11 @@ class HostCommitPolicy:
                     return {"state":"denied","reason":"operation_id_conflict"}
                 return {"state":row[3],"reason":"idempotent_replay",
                         "operation_id":operation_id}
+            if db.execute("""SELECT 1 FROM sec01_game_install_journal
+                WHERE host_id=? AND owner_id=? AND project_id=?
+                  AND state NOT IN ('cancelled','committed','rolled_back')
+                LIMIT 1""",(host_id,owner_id,project_id)).fetchone() is not None:
+                return {"state":"denied","reason":"project_install_operation_pending"}
             db.execute("""INSERT INTO sec01_game_install_journal
                 (operation_id,host_id,owner_id,project_id,state,plan_sha256)
                 VALUES(?,?,?,?,?,?)""",

@@ -53,6 +53,38 @@ class IsolatedInstallationStagingTests(unittest.TestCase):
         self.assertEqual(self.stage(op="../escape")["reason"], "invalid_operation_id")
         self.assertFalse((self.root / "escape").exists())
 
+    def test_symlinked_staging_root_is_rejected(self):
+        linked = self.root / "linked-staging"
+        try:
+            linked.symlink_to(self.staging, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("directory symlinks unavailable")
+        self.assertEqual(self.stage(root=linked)["reason"],
+                         "unsafe_installation_staging_root")
+        self.assertFalse((self.staging / "operation.one").exists())
+
+    def test_symlinked_staging_ancestor_is_rejected(self):
+        linked = self.root / "linked-parent"
+        try:
+            linked.symlink_to(self.root, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("directory symlinks unavailable")
+        self.assertEqual(self.stage(root=linked / "installation-staging")["reason"],
+                         "unsafe_installation_staging_root")
+        self.assertFalse((self.staging / "operation.one").exists())
+
+    def test_symlinked_repository_ancestor_is_rejected(self):
+        linked = self.root / "linked-parent"
+        try:
+            linked.symlink_to(self.root, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("directory symlinks unavailable")
+        result = stage_installation_bytes(
+            self.staging, "operation.one", linked / "repository",
+            self.entries, self.files.__getitem__)
+        self.assertEqual(result["reason"], "unsafe_repository_root")
+        self.assertFalse((self.staging / "operation.one").exists())
+
     def test_existing_repository_destination_blocks_staging(self):
         (self.repo / "assets").mkdir()
         (self.repo / "assets/model.glb").write_bytes(b"original")

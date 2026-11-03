@@ -46,3 +46,14 @@ Keep existing `preview.release_notes`, `preview.changed_files`, `preview.compati
 Acceptance for this contract-only step: documentation and regression tests pass on Windows; no Game repository, Alpha DB, host configuration, runtime or production registry is modified.
 
 References: `docs/GAME-DELIVERY-CONTINUITY.md`, `docs/GAME-INTEGRATION-VERIFICATION-v0.1-DRAFT.md`, `docs/GAME-INTEGRATION-UPDATE-DISCOVERY.md`.
+
+## Repository identifier policy (schema v0.1)
+
+The compatibility and migration declaration schemas accept a GitHub source as
+`owner/repository` with exactly two nonempty segments. Each segment must begin
+with an ASCII letter, digit or underscore; subsequent characters may additionally
+include dots and hyphens. Dot-prefixed segments (including `.` and `..`),
+backslashes, empty segments and additional path separators are rejected.
+This is a deliberately conservative assessment-document policy; it is not a
+claim about every name GitHub itself might accept. The same rule applies to
+both assessment schemas. Schema acceptance is never proof of authorized source.

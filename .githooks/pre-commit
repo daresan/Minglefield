@@ -1,0 +1,13 @@
+#!/bin/sh
+# Minglefield repository-managed hook. Enable once per clone:
+# git config --local core.hooksPath .githooks
+set -eu
+repo=$(git rev-parse --show-toplevel) || exit 1
+if command -v python >/dev/null 2>&1; then
+  python "$repo/scripts/check_soul_security.py"
+elif command -v py >/dev/null 2>&1; then
+  py -3 "$repo/scripts/check_soul_security.py"
+else
+  echo "SOUL security check ERROR: Python interpreter not found" >&2
+  exit 1
+fi

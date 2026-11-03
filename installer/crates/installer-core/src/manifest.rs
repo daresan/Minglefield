@@ -41,7 +41,9 @@ impl ArtifactManifest {
         if fields.len() != 4 {
             return Err(ManifestError::InvalidField);
         }
-        let version = fields["version"].parse().map_err(|_| ManifestError::InvalidVersion)?;
+        let version = fields["version"]
+            .parse()
+            .map_err(|_| ManifestError::InvalidVersion)?;
         if version != 1 {
             return Err(ManifestError::InvalidVersion);
         }
@@ -54,7 +56,9 @@ impl ArtifactManifest {
         {
             return Err(ManifestError::InvalidFilename);
         }
-        let size = fields["size"].parse().map_err(|_| ManifestError::InvalidField)?;
+        let size = fields["size"]
+            .parse()
+            .map_err(|_| ManifestError::InvalidField)?;
         let sha256 = fields["sha256"];
         if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(ManifestError::InvalidField);
@@ -87,8 +91,14 @@ mod tests {
         let input = "version=1\nfilename=payload.bin\nsize=3\nsha256=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n";
         let manifest = ArtifactManifest::parse(input).unwrap();
         assert_eq!(manifest.verify_bytes(b"abc"), Ok(()));
-        assert_eq!(manifest.verify_bytes(b"abd"), Err(ManifestError::DigestMismatch));
-        assert_eq!(manifest.verify_bytes(b"ab"), Err(ManifestError::SizeMismatch));
+        assert_eq!(
+            manifest.verify_bytes(b"abd"),
+            Err(ManifestError::DigestMismatch)
+        );
+        assert_eq!(
+            manifest.verify_bytes(b"ab"),
+            Err(ManifestError::SizeMismatch)
+        );
     }
 
     #[test]

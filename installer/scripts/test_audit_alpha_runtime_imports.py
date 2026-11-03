@@ -41,15 +41,15 @@ class AlphaRuntimeImportAuditTests(unittest.TestCase):
             root = Path(tmp) / "server"
             root.mkdir()
             (root / "private_alpha_gateway.py").write_text(
-                "from server.helper import run\\n", encoding="utf-8"
+                "from server.helper import run\n", encoding="utf-8"
             )
             (root / "helper.py").write_text(
-                "try:\\n    from .sibling import work\\n"
-                "except ImportError:\\n    from sibling import work\\n",
+                "try:\n    from .sibling import work\n"
+                "except ImportError:\n    from sibling import work\n",
                 encoding="utf-8",
             )
             (root / "sibling.py").write_text(
-                "from jsonschema import Draft202012Validator\\n", encoding="utf-8"
+                "from jsonschema import Draft202012Validator\n", encoding="utf-8"
             )
             result = audit(root)
             self.assertEqual(result["errors"], [])

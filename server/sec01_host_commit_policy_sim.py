@@ -921,6 +921,50 @@ class HostCommitPolicy:
                 WHERE operation_id=? AND state='prepared'""",(operation_id,))
         return {"state":"cancelled","reason":"prepared_operation_cancelled"}
 
+    def inspect_game_install_cleanup(self, host_id, owner_id, project_id,
+                                     operation_id, entries,
+                                     installation_staging_root):
+        """Owner-scoped journal-bound cleanup inspection; never delete files.
+
+        Staging root is supplied by trusted server configuration, never by
+        an untrusted HTTP request. The DB transaction covers authorization
+        and inspection but does not lock external filesystem mutations.
+        """
+        from game_integration_install_cleanup import inspect_staging_cleanup
+        from game_integration_install_staging import validate_staging_manifest
+        plan = validate_staging_manifest(entries)
+        if plan["state"] != "valid":
+            return {"state": "denied", "reason": plan["reason"],
+                    "deletion_performed": False, "cleanup_allowed": False}
+        if not all(ident(value) for value in (
+                host_id, owner_id, project_id, operation_id)):
+            return {"state": "denied", "reason": "invalid_install_operation",
+                    "deletion_performed": False, "cleanup_allowed": False}
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                    WHERE host_id=? AND owner_id=?""",
+                    (host_id, owner_id)).fetchone() is None:
+                return {"state": "denied", "reason": "not_host_owner",
+                        "deletion_performed": False, "cleanup_allowed": False}
+            if db.execute("""SELECT 1 FROM alpha_game_projects
+                    WHERE host_id=? AND owner_id=? AND project_id=?""",
+                    (host_id, owner_id, project_id)).fetchone() is None:
+                return {"state": "denied", "reason": "project_not_found",
+                        "deletion_performed": False, "cleanup_allowed": False}
+            row = db.execute("""SELECT state,plan_sha256
+                    FROM sec01_game_install_journal
+                    WHERE operation_id=? AND host_id=? AND owner_id=?
+                    AND project_id=?""",
+                    (operation_id, host_id, owner_id, project_id)).fetchone()
+            if row is None:
+                return {"state": "denied", "reason": "operation_not_found",
+                        "deletion_performed": False, "cleanup_allowed": False}
+            return inspect_staging_cleanup(
+                installation_staging_root, operation_id, entries,
+                journal_operation_id=operation_id,
+                journal_plan_sha256=row[1], journal_state=row[0],
+                owner_authorized=True)
+
     def game_install_journal_status(self, host_id, owner_id, project_id):
         """Read-only owner-scoped operation history; no cross-host disclosure."""
         with self.authority.store._tx() as db:

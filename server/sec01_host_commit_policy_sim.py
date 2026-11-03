@@ -625,8 +625,20 @@ class HostCommitPolicy:
         if report["installation_state"]!="declarations_unverified":
             return {"project_id":project_id,"installation_state":report["installation_state"],
                     "updates":[],"state":"unknown","reason":"manual_review_required"}
+        settings=self.host_settings(host_id,owner_id)
+        if settings is None:
+            return None
+        approved=set(settings["trusted_integration_sources"])
         updates=[]
         for entry in entries:
+            source=entry.get("release_source")
+            repository=source.get("repository") if isinstance(source,dict) else None
+            if repository not in approved:
+                updates.append({"integration_id":entry["integration_id"],
+                                "state":"unknown","reason":"source_not_trusted_by_host",
+                                "verification_state":"unknown",
+                                "installation_allowed":False})
+                continue
             if self._assessment_manifest_path is not None:
                 kwargs={"manifest_path":self._assessment_manifest_path,
                         "byte_loader":load_pinned_assessment_bytes}

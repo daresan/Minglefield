@@ -29,11 +29,19 @@ def inventory(report, package_map):
             ]}
 
 
+def read_audit_json(path):
+    """Accept UTF-8 and BOM-marked UTF-16 PowerShell redirection output."""
+    raw = path.read_bytes()
+    if raw.startswith((b"\\xff\\xfe", b"\\xfe\\xff")):
+        return json.loads(raw.decode("utf-16"))
+    return json.loads(raw.decode("utf-8-sig"))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audit_json", type=Path)
     args = parser.parse_args(argv)
-    report = json.loads(args.audit_json.read_text(encoding="utf-8"))
+    report = read_audit_json(args.audit_json)
     print(json.dumps(inventory(report, importlib.metadata.packages_distributions()),
                      indent=2, sort_keys=True))
     return 0

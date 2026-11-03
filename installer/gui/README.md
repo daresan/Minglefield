@@ -1,6 +1,6 @@
 # Tauri 2 installer GUI — non-installing proof of concept
 
-This GUI calls the existing Rust `minglefield-installer-core::plan` function, the same one used by `installer-cli`. It only previews plans. It does not copy files, download dependencies, verify publisher signatures, install runtimes, authenticate, or claim Hosts. Do not distribute as a functional installer.
+This GUI calls the existing Rust `minglefield-installer-core::plan` function, the same one used by `installer-cli`. It only previews plans. It does not copy files, download dependencies, verify release provenance, install runtimes, authenticate, or claim Hosts. Do not distribute as a functional installer.
 
 On a trusted developer workstation with Node.js/npm, Rust and Tauri OS prerequisites:
 
@@ -35,6 +35,14 @@ Use `minglefield-installer-cli --silent --defaults --json` or `--silent --config
 
 The unattended preview rejects repeated `--silent`, `--defaults`, `--json`, `--config`, or `--install-dir` flags with exit code 2. A value-taking option cannot silently consume a following `--flag` as its value. A deliberately malformed invocation fails before file access or planning. The `--json` output remains a read-only preview; this is not an installation execution entrypoint.
 
-### Artifact integrity versus publisher authenticity
+### Minglefield release provenance (no paid certificates)
 
-The shared Rust core now offers `integrity::sha256_hex`, strict version-1 single-artifact `manifest::ArtifactManifest` parsing, and a separate `publisher::PublisherPolicy` release-verification boundary. A checksum that matches a supplied manifest is **not proof of publisher identity**, because an attacker can replace both. The publisher verifier deliberately returns `PublisherVerificationUnavailable` even for matching artifact bytes until a pinned-key signature verification and trusted release metadata policy have been implemented and tested. Never use `ArtifactManifest::verify_bytes` alone to authorize downloading, executing, extracting or installing a release. No installer execution is enabled.
+This section concerns **installing Minglefield itself**, not the independent, stricter game-installation security rules.
+
+- Official distribution: the public `daresan/Minglefield` repository and a release based on its protected `main` branch.
+- Forks: a fork maintainer is the publisher of their own distribution; no approval or certificate from the original maintainer is required.
+- No paid publisher certificates, commercial signing services, or platform code-signing subscriptions are required by Minglefield's own trust policy.
+- An artifact manifest with SHA-256 checks file integrity, but not the connection to a GitHub commit. A trusted GitHub release and a reproducible or independently attested build provenance should connect the artifact to the chosen repository and commit using free mechanisms where practical.
+- The `publisher::PublisherPolicy` placeholder currently rejects even checksum-valid artifacts with `RepositoryProvenanceUnavailable`, until repository/release provenance verification is implemented. This is **not** a demand for a paid signing certificate. No installation execution is enabled.
+
+Platform packaging and OS security prompts must be documented honestly; Minglefield's own policy must not misrepresent operating-system trust requirements.

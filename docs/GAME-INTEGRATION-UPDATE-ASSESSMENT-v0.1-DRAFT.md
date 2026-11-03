@@ -50,10 +50,12 @@ References: `docs/GAME-DELIVERY-CONTINUITY.md`, `docs/GAME-INTEGRATION-VERIFICAT
 ## Repository identifier policy (schema v0.1)
 
 The compatibility and migration declaration schemas accept a GitHub source as
-`owner/repository` with exactly two nonempty segments. Each segment must begin
-with an ASCII letter, digit or underscore; subsequent characters may additionally
-include dots and hyphens. Dot-prefixed segments (including `.` and `..`),
-backslashes, empty segments and additional path separators are rejected.
+`owner/repository` with exactly two nonempty segments. Each segment may contain ASCII letters, digits, underscores, dots and hyphens,
+including a leading dot (for example `owner/.mygame`). Segments consisting
+**only** of dots (including `.`, `..` and `...`), backslashes, empty
+segments and additional path separators are rejected.
 This is a deliberately conservative assessment-document policy; it is not a
 claim about every name GitHub itself might accept. The same rule applies to
 both assessment schemas. Schema acceptance is never proof of authorized source.
+
+This policy is scoped to assessment-document source identifiers; it does not rename or constrain Game project repositories. Centralization with the existing registry and lock source identifier validation should be a separate compatibility-reviewed change, not an implicit schema migration.

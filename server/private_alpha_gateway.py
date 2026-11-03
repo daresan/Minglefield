@@ -1336,7 +1336,7 @@ async function loadHostStorageSettings(){
     if(requestId!==hostSettingsRequestId||host_id!==hv("hostSelect"))return;
     document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
     if(result.status===200){
-      staging.value=result.data.settings.staging_root||"";
+      staging.value=result.data.settings.job_attachments_root||"";
       output.value=result.data.settings.output_root||"";
       sources.value=(result.data.settings.trusted_integration_sources||[]).join("\n");
       save.disabled=false;staging.disabled=false;output.disabled=false;sources.disabled=false;
@@ -1350,7 +1350,7 @@ document.getElementById("hostSettingsLoad").onclick=loadHostStorageSettings;
 document.getElementById("hostSettingsSave").onclick=async()=>{
   const result=await api("/api/host/settings",{
     host_id:hv("hostSelect"),
-    settings:{staging_root:document.getElementById("hostStagingRoot").value.trim(),
+    settings:{job_attachments_root:document.getElementById("hostStagingRoot").value.trim(),
               output_root:document.getElementById("hostOutputRoot").value.trim(),
               trusted_integration_sources:document.getElementById("hostTrustedIntegrationSources").value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
   });
@@ -2226,12 +2226,12 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 filename=self.headers.get("X-Minglefield-Filename","")
                 length=self.headers.get("Content-Length","")
                 settings=policy.host_settings(host_id,principal.user_id) if policy else None
-                configured=(settings or {}).get("staging_root","")
+                configured=(settings or {}).get("job_attachments_root","")
                 if self.headers.get("Content-Type","").split(";")[0].strip()!="application/octet-stream":
                     self.reply(415,{"error":"binary_upload_required"})
                     return
                 if not configured:
-                    self.reply(409,{"error":"staging_root_not_configured"})
+                    self.reply(409,{"error":"job_attachments_root_not_configured"})
                     return
                 if not length.isdecimal() or int(length)>MAX_ASSET_BYTES:
                     self.reply(413,{"error":"invalid_asset_size"})
@@ -2478,7 +2478,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     from staged_comfy_assets import ASSET_PREFIX, staged_record, upload_staged_asset
                     from game_job_attachments import JobAttachmentsError
                     settings=policy.host_settings(body["host_id"],principal.user_id)
-                    root=(settings or {}).get("staging_root","")
+                    root=(settings or {}).get("job_attachments_root","")
                     file_bindings={p["binding"] for p in context["metadata"].get("parameters",[])
                                    if p.get("type")=="file"}
                     for binding,value in context["parameters"].items():
@@ -2685,7 +2685,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                      if type(v) is str and v.startswith(ASSET_PREFIX)}
                     if staged_bindings:
                         settings=policy.host_settings(body["host_id"],principal.user_id)
-                        root=(settings or {}).get("staging_root","")
+                        root=(settings or {}).get("job_attachments_root","")
                         if not root or not staged_bindings.issubset(file_bindings):
                             self.reply(400,{"error":"invalid_staged_asset_binding"})
                             return

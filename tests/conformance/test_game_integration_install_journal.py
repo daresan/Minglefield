@@ -22,7 +22,7 @@ class GameInstallJournalTests(unittest.TestCase):
             db.execute("INSERT INTO sec01_host_owners(host_id,owner_id) VALUES(?,?)",
                        ("host.one", "user.owner"))
             db.execute("""INSERT INTO alpha_game_projects
-                (host_id,owner_id,project_id,name,repository_root,staging_root,output_root,settings_revision)
+                (host_id,owner_id,project_id,name,repository_root,job_attachments_root,output_root,settings_revision)
                 VALUES(?,?,?,?,?,?,?,?)""",
                 ("host.one", "user.owner", "game.one", "Game",
                  str(self.root), str(self.root / "staging"),
@@ -115,12 +115,12 @@ class GameInstallJournalTests(unittest.TestCase):
     def test_game_project_reports_job_attachments_alias_without_moving_files(self):
         projects = self.policy.list_game_projects("host.one", "user.owner")
         self.assertEqual(len(projects), 1)
-        self.assertEqual(projects[0]["job_attachments_root"],
-                         projects[0]["staging_root"])
+        self.assertEqual(projects[0]["job_attachments_root"], str(self.root / "staging"))
+        self.assertNotIn("staging_root", projects[0])
         inspected = self.policy.inspect_game_project_paths(
             "host.one", "user.owner", "game.one")
-        self.assertEqual(inspected["job_attachments_root"],
-                         inspected["staging_root"])
+        self.assertEqual(inspected["job_attachments_root"]["path"], str(self.root / "staging"))
+        self.assertNotIn("staging_root", inspected)
         self.assertFalse((self.root / "staging").exists())
 
     def test_recovery_is_conservative(self):

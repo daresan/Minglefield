@@ -92,9 +92,10 @@ class IsolatedInstallationStagingTests(unittest.TestCase):
             self.skipTest("Windows junction-specific test")
         result = subprocess.run(
             ["cmd", "/c", "mklink", "/J", str(link), str(target)],
-            capture_output=True, text=True)
+            capture_output=True)
         if result.returncode:
-            self.skipTest("junction creation unavailable: " + result.stderr.strip())
+            details = result.stderr.decode("utf-8", errors="replace").strip()
+            self.skipTest("junction creation unavailable: " + details)
         self.assertTrue(link.exists())
 
     def test_junction_staging_root_is_rejected(self):

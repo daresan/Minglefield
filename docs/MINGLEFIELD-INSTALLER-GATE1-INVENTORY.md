@@ -111,6 +111,39 @@ Installer scope: application installation and discovery, runtime dependency prov
 
 Gate 1 is **not yet signed off**. The responsibility boundary is clarified; no installer-specific job-rule implementation is planned.
 
+## Gate 1 product launch, platform distribution and licensing audit (2026-11-03)
+
+### Verified launch contract versus required packaged contract
+
+`README.md` calls Minglefield a concept/foundation project with no playable release or production SDK; `server/README.md` calls the server an experimental reference implementation, not a production server. The current Alpha launch is `python -B server/private_alpha_gateway.py --auth-db <db> --port 8767`, as documented in `docs/MINGLEFIELD-PLATFORM-SETUP-ALPHA.md`.
+
+`run_local()` initializes `AlphaAuthStore` and `HostCommitPolicy`, generates a fresh console bootstrap secret, binds `ThreadingHTTPServer` to `127.0.0.1`, and blocks in `serve_forever()`. It does not define a desktop executable entry point, process supervisor, health/ready handshake, UI window lifecycle, or installer-safe first-run provisioning. The packaged launcher must be a **new explicit contract**, not a claim that this prototype is production-ready.
+
+Proposed launcher acceptance contract for Gate 2 review:
+- Run without installed Python, Git, Conda, PowerShell or shell commands; use packaged/managed isolated runtime.
+- Resolve installed application resources separately from writable per-user state, logs, caches, optional managed runtimes and secrets.
+- Bind local service to loopback only unless a separately reviewed remote service mode exists; choose/validate ports and report collision rather than silently connecting to an unrelated process.
+- Establish authenticated process identity/health before opening local UI; cleanly terminate or detach according to documented lifecycle, with no orphaned untrusted privileged process.
+- Provide structured startup errors, crash logs and a repair route, without exposing bearer tokens or provisioning secrets.
+- Preserve existing SQLite state; require explicit backup and migration policy before schema-changing updates.
+- Support source checkout recognition without confusing source detection with a packaged executable; never require Git metadata for source-only recognition.
+
+### Platform paths and lifecycle boundaries
+
+Windows current-user program default: `%LOCALAPPDATA%\\Programs\\Minglefield`; persistent data `%LOCALAPPDATA%\\Minglefield`. Existing gateway uses this data root for `alpha.sqlite3`. Current gateway uses `~/.local/share/Minglefield/alpha.sqlite3` for both macOS and Linux. Gate 2 must define an appropriate macOS per-user Application Support path and Linux XDG data/config/cache conventions, with backward-compatible detection and consented migration. Do not infer these from the developer's machine.
+
+### Release and licensing blockers
+
+- The root `README.md` explicitly states **license selection is pending** and that public visibility does not grant redistribution rights. `server/README.md` identifies AGPL 3.0 as a **candidate**, not an adopted license. Therefore a redistributable installer release must be gated on legal/licensing approval, including dependencies, Python distribution, bundler and optional components.
+- The `game-install-portability.yml` and `game-installation-security.yml` workflows run conformance tests for third-party game installation modules, even on Windows/macOS/Linux. They do not build, sign, publish or smoke-test a Minglefield platform installer.
+- No platform release feed, signed artifact metadata or production application version identity is established by the inspected entry points and documentation.
+
+### Gate 2 architecture comparison criteria (no technology selected yet)
+
+Compare a native OS-specific installer around a packaged Python launcher, a cross-platform desktop shell around a local backend, and a Python GUI/bundler distribution. Evaluate: zero-prerequisite install; Windows per-user no-elevation path; macOS signing/notarization; Linux packaging variants; trustworthy product identity; independent app/data lifecycle; update rollback; optional ComfyUI standard-only integration; security of local provisioning; reproducible per-OS dependency closure; license compatibility; maintainability and clean-machine CI.
+
+**Gate 1 decision:** existing Alpha gateway is a useful backend reference but **not** itself a production packaged launcher. Implementation of a launcher and release identity is a prerequisite for a genuine end-user installer.
+
 ## Next Gate 1 verification tasks
 
 1. Traverse nested `sdk/`, `services/`, `integrations/`, workflows and packaging metadata; enumerate actual Python runtime imports and optional import boundaries. Compare with declared requirements.

@@ -2,27 +2,30 @@
 //!
 //! SHA-256 only establishes integrity relative to a manifest. Neither an
 //! unsigned manifest nor a caller-supplied digest establishes publisher trust.
-//! Until a pinned-key signature verifier is implemented, release verification
+//! Release provenance is tied to the selected GitHub repository and protected
+//! release commit, not to a paid publisher certificate. A fork may be its own
+//! publisher. Until repository/release provenance is verifiable, verification
 //! MUST fail closed. This module performs no filesystem or network operations.
 
 use crate::manifest::ArtifactManifest;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrustError {
-    PublisherVerificationUnavailable,
+    RepositoryProvenanceUnavailable,
     InvalidManifest,
     InvalidArtifact,
 }
 
 /// A publisher verification policy, not an overrideable success flag.
 ///
-/// The first release policy has no configured pinned public key or verified
-/// signature format. Callers must not treat checksum-only success as trusted.
+/// The release policy does not yet verify the selected GitHub repository,
+/// protected release commit, and artifact-to-commit provenance. A checksum
+/// alone cannot establish those properties.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PublisherPolicy;
 
 impl PublisherPolicy {
-    /// Intentionally fails closed until authenticated release metadata exists.
+    /// Intentionally fails closed until repository release provenance exists.
     pub fn verify_release(
         &self,
         manifest_text: &str,
@@ -33,7 +36,7 @@ impl PublisherPolicy {
         manifest
             .verify_bytes(artifact)
             .map_err(|_| TrustError::InvalidArtifact)?;
-        Err(TrustError::PublisherVerificationUnavailable)
+        Err(TrustError::RepositoryProvenanceUnavailable)
     }
 }
 
@@ -51,7 +54,7 @@ mod tests {
     #[test]
     fn matching_checksum_never_grants_publisher_trust() {
         let result = PublisherPolicy.verify_release(MANIFEST, b"abc");
-        assert_eq!(result, Err(TrustError::PublisherVerificationUnavailable));
+        assert_eq!(result, Err(TrustError::RepositoryProvenanceUnavailable));
     }
 
     #[test]

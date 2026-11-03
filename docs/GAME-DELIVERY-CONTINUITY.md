@@ -61,3 +61,12 @@ Keep ROADMAP.md as the main milestone index. This note defines acceptance gates 
 stable-channel decision and explicit declaration-only comparison states. This resolves
 the version-policy question above for discovery; verified installation and the complete
 P1.4f.3/P1.4f.4 acceptance gates remain open. No Game data migration is performed.
+
+## P1.4f.3 assessment contract (2026-11-03)
+
+The fail-closed, contract-only assessment specification is recorded in
+[Game Integration Update Assessment v0.1 draft](GAME-INTEGRATION-UPDATE-ASSESSMENT-v0.1-DRAFT.md).
+It defines independent compatibility, migration, local-conflict, source, integrity,
+approval and recovery evidence gates. No installer, trust promotion or runtime
+mutation is introduced by this documentation step. Implementation and Windows
+acceptance tests remain pending.

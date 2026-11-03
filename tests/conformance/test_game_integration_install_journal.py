@@ -2,6 +2,7 @@ import sys
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 import tempfile
 import unittest
 from pathlib import Path
@@ -180,6 +181,62 @@ class GameInstallJournalTests(unittest.TestCase):
                      "prepared", "b" * 64))
         self.assertEqual(len(self.policy.game_install_journal_status(
             *args[:3])), 1)
+
+    def test_parallel_cas_transitions_across_independent_connections(self):
+        args = ("host.one", "user.owner", "game.one", "op.cas.race", "a" * 64)
+        self.assertEqual(self.policy.prepare_game_install_journal(*args)["state"],
+                         "prepared")
+        policies = [
+            HostCommitPolicy(IntegratedAlphaAdmission(
+                AlphaAuthStore(self.root / "db.sqlite3")))
+            for _ in range(6)
+        ]
+        barrier = Barrier(len(policies))
+
+        def advance(policy):
+            barrier.wait(timeout=5)
+            return policy.record_game_install_transition(
+                *args, "prepared", "applying", executor_authorized=True,
+                plan_verified=True)
+
+        with ThreadPoolExecutor(max_workers=len(policies)) as pool:
+            results = list(pool.map(advance, policies))
+        self.assertEqual(sum(r["state"] == "applying" for r in results), 1)
+        self.assertEqual(sum(r.get("reason") == "journal_state_conflict"
+                             for r in results), 5)
+        entry = self.policy.game_install_journal_status(*args[:3])[0]
+        self.assertEqual(entry["state"], "applying")
+        self.assertFalse(entry["recovery"]["auto_retry_allowed"])
+
+    def test_parallel_distinct_terminal_transitions_only_one_wins(self):
+        args = ("host.one", "user.owner", "game.one", "op.cas.terminal", "b" * 64)
+        self.policy.prepare_game_install_journal(*args)
+        self.assertEqual(self.policy.record_game_install_transition(
+            *args, "prepared", "applying", executor_authorized=True,
+            plan_verified=True)["state"], "applying")
+        policies = [
+            HostCommitPolicy(IntegratedAlphaAdmission(
+                AlphaAuthStore(self.root / "db.sqlite3")))
+            for _ in range(2)
+        ]
+        barrier = Barrier(2)
+
+        def advance(item):
+            policy, destination = item
+            barrier.wait(timeout=5)
+            return policy.record_game_install_transition(
+                *args, "applying", destination, executor_authorized=True,
+                plan_verified=True)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(advance, zip(
+                policies, ("committed", "rollback_required"))))
+        self.assertEqual(sum(r["state"] in ("committed", "rollback_required")
+                             for r in results), 1)
+        self.assertEqual(sum(r.get("reason") == "journal_state_conflict"
+                             for r in results), 1)
+        final = self.policy.game_install_journal_status(*args[:3])[0]["state"]
+        self.assertIn(final, ("committed", "rollback_required"))
 
     def test_preparation_is_persistent_and_idempotent(self):
         args = ("host.one", "user.owner", "game.one", "op.one", "a" * 64)

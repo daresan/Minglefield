@@ -12,7 +12,7 @@ Support Windows, macOS and Linux with self-starting installers that require no p
 ## Installer journeys
 
 - **Standard:** safe OS-specific defaults, clear progress, minimal choices, automatic detection, install/reuse required Python runtime, local Host creation, launch.
-- **Advanced:** destination and data locations, detected installations and manual path selection, Python/Conda/ComfyUI options, full relevant Host settings including scheduling, enabled state, resource limits and runtime configuration. All installer-set Host settings remain visible/editable in Minglefield's existing Hosts UI.
+- **Advanced:** destination and data locations, detected installations and manual path selection, Python/Conda/ComfyUI options, installation and connection options, local Host registration, and optional Host-owned runtime configuration; job authorization/scheduling rules remain exclusively in Hosts. All installer-set Host settings remain visible/editable in Minglefield's existing Hosts UI.
 - **Existing installation:** detect and offer safe reuse/repair/update without silently replacing an existing environment, Host ownership, settings, SQLite database, user data, or unrelated files.
 - **No installation detected:** provision the local Host during first run; do not require the user to manually copy or enter a Host claim token.
 
@@ -44,7 +44,7 @@ For **Python, Conda and ComfyUI**: search known platform-specific locations, ver
 
 The installer knows which computer it is running on; this is **not by itself proof of authorization** to claim an account's Host. Reuse the existing authenticated Host persistence and configuration API rather than creating a second settings store or privileged bypass. Design a **one-time, narrowly scoped, locally authorized provisioning handshake** bound to the intended local installation and authenticated operator/account. The setup flow should perform the Host claim automatically, without requiring manual token entry; secrets must be ephemeral and invalidated after use, and the flow must resist unrelated local processes. Reinstall/repair must not silently seize a Host already owned by another account. Preserve the existing manual token/confirmation mechanism for **remote Host claims**.
 
-The installer should expose the relevant Host controls already available in the alpha UI, with approachable defaults and an Advanced section; both surfaces must read/write the same authoritative Host model. The existing alpha gateway's local bootstrap code and current Host-claim route require security and persistence review **before** reuse or extension.
+The installer/first-run flow may register the local Host and configure only the minimal installation-related Host connection and optional runtime settings through existing authorized APIs. Host job-approval rules, scheduling, resource limits, rule priority and enablement belong to the Hosts/job-policy UI, not the installer; the installer must neither create nor modify them. The existing alpha gateway's local bootstrap code and current Host-claim route require security and persistence review **before** reuse or extension.
 
 ## Existing repository boundaries and evidence to inspect
 

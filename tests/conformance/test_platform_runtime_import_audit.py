@@ -53,7 +53,7 @@ class RuntimeImportAuditTests(unittest.TestCase):
         self.assertEqual(report["dynamic_import_review"], [])
 
     def test_from_package_import_local_module(self):
-        entry = self.write("main.py", "from server import helper\n")
+        entry = self.write("main.py", f"from {self.root.name} import helper\n")
         self.write("helper.py", "import third_party_in_helper\n")
         report = audit(entry, self.root)
         self.assertEqual(report["local_modules"], ["helper.py", "main.py"])

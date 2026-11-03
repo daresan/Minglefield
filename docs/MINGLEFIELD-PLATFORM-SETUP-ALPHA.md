@@ -31,12 +31,34 @@ $mfPython = $env:MINGLEFIELD_PYTHON
 
 The user must select the interpreter explicitly. The Python entry point avoids PowerShell script execution-policy restrictions. A failing preflight must not trigger an implicit installation.
 
+## Second deliverable: isolated Python environment bootstrap (alpha)
+
+`scripts/minglefield_environment.py` uses only the Python standard library and
+runs on Windows, Linux and macOS. It **requires a deliberately selected Python
+3.10+ interpreter** and therefore does not yet solve first-time Python runtime
+installation. It refuses unrecognized existing targets and does not modify
+Conda base or another selected Python installation.
+
+From the repository root, with the existing confirmed interpreter:
+
+```powershell
+$mfPython = $env:MINGLEFIELD_PYTHON
+& $mfPython -B scripts/minglefield_environment.py --target "$env:LOCALAPPDATA\\Minglefield\\venv" --install-ci
+```
+
+For Linux/macOS, use the selected Python executable and a user-owned target
+path (for example `$HOME/.local/share/minglefield/venv`); the target parent
+must exist. Without `--install-ci`, the script only creates/reuses the virtual
+environment. With it, it installs **conformance dependencies only** and runs
+the preflight; it does not claim the gateway runtime is fully provisioned.
+It does not install ComfyUI, migrate databases, change Git, or restart services.
+
 ## Next implementation slices (not yet delivered)
 
 1. Inventory actual gateway runtime imports and optional integrations;
    distinguish mandatory and optional packages.
-2. Explicit opt-in installation/update of Python dependencies into a
-   dedicated Minglefield environment, never into an unselected interpreter.
+2. Define complete runtime dependency declarations and install them into
+   the dedicated environment; design a first-install Python acquisition path.
 3. Idempotent platform update with preflight, backup of persistent state,
    migration policy, failure reporting and operator-controlled restart.
 4. Cross-platform support after Windows alpha behavior is verified.

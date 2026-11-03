@@ -55,6 +55,15 @@ def audit(entry: Path, module_root: Path) -> dict:
                     dynamic.append({"file": path.name, "line": node.lineno,
                                     "kind": "import_module"})
                 continue
+            # "from server import helper" and "from . import helper" may
+            # import local submodules even when node.module is only a package.
+            # Discover those explicit aliases without importing any code.
+            if isinstance(node, ast.ImportFrom):
+                if node.level == 1 and node.module is None:
+                    names = [alias.name for alias in node.names if alias.name != "*"]
+                elif node.level == 0 and node.module == module_root.name:
+                    names = [module_root.name + "." + alias.name
+                             for alias in node.names if alias.name != "*"]
             for name in names:
                 top = name.split(".")[0]
                 candidate = module_root / (top + ".py")

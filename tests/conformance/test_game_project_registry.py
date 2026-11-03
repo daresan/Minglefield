@@ -416,7 +416,7 @@ class GameProjectRegistryTests(unittest.TestCase):
         result = self.policy.inspect_game_project_paths(
             "host.one", "user.owner", "game.paths")
         self.assertEqual(result["repository_root"]["state"], "directory")
-        self.assertEqual(result["staging_root"]["state"], "missing")
+        self.assertEqual(result["job_attachments_root"]["state"], "missing")
         self.assertEqual(result["output_root"]["state"], "not_directory")
         self.assertFalse(stage.exists())
         self.assertEqual(file_path.read_text(), "keep")

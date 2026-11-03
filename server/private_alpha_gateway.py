@@ -2396,7 +2396,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 policy=getattr(service,"_host_policy",None)
                 fields={"host_id","project_id","settings_revision","name",
                         "repository_root","output_root"}
-                attachment_keys={"staging_root","job_attachments_root"}
+                attachment_keys={"job_attachments_root"}
                 if (policy is None or type(body) is not dict
                         or not fields <= set(body)
                         or not (set(body)-fields) <= attachment_keys
@@ -2423,7 +2423,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
             if path=="/api/game/projects":
                 policy=getattr(service,"_host_policy",None)
                 fields={"host_id","project_id","name","repository_root","output_root"}
-                attachment_keys={"staging_root","job_attachments_root"}
+                attachment_keys={"job_attachments_root"}
                 if (policy is None or type(body) is not dict
                         or not fields <= set(body)
                         or not (set(body)-fields) <= attachment_keys

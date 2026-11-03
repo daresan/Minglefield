@@ -255,6 +255,63 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(data["updates"],[])
         self.assertFalse((repo/"minglefield.lock").exists())
 
+    def test_host_local_release_discovery_http_without_central_registry(self):
+        from unittest.mock import patch
+        repository = self.root / "local_release"
+        repository.mkdir()
+        project = "game.local.release"
+        payload = dict(host_id="host.one", project_id=project, name="Local release",
+                       repository_root=str(repository),
+                       staging_root=str(repository / "staging"),
+                       output_root=str(repository / "output"))
+        self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
+        (repository / ".minglefield").mkdir()
+        (repository / ".minglefield" / "project.json").write_text(
+            json.dumps({"schema_version": 1, "project_id": project}))
+        source = {"provider": "github", "repository": "daresan/minglefield-integration-test"}
+        (repository / "minglefield.lock").write_text(json.dumps({
+            "lock_version": "0.1", "project_id": project,
+            "packages": [{"package_id": "community.daresan.test",
+                          "kind": "game_integration", "version": "1.0.0",
+                          "publisher": "daresan", "release_source": source,
+                          "artifact": {"reference": "asset", "sha256": "a" * 64}}]}))
+        route = "/api/game/integration/releases?host_id=host.one&project_id=" + project
+        calls = []
+        def releases(repo):
+            calls.append(repo)
+            return {"state": "available", "releases": [
+                {"tag_name": "v1.1.0", "release_notes": "Fixture"}]}
+        import game_integration_updates as updates
+        original = updates.discover_integration_update
+        with patch("game_integration_registry.load_registry",
+                   return_value={"registry_version": "0.1", "integrations": []}), patch(
+                "game_integration_updates.discover_integration_update",
+                side_effect=lambda entry, catalog: original(
+                    entry, catalog, fetcher=releases,
+                    compare_fetcher=lambda *_: {"state": "unknown"})):
+            status, denied = self.request("GET", route, self.owner)
+            self.assertEqual(status, 200)
+            self.assertEqual(denied["updates"][0]["reason"], "source_not_trusted_by_host")
+            self.assertEqual(calls, [])
+            self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
+                "host_id": "host.one", "settings": {
+                    "staging_root": "", "output_root": "",
+                    "trusted_integration_sources": [source["repository"]]}})[0], 200)
+            status, allowed = self.request("GET", route, self.owner)
+            self.assertEqual(status, 200)
+            self.assertEqual(calls, [source["repository"]])
+            self.assertEqual(allowed["updates"][0]["available_version"], "v1.1.0")
+            self.assertFalse(allowed["updates"][0]["installation_allowed"])
+            self.assertEqual(allowed["updates"][0]["verification_state"], "unknown")
+            self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
+                "host_id": "host.one", "settings": {
+                    "staging_root": "", "output_root": "",
+                    "trusted_integration_sources": []}})[0], 200)
+            status, revoked = self.request("GET", route, self.owner)
+            self.assertEqual(status, 200)
+            self.assertEqual(revoked["updates"][0]["reason"], "source_not_trusted_by_host")
+            self.assertEqual(calls, [source["repository"]])
+
     def test_multiple_release_discovery_is_isolated_and_preserves_files(self):
         from unittest.mock import patch
         repo=self.root/"multi"

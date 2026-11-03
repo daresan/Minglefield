@@ -52,6 +52,27 @@ class GameProjectHttpTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_comfy_upload_and_job_attachment_stage_require_active_session(self):
+        for endpoint in ("/api/host/comfy/upload", "/api/host/assets/stage"):
+            for token in (None, "invalid-session-token"):
+                with self.subTest(endpoint=endpoint, token=token):
+                    conn = http.client.HTTPConnection("127.0.0.1",
+                                                       self.http.server_port, timeout=5)
+                    headers = {"Content-Type": "application/octet-stream",
+                               "X-Minglefield-Host": "host.one",
+                               "X-Minglefield-Runtime": "comfy.one",
+                               "X-Minglefield-Filename": "test.png"}
+                    if token:
+                        headers["Authorization"] = "Bearer " + token
+                    try:
+                        conn.request("POST", endpoint, body=b"test", headers=headers)
+                        response = conn.getresponse()
+                        self.assertEqual(response.status, 401)
+                        self.assertEqual(json.loads(response.read()),
+                                         {"error": "unauthorized"})
+                    finally:
+                        conn.close()
+
     def test_host_integration_source_settings_owner_scoped(self):
         endpoint = "/api/host/settings"
         payload = {"host_id": "host.one", "settings": {

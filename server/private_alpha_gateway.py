@@ -1338,7 +1338,7 @@ async function loadHostStorageSettings(){
     if(result.status===200){
       staging.value=result.data.settings.job_attachments_root||"";
       output.value=result.data.settings.output_root||"";
-      sources.value=(result.data.settings.trusted_integration_sources||[]).join("\n");
+      sources.value=(result.data.settings.trusted_integration_sources||[]).join("\\n");
       save.disabled=false;staging.disabled=false;output.disabled=false;sources.disabled=false;
     }
   }catch(error){
@@ -1352,7 +1352,7 @@ document.getElementById("hostSettingsSave").onclick=async()=>{
     host_id:hv("hostSelect"),
     settings:{job_attachments_root:document.getElementById("hostJobAttachmentsRoot").value.trim(),
               output_root:document.getElementById("hostOutputRoot").value.trim(),
-              trusted_integration_sources:document.getElementById("hostTrustedIntegrationSources").value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
+              trusted_integration_sources:document.getElementById("hostTrustedIntegrationSources").value.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean)}
   });
   document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
 };

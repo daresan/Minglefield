@@ -13,6 +13,8 @@ class RuntimeImportAuditTests(unittest.TestCase):
 
     def write(self, name, source):
         p = self.root / name
+        # Fixture source must be valid Python before testing import resolution.
+        compile(source, str(p), "exec")
         p.write_text(source, encoding="utf-8")
         return p
 
@@ -40,11 +42,11 @@ class RuntimeImportAuditTests(unittest.TestCase):
         self.assertEqual(report["entry"], "private_alpha_gateway.py")
 
     def test_literal_stdlib_dynamic_import_is_not_unresolved(self):
-        entry = self.write("main.py", "__import__('os')\n")
+        entry = self.write("main.py", "__import__('os')" + chr(10))
         self.assertEqual(audit(entry, self.root)["dynamic_import_review"], [])
 
     def test_relative_local_import_is_resolved(self):
-        entry = self.write("main.py", "from .helper import work\n")
+        entry = self.write("main.py", "from .helper import work" + chr(10))
         self.write("helper.py", "def work(): pass\n")
         report = audit(entry, self.root)
         self.assertEqual(report["local_modules"], ["helper.py", "main.py"])

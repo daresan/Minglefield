@@ -77,8 +77,8 @@ mod tests {
     fn rejects_missing_config_and_missing_option_values() {
         assert_eq!(
             run(["--silent".to_string(), "--config".to_string()])
-            .unwrap_err()
-            .0,
+                .unwrap_err()
+                .0,
             2
         );
         assert_eq!(

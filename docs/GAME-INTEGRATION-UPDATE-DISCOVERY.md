@@ -167,3 +167,42 @@ hardcoded path. Prefer the existing Hosts/Projects configuration architecture,
 but keep workflow staging semantics unchanged. Before enabling writes,
 determine filesystem/volume requirements and prevent overlap with project
 content, workflow staging and Git control metadata.
+
+## Naming decision: JobAttachments versus installation staging (2026-11-03)
+
+The operator chose **JobAttachments** for the existing job/workflow file
+staging function, including ComfyUI. The new game integration installer alone
+uses **installation staging**. This replaces the earlier suggestion to reuse
+the workflow staging directory.
+
+Target names:
+- `job_attachments_root`: existing host/job attachment transfer storage.
+- `job_attachments_root` (project scope): existing project job attachment
+  storage, where applicable. Host and project settings are distinct records.
+- `installation_staging_root`: separate project-scoped installer transaction
+  storage, introduced only with a dedicated configuration and safety policy.
+
+**Migration is required before changing API or database field names.**
+Current `staging_root` appears in `alpha_game_projects` SQLite schema,
+project create/update/list/inspect/prepare, `sec01_host_settings` JSON,
+gateway host settings and job upload/transfer handlers, game project HTTP
+handlers and frontend form IDs, plus conformance tests. A simple global
+search/replace or renaming a folder on disk is unsafe.
+
+Migration acceptance criteria:
+1. Existing SQLite projects and host settings retain their path values,
+   owner scope, revisions and running-job behavior after upgrade.
+2. Persisted keys/columns are migrated explicitly, or are retained as
+   documented internal legacy storage while public and domain APIs adopt
+   `job_attachments_root`; never silently drop legacy data.
+3. Update all host/project UI labels, API request/response contracts,
+   internal variable names, tests and docs together. If a temporary
+   compatibility alias is required, define precedence and rejection of
+   conflicting values; remove alias only with an explicit version boundary.
+4. No implicit filesystem rename, move or deletion. Operator may change
+   the configured job attachments path in Game Settings after deployment.
+5. Installer staging remains separately named and must not read or write
+   job attachments storage. Verify with HTTP regression tests and three-OS CI.
+
+Until the migration lands and passes tests, `staging_root` remains the
+**legacy persisted name for job attachment storage**, not an installer path.

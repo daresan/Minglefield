@@ -125,6 +125,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_duplicate_and_unvalued_options() {
+        for args in [
+            vec!["--silent", "--silent", "--defaults"],
+            vec!["--silent", "--defaults", "--defaults"],
+            vec!["--silent", "--defaults", "--json", "--json"],
+            vec!["--silent", "--defaults", "--install-dir", "/tmp", "--install-dir", "/tmp"],
+            vec!["--silent", "--config", "one", "--config", "two"],
+            vec!["--silent", "--config", "--json"],
+            vec!["--silent", "--defaults", "--install-dir", "--json"],
+        ] {
+            let result = run(args.into_iter().map(str::to_owned));
+            assert_eq!(result.unwrap_err().0, 2);
+        }
+    }
+
+    #[test]
     fn rejects_ambiguous_modes() {
         assert!(run([
             "--silent".to_string(),

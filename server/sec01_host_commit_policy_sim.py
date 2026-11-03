@@ -780,8 +780,7 @@ class HostCommitPolicy:
             settings = json.loads(row[0]) if row else {}
             job_root = settings.get("job_attachments_root",
                                     settings.get("staging_root", ""))
-            return {"staging_root": job_root,
-                    "job_attachments_root": job_root,
+            return {"job_attachments_root": job_root,
                     "output_root": settings.get("output_root", ""),
                     "trusted_integration_sources": settings.get("trusted_integration_sources", [])}
 
@@ -881,10 +880,9 @@ class HostCommitPolicy:
                 set(canonical) - {"job_attachments_root","output_root",
                                   "trusted_integration_sources"}):
             return HostDecision("denied","invalid_settings")
-        # The persisted legacy key is retained until all job consumers migrate.
-        settings = {**canonical, "staging_root": canonical["job_attachments_root"]}
-        settings.pop("job_attachments_root")
-        for value in (settings["staging_root"],settings["output_root"]):
+        # New writes use the canonical key; legacy rows remain readable.
+        settings = canonical
+        for value in (settings["job_attachments_root"],settings["output_root"]):
             if type(value) is not str or (value and
                     (not Path(value).is_absolute() or len(value)>1024)):
                 return HostDecision("denied","invalid_host_path")

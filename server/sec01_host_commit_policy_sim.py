@@ -783,8 +783,16 @@ class HostCommitPolicy:
             row=db.execute("SELECT settings FROM sec01_host_settings WHERE host_id=?",
                            (host_id,)).fetchone()
             settings = json.loads(row[0]) if row else {}
-            job_root = settings.get("job_attachments_root",
-                                    settings.get("staging_root", ""))
+            if "staging_root" in settings:
+                legacy_root = settings["staging_root"]
+                if ("job_attachments_root" in settings
+                        and settings["job_attachments_root"] != legacy_root):
+                    raise ValueError("conflicting_persisted_job_attachments_roots")
+                settings["job_attachments_root"] = legacy_root
+                del settings["staging_root"]
+                db.execute("UPDATE sec01_host_settings SET settings=? WHERE host_id=?",
+                           (json.dumps(settings, sort_keys=True), host_id))
+            job_root = settings.get("job_attachments_root", "")
             return {"job_attachments_root": job_root,
                     "output_root": settings.get("output_root", ""),
                     "trusted_integration_sources": settings.get("trusted_integration_sources", [])}

@@ -33,8 +33,10 @@ class HostDecision:
     reason: str
 
 class HostCommitPolicy:
-    def __init__(self, authority):
+    def __init__(self, authority, *, assessment_manifest_path=None):
         self.authority=authority
+        # Deployment-only configuration; never sourced from an HTTP request.
+        self._assessment_manifest_path=assessment_manifest_path
         with authority.store._tx() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_comfy_workflows(
                 host_id TEXT NOT NULL, effect_id TEXT NOT NULL,
@@ -610,6 +612,8 @@ class HostCommitPolicy:
     def inspect_game_integration_releases(self, host_id, owner_id, project_id, *, fetcher=None):
         """Read-only update discovery; never accept release sources from the client."""
         from game_integration_updates import discover_integration_update
+        from game_integration_assessment_approvals import discover_with_operator_approvals
+        from game_integration_assessment_loader import load_pinned_assessment_bytes
         report=self.inspect_game_integrations(host_id,owner_id,project_id)
         if report is None:
             return None
@@ -623,7 +627,13 @@ class HostCommitPolicy:
                     "updates":[],"state":"unknown","reason":"manual_review_required"}
         updates=[]
         for entry in entries:
-            if fetcher is None:
+            if self._assessment_manifest_path is not None:
+                kwargs={"manifest_path":self._assessment_manifest_path,
+                        "byte_loader":load_pinned_assessment_bytes}
+                if fetcher is not None:
+                    kwargs["fetcher"]=fetcher
+                outcome=discover_with_operator_approvals(entry,report["registry"],**kwargs)
+            elif fetcher is None:
                 outcome=discover_integration_update(entry,report["registry"])
             else:
                 outcome=discover_integration_update(entry,report["registry"],fetcher=fetcher)

@@ -80,6 +80,35 @@ class JournalBoundCleanupTests(unittest.TestCase):
         self.assertEqual(self.inspect(entries=wrong)["reason"],
                          "journal_cleanup_not_authorized")
 
+    def test_backend_candidate_requires_terminal_journal(self):
+        self.prepare_and_stage()
+        pending = self.policy.inspect_game_install_cleanup_backend(
+            *self.args, self.entries, self.staging)
+        self.assertEqual(pending["state"], "blocked")
+        self.assertEqual(pending["reason"], "journal_cleanup_not_authorized")
+        self.assertFalse(pending["deletion_performed"])
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        result = self.policy.inspect_game_install_cleanup_backend(
+            *self.args, self.entries, self.staging)
+        self.assertFalse(result["cleanup_allowed"])
+        self.assertFalse(result["deletion_performed"])
+        self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
+        if sys.platform == "win32":
+            self.assertEqual(result["reason"],
+                             "windows_native_handle_backend_required")
+        else:
+            self.assertIn(result["state"], ("candidate_snapshot", "blocked"))
+
+    def test_backend_rejects_wrong_owner_without_deletion(self):
+        self.prepare_and_stage()
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        result = self.policy.inspect_game_install_cleanup_backend(
+            "host.one", "other", "project.one", "op.one",
+            self.entries, self.staging)
+        self.assertEqual(result["reason"], "not_host_owner")
+        self.assertFalse(result["deletion_performed"])
+        self.assertTrue((self.staging / "op.one").exists())
+
     def test_unknown_operation_denied(self):
         self.assertEqual(self.inspect()["reason"], "operation_not_found")
 

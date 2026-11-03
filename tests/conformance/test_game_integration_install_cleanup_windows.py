@@ -82,9 +82,19 @@ class WindowsCleanupHandleTests(unittest.TestCase):
             with patch("game_integration_install_cleanup_windows.inspect_windows_directory_handle",
                        side_effect=attempt_rename):
                 result = inspect_windows_staging_binding(root, "op1")
-            self.assertEqual(attempted, ["blocked"])
-            self.assertEqual(result["state"], "inspected")
-            self.assertTrue(operation.is_dir())
+            self.assertEqual(len(attempted), 1)
+            if attempted == ["blocked"]:
+                self.assertEqual(result["state"], "inspected")
+                self.assertTrue(operation.is_dir())
+            else:
+                # A same-process rename may succeed despite a no-delete-share
+                # handle. The subsequent identity/binding check MUST fail
+                # closed rather than claim that the operation is stable.
+                self.assertEqual(attempted, ["unexpected_success"])
+                self.assertEqual(result["state"], "blocked")
+                self.assertEqual(result["reason"],
+                                 "windows_staging_binding_changed")
+                self.assertTrue((root / "moved").is_dir())
             self.assertFalse(result["deletion_performed"])
 
     @unittest.skipUnless(os.name == "nt", "Windows native handle test")

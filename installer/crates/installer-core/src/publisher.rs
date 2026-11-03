@@ -5,7 +5,7 @@
 //! Until a pinned-key signature verifier is implemented, release verification
 //! MUST fail closed. This module performs no filesystem or network operations.
 
-use crate::manifest::{ArtifactManifest, ManifestError};
+use crate::manifest::ArtifactManifest;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrustError {

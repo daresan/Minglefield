@@ -204,6 +204,7 @@ nur gespeichert, nicht auf Erreichbarkeit geprüft. Workflows werden im Tab „E
 <div class="field-grid">
 <label>Asset-Staging-Verzeichnis <input id="hostStagingRoot" placeholder="C:\\Minglefield\\Staging"></label>
 <label>Output-Verzeichnis <input id="hostOutputRoot" placeholder="C:\\Minglefield\\Output"></label>
+<label>Vertrauenswürdige Integrations-Repositories (owner/repo, eines pro Zeile) <textarea id="hostTrustedIntegrationSources" rows="3" placeholder="daresan/minglefield-integration-test"></textarea></label>
 </div><div class="action-row"><button type="button" id="hostSettingsLoad">Einstellungen laden</button>
 <button type="button" id="hostSettingsSave">Einstellungen speichern</button></div>
 <pre id="hostSettingsStatus" aria-live="polite"></pre></div>
@@ -1321,9 +1322,10 @@ async function loadHostStorageSettings(){
   const save=document.getElementById("hostSettingsSave");
   const staging=document.getElementById("hostStagingRoot");
   const output=document.getElementById("hostOutputRoot");
+  const sources=document.getElementById("hostTrustedIntegrationSources");
   save.disabled=true;
-  staging.disabled=true;output.disabled=true;
-  staging.value="";output.value="";
+  staging.disabled=true;output.disabled=true;sources.disabled=true;
+  staging.value="";output.value="";sources.value="";
   if(!host_id){
     document.getElementById("hostSettingsStatus").textContent="Kein Host ausgewählt.";
     return;
@@ -1336,7 +1338,8 @@ async function loadHostStorageSettings(){
     if(result.status===200){
       staging.value=result.data.settings.staging_root||"";
       output.value=result.data.settings.output_root||"";
-      save.disabled=false;staging.disabled=false;output.disabled=false;
+      sources.value=(result.data.settings.trusted_integration_sources||[]).join("\\n");
+      save.disabled=false;staging.disabled=false;output.disabled=false;sources.disabled=false;
     }
   }catch(error){
     if(requestId===hostSettingsRequestId)
@@ -1348,7 +1351,8 @@ document.getElementById("hostSettingsSave").onclick=async()=>{
   const result=await api("/api/host/settings",{
     host_id:hv("hostSelect"),
     settings:{staging_root:document.getElementById("hostStagingRoot").value.trim(),
-              output_root:document.getElementById("hostOutputRoot").value.trim()}
+              output_root:document.getElementById("hostOutputRoot").value.trim(),
+              trusted_integration_sources:document.getElementById("hostTrustedIntegrationSources").value.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean)}
   });
   document.getElementById("hostSettingsStatus").textContent=JSON.stringify(result.data,null,2);
 };

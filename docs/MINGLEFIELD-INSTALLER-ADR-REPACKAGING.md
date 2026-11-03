@@ -73,6 +73,18 @@ On Windows default to `%LOCALAPPDATA%\\Programs\\Minglefield` and data `%LOCALAP
 
 Evaluate Windows per-user no-elevation, macOS signing/notarization, Linux desktop integration, artifact provenance, dependency closure, upgrade rollback, clean-machine install and accessibility. **Do not select a toolkit by popularity alone.**
 
+## Gate 2 technology direction and Shadow toolchain evidence (2026-11-03)
+
+**Preferred implementation direction, pending packaged proof of concept:** one shared Tauri 2 GUI across Windows, macOS and Linux, backed by a reusable Rust installer engine and Rust CLI for unattended operation. The GUI and CLI must share configuration validation, trust verification, installation lifecycle and security policy. Produce separate OS/architecture-specific installer artifacts; neither end-user GUI nor CLI may require preinstalled Rust, Python, Git or Conda. Qt 6 remains the fallback candidate for comparison and a possible future Minglefield desktop application; no decision to rewrite the current Python Alpha in Rust is implied. The binding functional requirements, including silent/default configuration and local Host authorization, remain in `docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md`.
+
+**Observed on the developer's Shadow Windows workstation (not a supported-user prerequisite or release build verification):**
+
+- `rustc --version`: `rustc 1.99.1 (58cf8f9c3 2026-10-13)`
+- `cargo --version`: `cargo 1.99.1 (5f94df478 2026-08-27)`
+- `rustup show`: default host `x86_64-pc-windows-msvc`; active/default toolchain `stable-x86_64-pc-windows-msvc`; installed target `x86_64-pc-windows-msvc`.
+
+This confirms the Rust toolchain is available for local Windows development; it **does not** establish that Tauri's Windows prerequisites, webview, frontend dependencies, linker, macOS/Linux targets, or packaged GUI/CLI builds are ready. Verify those separately. Introduce Rust CI gates for `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, and `cargo check --locked`, with per-platform release builds and dependency/license auditing as the implementation matures. macOS runner availability is a separate unresolved CI infrastructure issue.
+
 ## Mandatory next deliverables
 
 - Machine-checkable release-manifest schema and fixture tests (positive, missing hash, path traversal, wrong OS/arch, untrusted provenance).

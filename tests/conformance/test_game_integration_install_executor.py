@@ -16,7 +16,7 @@ class IsolatedInstallationStagingTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.root = Path(temp.name)
+        self.root = Path(temp.name).resolve(strict=True)
         self.repo = self.root / "repository"
         self.staging = self.root / "installation-staging"
         self.repo.mkdir()

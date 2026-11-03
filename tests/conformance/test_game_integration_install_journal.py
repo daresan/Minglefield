@@ -80,6 +80,22 @@ class GameInstallJournalTests(unittest.TestCase):
         self.assertEqual(self.policy.game_install_journal_status(*args[:3])[0]["state"],
                          "prepared")
 
+    def test_host_settings_accept_job_attachments_alias_without_losing_legacy(self):
+        root = str(self.root / "jobattachments")
+        result = self.policy.save_host_settings(
+            "host.one", "user.owner",
+            {"job_attachments_root": root, "output_root": ""})
+        self.assertEqual(result.state, "saved")
+        settings = self.policy.host_settings("host.one", "user.owner")
+        self.assertEqual(settings["job_attachments_root"], root)
+        self.assertEqual(settings["staging_root"], root)
+        self.assertEqual(self.policy.save_host_settings(
+            "host.one", "user.owner",
+            {"staging_root": root, "job_attachments_root": str(self.root / "other"),
+             "output_root": ""}).state, "denied")
+        self.assertEqual(self.policy.host_settings(
+            "host.one", "user.owner")["job_attachments_root"], root)
+
     def test_recovery_is_conservative(self):
         for state in ("prepared", "applying", "rollback_required", "committed",
                       "rolled_back", "unexpected"):

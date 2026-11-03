@@ -7,7 +7,7 @@ Scope: installing, configuring, launching, updating and recovering **Minglefield
 
 A first-time, non-technical user can download an OS-appropriate graphical installer, choose a destination, install Minglefield and its necessary runtime, provision the **computer running the installer** as their local Host, configure optional runtimes, and launch Minglefield without knowing Python, Conda, Git, shell commands, or environment variables. Aim for **at least 80%** of representative first-time target users completing defined core onboarding tasks unaided. This is a **target**, not a measured achievement; establish task definitions, test participants, observations and completion criteria.
 
-Support Windows, macOS and Linux with self-starting installers that require no preinstalled Python/Conda. Select the packaging/GUI technology **after** repository, OS packaging, licensing and dependency inventory; do not prematurely commit to a framework.
+Support Windows, macOS and Linux with self-starting installers that require no preinstalled Python/Conda. Use **one shared cross-platform installer GUI** with platform-specific distributable builds. Select the actual GUI toolkit and package formats after comparing feasibility, OS packaging, licensing and dependency inventory; do not prematurely commit to a framework.
 
 ## Installer journeys
 
@@ -15,6 +15,14 @@ Support Windows, macOS and Linux with self-starting installers that require no p
 - **Advanced:** destination and data locations, detected installations and manual path selection, Python/Conda/ComfyUI options, installation and connection options, local Host registration, and optional Host-owned runtime configuration; job authorization/scheduling rules remain exclusively in Hosts. All installer-set Host settings remain visible/editable in Minglefield's existing Hosts UI.
 - **Existing installation:** detect and offer safe reuse/repair/update without silently replacing an existing environment, Host ownership, settings, SQLite database, user data, or unrelated files.
 - **No installation detected:** provision the local Host during first run; do not require the user to manually copy or enter a Host claim token.
+
+## Shared GUI and unattended CLI installation (binding decision, 2026-11-03)
+
+- One cross-platform installer GUI codebase for Windows, macOS and Linux; **build and distribute separate signed/verified OS/architecture-specific installer artifacts**. The GUI toolkit and precise native package formats remain to be selected through Gate 2 evidence.
+- The same installer application must also start from a terminal with documented parameters, including `--silent`, `--config <path>`, and `--defaults` (proposed CLI spelling), with a versioned default configuration and explicit overrides. GUI and CLI call the **same installation engine**, validation, trust checks, lifecycle and Host APIs; no duplicate or weaker headless installation path.
+- Unattended mode has no interactive prompts, uses deterministic exit codes, machine-readable result/log output, supports idempotent re-runs, and fails safely when required consent, ownership proof, credentials, network access or conflict resolution is missing. Never infer consent for optional Conda/ComfyUI or destructive data actions from `--silent` or `--defaults` alone.
+- Default configuration contains no credentials, tokens, or machine-specific paths. Resolve OS-specific install/data defaults at runtime. Distinguish unattended **application installation** from account-authenticated local Host provisioning: missing authenticated authorization may defer provisioning to first-run GUI, but must never silently claim a Host.
+- Add focused tests for GUI/CLI config parity, precedence and validation, headless non-interactivity, exit codes, missing authorization/consent, no unexpected optional components, and per-OS packaged entrypoint behavior.
 
 ## Windows installation destination (binding default)
 
@@ -58,7 +66,7 @@ The installer/first-run flow may register the local Host and configure only the 
 ## Ordered implementation gates
 
 1. **Product architecture inventory (not operator environment replication):** trace the supported application launch contract, Host claim/auth/persistence interfaces, update UI/API, dependency declarations, OS-specific data paths, licensing and existing tests. Produce a gap/compatibility matrix before choosing installer tooling. Do **not** derive installer defaults from the developer's personal launch commands, local Conda environment or machine paths; use that machine only as a preexisting-installation detection test case.
-2. **Installer architecture decision:** evaluate GUI/packaging candidates, OS signing/notarization/distribution, permissions, bundled/managed Python, optional Conda/ComfyUI acquisition, and lifecycle/rollback. Record alternatives and rationale.
+2. **Installer architecture decision:** implement one shared GUI and CLI over a common installation engine, with OS/architecture-specific distributable builds. Evaluate toolkit/package candidates, OS signing/notarization/distribution, permissions, bundled/managed Python, optional Conda/ComfyUI acquisition, and lifecycle/rollback. Record alternatives and rationale.
 3. **First runnable GUI slice:** on supported OS builds, select destination, detect existing install, install/reuse verified Python and Minglefield, show progress/errors, launch local application. No hidden developer prerequisites.
 4. **Local Host onboarding:** implement reviewed, authenticated, single-use local provisioning and complete Host settings through existing persistence/API; preserve remote claim workflow.
 5. **Optional components:** detect, verify, select manually or explicitly install Conda and ComfyUI; configure chosen runtime(s) per Host; exercise existing local ComfyUI connection test.
@@ -68,7 +76,7 @@ The installer/first-run flow may register the local Host and configure only the 
 
 ## Explicit non-goals and open decisions
 
-Not part of this phase: third-party game installer expansion, federated marketplaces, any additional ComfyUI models, custom nodes, extensions or workflows, remote-host ownership bypass, or mandatory central trust service. Exact GUI toolkit, OS distribution formats, Python packaging strategy, optional Conda distribution/license, ComfyUI acquisition policy and security design for local provisioning remain **open** until inventory and review. No production-ready installer, complete runtime dependency list, security review, or usability measurement is claimed yet.
+Not part of this phase: third-party game installer expansion, federated marketplaces, any additional ComfyUI models, custom nodes, extensions or workflows, remote-host ownership bypass, or mandatory central trust service. Exact shared GUI toolkit, OS distribution formats, Python packaging strategy, optional Conda distribution/license, ComfyUI acquisition policy and security design for local provisioning remain **open** until inventory and review. No production-ready installer, complete runtime dependency list, security review, or usability measurement is claimed yet.
 
 ## Updated product decision: alpha release and reusable repackaging (2026-11-03)
 

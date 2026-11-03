@@ -279,6 +279,88 @@ class GameProjectHttpTests(unittest.TestCase):
                 url="/api/game/integration/"+endpoint+"?host_id=host.one&project_id="+project+extra
                 self.assertEqual(self.request("GET",url,self.owner)[0],400)
 
+    def test_http_assessment_approval_revocation_per_request(self):
+        """Actual HTTP route reloads deployment approvals without client authority."""
+        import hashlib
+        from unittest.mock import patch
+
+        repo = self.root / "approval_http_repo"
+        repo.mkdir()
+        project = "game.approval.http"
+        payload = dict(host_id="host.one", project_id=project, name="Approval HTTP",
+                       repository_root=str(repo), staging_root=str(repo / "staging"),
+                       output_root=str(repo / "output"))
+        self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
+        (repo / ".minglefield").mkdir()
+        (repo / ".minglefield" / "project.json").write_text(
+            json.dumps({"schema_version": 1, "project_id": project}))
+        source = {"provider": "github", "repository": "daresan/minglefield-integration-test"}
+        integration = "community.daresan.test"
+        (repo / "minglefield.lock").write_text(json.dumps({
+            "lock_version": "0.1", "project_id": project,
+            "packages": [{"package_id": integration, "kind": "game_integration",
+                          "version": "v1.0.0", "publisher": "daresan",
+                          "release_source": source,
+                          "artifact": {"reference": "asset", "sha256": "a" * 64}}]}))
+        document = {"contract_version": "0.1", "integration_id": integration,
+                    "release_source": source, "from_version": "v1.0.0",
+                    "to_version": "v1.1.0",
+                    "requirements": [{"capability": "game.api", "constraint": ">=1.0"}]}
+        raw = json.dumps(document).encode()
+        row = {"kind": "compatibility", "integration_id": integration,
+               "repository": source["repository"], "from_version": "v1.0.0",
+               "to_version": "v1.1.0",
+               "commit": "6df11272a9ca14dcfb8dc3bbe26b29c189d12253",
+               "sha256": hashlib.sha256(raw).hexdigest()}
+        manifest = self.root / "operator_approvals.json"
+        self.store._host_policy._assessment_manifest_path = manifest
+        self.addCleanup(setattr, self.store._host_policy, "_assessment_manifest_path", None)
+        route = "/api/game/integration/releases?host_id=host.one&project_id=" + project
+        registry = {"registry_version": "0.1", "integrations": [
+            {"integration_id": integration, "name": "Fixture", "publisher": "daresan",
+             "trust_tier": "community", "release_source": source}]}
+        calls = []
+        def load(*args):
+            calls.append(args)
+            return raw
+        def releases(*args):
+            return {"state": "available", "complete": True, "releases": [
+                {"tag_name": "v1.1.0", "draft": False, "prerelease": False}]}
+        with patch("game_integration_registry.load_registry", return_value=registry), patch(
+                "game_integration_assessment_loader.load_pinned_assessment_bytes",
+                side_effect=load), patch(
+                "game_integration_updates.fetch_releases", side_effect=releases), patch(
+                "game_integration_assessment_approvals.discover_with_operator_approvals"
+        ) as wrapper:
+            # Delegate through the real discovery with injected external release I/O.
+            from game_integration_assessment_approvals import discover_with_operator_approvals as real
+            wrapper.side_effect = lambda entry, catalog, **kwargs: real(
+                entry, catalog, **{**kwargs, "fetcher": releases,
+                                  "compare_fetcher": lambda *args: {"state": "unknown"}})
+            manifest.write_text(json.dumps({"format_version": "0.1", "approvals": [row]}))
+            self.assertEqual(self.request("GET", route)[0], 401)
+            self.assertEqual(self.request("GET", route, self.other)[0], 404)
+            self.assertEqual(calls, [])
+            status, approved = self.request("GET", route, self.owner)
+            self.assertEqual(status, 200)
+            compatibility = approved["updates"][0]["preview"]["compatibility"]
+            self.assertEqual(compatibility["document_provenance"], "verified")
+            self.assertEqual(compatibility["state"], "unknown")
+            self.assertFalse(approved["updates"][0]["installation_allowed"])
+            self.assertEqual(len(calls), 1)
+            manifest.write_text(json.dumps({"format_version": "0.1", "approvals": []}))
+            status, revoked = self.request("GET", route, self.owner)
+            self.assertEqual(status, 200)
+            self.assertNotIn("document_provenance",
+                             revoked["updates"][0]["preview"]["compatibility"])
+            self.assertEqual(len(calls), 1)
+            self.assertFalse(revoked["updates"][0]["installation_allowed"])
+            manifest.unlink()
+            status, missing = self.request("GET", route, self.owner)
+            self.assertEqual(status, 200)
+            self.assertNotIn("document_provenance",
+                             missing["updates"][0]["preview"]["compatibility"])
+
     def test_invalid_requests_are_rejected(self):
         self.assertEqual(self.request("GET", "/api/game/projects", self.owner)[0], 400)
         self.assertEqual(self.request("GET", "/api/game/projects?host_id=a&host_id=b",

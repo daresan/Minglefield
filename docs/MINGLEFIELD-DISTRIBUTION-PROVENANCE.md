@@ -30,3 +30,13 @@ No commercial publisher certificate or paid signing service is required. Release
 5. Only enable real installation after runtime, lifecycle, security and cross-platform acceptance gates.
 
 The stricter rules for installing third-party games are independent and must not be reused as Minglefield application distribution policy.
+
+## Build-time GitHub ancestry check (implemented, not yet an installer release gate)
+
+`installer/scripts/verify_release_source.py --source PATH` checks a version-1 UTF-8 source record against live GitHub REST API metadata using the Python standard library. It is a **release-build tool only**, not a Python requirement for end users. The source record contains `version`, `repository_id`, `repository`, and a full 40-character `commit` hash.
+
+The checker fetches the repository by its claimed owner/name, requires its stable GitHub ID and name to match, confirms the exact commit exists, pins the currently observed default-branch head, and verifies that the release commit is its ancestor using the GitHub compare endpoint. For the official upstream ID `1440772489` it additionally requires canonical name `daresan/Minglefield`, default branch `main`, and GitHub's `protected=true` branch marker. Other repositories may verify their own ancestry without being misrepresented as upstream-recognized. No upstream fork-recognition registry is implemented yet.
+
+All negative cases fail before a success JSON result. Success explicitly reports `artifact_authenticated=false` and `installation_authorized=false`. GitHub HTTPS/API evidence is not a cryptographic binary-build attestation and does not establish that a released installer was built reproducibly from that commit. The standalone tool is not currently invoked as a release-packaging gate because an actual package production workflow has not yet been implemented. Offline tests for identity mismatches, unprotected upstream, ancestry divergence and independent forks run on all three operating systems in `installer-rust.yml`.
+
+When implementing actual packaging, run the checker on the intended source record and pin both the checked source commit and final release artifact digests in versioned release metadata. Preserve the independent GPL fork path and the separately optional upstream recognition label.

@@ -10,28 +10,17 @@ import re
 from pathlib import Path
 
 from game_integration_install_paths import inspect_installation_paths
+from game_integration_install_path_safety import has_redirecting_component, is_redirecting_path
 from game_integration_install_staging import validate_staging_manifest
 
 _OPERATION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-
-
-def _has_symlink_component(path):
-    """Reject links in any existing ancestor, not only the final directory."""
-    current = Path(os.path.abspath(path))
-    while True:
-        if current.is_symlink():
-            return True
-        parent = current.parent
-        if parent == current:
-            return False
-        current = parent
 
 
 def _same_directory(path, identity):
     """Detect directory replacement; not an atomic cross-platform lock."""
     try:
         stat = path.stat(follow_symlinks=False)
-        return (not path.is_symlink() and path.is_dir()
+        return (not is_redirecting_path(path) and path.is_dir()
                 and (stat.st_dev, stat.st_ino) == identity)
     except OSError:
         return False
@@ -55,11 +44,11 @@ def stage_installation_bytes(installation_staging_root, operation_id,
     if not callable(byte_loader):
         return blocked("missing_staging_reader")
     root = Path(installation_staging_root)
-    if not root.is_dir() or _has_symlink_component(root):
+    if not root.is_dir() or has_redirecting_component(root):
         return blocked("unsafe_installation_staging_root")
     root = root.resolve(strict=True)
     repository = Path(repository_root)
-    if not repository.is_dir() or _has_symlink_component(repository):
+    if not repository.is_dir() or has_redirecting_component(repository):
         return blocked("unsafe_repository_root")
     repository = repository.resolve(strict=True)
     if root == repository or root.is_relative_to(repository) or repository.is_relative_to(root):
@@ -95,7 +84,7 @@ def stage_installation_bytes(installation_staging_root, operation_id,
                 return blocked("staging_directory_changed")
             target = operation.joinpath(*relative.split("/"))
             target.parent.mkdir(parents=True, exist_ok=True)
-            if (_has_symlink_component(target.parent)
+            if (has_redirecting_component(target.parent)
                     or not _same_directory(root, root_identity)
                     or not _same_directory(operation, operation_identity)):
                 return blocked("unsafe_staging_path")

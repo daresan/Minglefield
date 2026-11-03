@@ -32,7 +32,7 @@ def inventory(report, package_map):
 def read_audit_json(path):
     """Accept UTF-8 and BOM-marked UTF-16 PowerShell redirection output."""
     raw = path.read_bytes()
-    if raw.startswith((b"\\xff\\xfe", b"\\xfe\\xff")):
+    if raw.startswith((bytes((0xFF, 0xFE)), bytes((0xFE, 0xFF)))):
         return json.loads(raw.decode("utf-16"))
     return json.loads(raw.decode("utf-8-sig"))
 

@@ -17,7 +17,7 @@ class JournalBoundCleanupTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
+        self.root = Path(tmp.name).resolve(strict=True)
         self.repo = self.root / "repo"
         self.staging = self.root / "install-staging"
         self.repo.mkdir()

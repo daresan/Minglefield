@@ -835,6 +835,57 @@ class HostCommitPolicy:
         return {"state":"prepared","reason":"operation_recorded",
                 "operation_id":operation_id}
 
+    def record_game_install_transition(self, host_id, owner_id, project_id,
+                                       operation_id, plan_sha256, expected_state,
+                                       next_state, *, plan_verified=False,
+                                       executor_authorized=False):
+        """Atomic journal CAS; no filesystem writes and no public API binding.
+
+        Only a future trusted executor may advance a write-related state.
+        Caller-provided booleans must never be exposed as HTTP authorization.
+        """
+        import re
+        from game_integration_install_journal import inspect_journal_transition
+        if (not all(ident(v) for v in (host_id, owner_id, project_id, operation_id))
+                or type(plan_sha256) is not str
+                or re.fullmatch(r"[a-f0-9]{64}", plan_sha256) is None):
+            return {"state": "denied", "reason": "invalid_install_operation"}
+        if executor_authorized is not True:
+            return {"state": "denied", "reason": "trusted_executor_required"}
+        decision = inspect_journal_transition(
+            expected_state, next_state, owner_authorized=True,
+            plan_verified=plan_verified)
+        if decision["state"] != "transition_permitted":
+            return {"state": "denied", "reason": decision["reason"]}
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                    WHERE host_id=? AND owner_id=?""",
+                    (host_id, owner_id)).fetchone() is None:
+                return {"state": "denied", "reason": "not_host_owner"}
+            if db.execute("""SELECT 1 FROM alpha_game_projects
+                    WHERE host_id=? AND owner_id=? AND project_id=?""",
+                    (host_id, owner_id, project_id)).fetchone() is None:
+                return {"state": "denied", "reason": "project_not_found"}
+            row = db.execute("""SELECT state,plan_sha256 FROM sec01_game_install_journal
+                    WHERE operation_id=? AND host_id=? AND owner_id=? AND project_id=?""",
+                    (operation_id, host_id, owner_id, project_id)).fetchone()
+            if row is None:
+                return {"state": "denied", "reason": "operation_not_found"}
+            if row[1] != plan_sha256:
+                return {"state": "denied", "reason": "plan_digest_conflict"}
+            if row[0] != expected_state:
+                return {"state": "denied", "reason": "journal_state_conflict"}
+            updated = db.execute("""UPDATE sec01_game_install_journal
+                    SET state=?,updated_at=CURRENT_TIMESTAMP
+                    WHERE operation_id=? AND host_id=? AND owner_id=?
+                    AND project_id=? AND state=? AND plan_sha256=?""",
+                    (next_state, operation_id, host_id, owner_id, project_id,
+                     expected_state, plan_sha256))
+            if updated.rowcount != 1:
+                return {"state": "denied", "reason": "journal_state_conflict"}
+        return {"state": next_state, "reason": "journal_transition_recorded",
+                "operation_id": operation_id, "filesystem_mutation_performed": False}
+
     def cancel_prepared_game_install(self, host_id, owner_id, project_id,
                                      operation_id, plan_sha256):
         """Cancel only a still-prepared operation; never undo applied files."""

@@ -1,0 +1,49 @@
+name: Game installation cross-platform security
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/game-integration-updates'
+    paths:
+      - 'server/game_integration_install*.py'
+      - 'server/sec01_host_commit_policy_sim.py'
+      - 'server/private_alpha_auth.py'
+      - 'tests/conformance/test_game_integration_install*.py'
+      - '.github/workflows/game-installation-security.yml'
+      - 'requirements-ci.txt'
+  pull_request:
+    paths:
+      - 'server/game_integration_install*.py'
+      - 'server/sec01_host_commit_policy_sim.py'
+      - 'server/private_alpha_auth.py'
+      - 'tests/conformance/test_game_integration_install*.py'
+      - '.github/workflows/game-installation-security.yml'
+      - 'requirements-ci.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installation-security:
+    name: Installation security / ${{ matrix.os }} / Python 3.11
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install declared conformance dependencies
+        run: python -m pip install -r requirements-ci.txt
+      - name: Run game installation security conformance
+        run: python -B -m unittest discover -s tests/conformance -p "test_game_integration_install*.py" -v

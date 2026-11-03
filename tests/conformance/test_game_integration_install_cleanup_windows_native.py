@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
-from game_integration_install_cleanup_windows_native import delete_isolated_regular_file_by_handle\nfrom game_integration_install_cleanup_windows import inspect_windows_staged_file
+from game_integration_install_cleanup_windows_native import delete_isolated_regular_file_by_handle
+from game_integration_install_cleanup_windows import inspect_windows_staged_file
 
 
 class WindowsNativeDispositionTests(unittest.TestCase):
@@ -15,7 +16,11 @@ class WindowsNativeDispositionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "disposable"
             path.write_bytes(b"payload")
-            result = delete_isolated_regular_file_by_handle(path)
+            identity = inspect_windows_staged_file(path)
+            self.assertEqual(identity["state"], "inspected")
+            result = delete_isolated_regular_file_by_handle(
+                path, expected_volume_serial=identity["volume_serial"],
+                expected_file_index=identity["file_index"])
             self.assertEqual(result["state"], "removed", result)
             self.assertFalse(path.exists())
             self.assertFalse(result["cleanup_allowed"])
@@ -53,7 +58,8 @@ class WindowsNativeDispositionTests(unittest.TestCase):
             other = Path(tmp) / "link"
             path.write_bytes(b"payload")
             os.link(path, other)
-            result = delete_isolated_regular_file_by_handle(path)
+            result = delete_isolated_regular_file_by_handle(
+                path, expected_volume_serial=0, expected_file_index=0)
             self.assertEqual(result["reason"], "unsafe_staging_hardlink")
             self.assertTrue(path.exists())
             self.assertEqual(other.read_bytes(), b"payload")
@@ -63,7 +69,8 @@ class WindowsNativeDispositionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "directory"
             path.mkdir()
-            result = delete_isolated_regular_file_by_handle(path)
+            result = delete_isolated_regular_file_by_handle(
+                path, expected_volume_serial=0, expected_file_index=0)
             self.assertEqual(result["state"], "blocked")
             self.assertTrue(path.exists())
 

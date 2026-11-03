@@ -1,5 +1,5 @@
 //! Read-only bootstrap CLI. Never writes application files or claims a Host.
-use minglefield_installer_core::{plan, InstallRequest, Mode};
+use minglefield_installer_core::{default_destination, plan, InstallRequest, Mode};
 use std::env;
 use std::process::ExitCode;
 
@@ -36,21 +36,16 @@ fn main() -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let destination = install_dir.unwrap_or_else(|| {
-        if cfg!(windows) {
-            env::var("LOCALAPPDATA")
-                .map(|v| format!("{v}\\Programs\\Minglefield"))
-                .unwrap_or_default()
-        } else if cfg!(target_os = "macos") {
-            env::var("HOME")
-                .map(|v| format!("{v}/Applications/Minglefield"))
-                .unwrap_or_default()
-        } else {
-            env::var("HOME")
-                .map(|v| format!("{v}/.local/opt/Minglefield"))
-                .unwrap_or_default()
-        }
-    });
+    let destination = match install_dir {
+        Some(path) => path,
+        None => match default_destination() {
+            Ok(path) => path,
+            Err(error) => {
+                eprintln!("cannot determine installation directory: {error}");
+                return ExitCode::from(3);
+            }
+        },
+    };
     let request = InstallRequest {
         mode: Mode::Silent,
         install_dir: destination,

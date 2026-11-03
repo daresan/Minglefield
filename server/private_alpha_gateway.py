@@ -2773,14 +2773,20 @@ def run_local():
     parser = argparse.ArgumentParser(description="LOCAL simulation only; NEVER publish as-is")
     parser.add_argument("--port", type=int, default=8767)
     parser.add_argument("--auth-db", help="local-only SQLite test identity store")
+    parser.add_argument("--assessment-approvals", type=Path, default=None,
+                        help="absolute path to operator-provisioned read-only assessment approvals JSON")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port must be 1024..65535")
+    if args.assessment_approvals is not None and not args.assessment_approvals.is_absolute():
+        parser.error("--assessment-approvals requires an absolute path")
     from private_alpha_auth import AlphaAuthStore
     from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
     from sec01_host_commit_policy_sim import HostCommitPolicy
     service = AlphaAuthStore(args.auth_db or default_alpha_database())
-    service._host_policy = HostCommitPolicy(IntegratedAlphaAdmission(service))
+    service._host_policy = HostCommitPolicy(
+        IntegratedAlphaAdmission(service),
+        assessment_manifest_path=args.assessment_approvals)
     token = None
     bootstrap = secrets.token_urlsafe(32)
     server = ThreadingHTTPServer(("127.0.0.1", args.port),

@@ -202,7 +202,7 @@ nur gespeichert, nicht auf Erreichbarkeit geprüft. Workflows werden im Tab „E
 <div class="form-group"><h3>Host-Speicherorte</h3>
 <p>Lokale Verzeichnisse werden persistent in der Host-Datenbank gespeichert. Keine Umgebungsvariablen erforderlich.</p>
 <div class="field-grid">
-<label>Asset-Staging-Verzeichnis <input id="hostStagingRoot" placeholder="C:\\Minglefield\\Staging"></label>
+<label>Job-Anhänge-Verzeichnis <input id="hostJobAttachmentsRoot" placeholder="C:\\Minglefield\\Staging"></label>
 <label>Output-Verzeichnis <input id="hostOutputRoot" placeholder="C:\\Minglefield\\Output"></label>
 <label>Vertrauenswürdige Integrations-Repositories (owner/repo, eines pro Zeile) <textarea id="hostTrustedIntegrationSources" rows="3" placeholder="daresan/minglefield-integration-test"></textarea></label>
 </div><div class="action-row"><button type="button" id="hostSettingsLoad">Einstellungen laden</button>
@@ -272,7 +272,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <label>Projekt-ID (nicht änderbar) <input id="gameProjectId" readonly></label>
 <label>Name <input id="gameProjectName"></label>
 <label>Repository-Pfad (absolut) <input id="gameRepositoryRoot"></label>
-<label>Staging-Pfad (absolut) <input id="gameStagingRoot"></label>
+<label>Job-Anhänge-Pfad (absolut) <input id="gameJobAttachmentsRoot"></label>
 <label>Output-Pfad (absolut) <input id="gameOutputRoot"></label>
 <div class="action-row"><button id="gameProjectUpdate" type="button">Änderungen speichern</button>
 <button id="gameProjectDelete" type="button">Projekt aus Minglefield entfernen</button>
@@ -289,7 +289,7 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 <label>Neue Projekt-ID <input id="gameNewProjectId" placeholder="game.demo"></label>
 <label>Name <input id="gameNewProjectName"></label>
 <label>Repository-Pfad (absolut) <input id="gameNewRepositoryRoot"></label>
-<label>Staging-Pfad (absolut) <input id="gameNewStagingRoot"></label>
+<label>Job-Anhänge-Pfad (absolut) <input id="gameNewJobAttachmentsRoot"></label>
 <label>Output-Pfad (absolut) <input id="gameNewOutputRoot"></label>
 <div class="action-row"><button id="gameProjectCreate" type="button">Neues Projekt registrieren</button>
 <button id="gameProjectCancel" type="button">Abbrechen</button></div>
@@ -1320,7 +1320,7 @@ async function loadHostStorageSettings(){
   const host_id=hv("hostSelect");
   const requestId=++hostSettingsRequestId;
   const save=document.getElementById("hostSettingsSave");
-  const staging=document.getElementById("hostStagingRoot");
+  const staging=document.getElementById("hostJobAttachmentsRoot");
   const output=document.getElementById("hostOutputRoot");
   const sources=document.getElementById("hostTrustedIntegrationSources");
   save.disabled=true;
@@ -1350,7 +1350,7 @@ document.getElementById("hostSettingsLoad").onclick=loadHostStorageSettings;
 document.getElementById("hostSettingsSave").onclick=async()=>{
   const result=await api("/api/host/settings",{
     host_id:hv("hostSelect"),
-    settings:{job_attachments_root:document.getElementById("hostStagingRoot").value.trim(),
+    settings:{job_attachments_root:document.getElementById("hostJobAttachmentsRoot").value.trim(),
               output_root:document.getElementById("hostOutputRoot").value.trim(),
               trusted_integration_sources:document.getElementById("hostTrustedIntegrationSources").value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
   });
@@ -1527,7 +1527,7 @@ function showSelectedGameProject(){
   refreshSelectedGameUpdateSignal();
   if(!project)return;
   for(const [id,value] of [["gameProjectId",project.project_id],["gameProjectName",project.name],
-      ["gameRepositoryRoot",project.repository_root],["gameStagingRoot",project.job_attachments_root||project.staging_root],
+      ["gameRepositoryRoot",project.repository_root],["gameJobAttachmentsRoot",project.job_attachments_root],
       ["gameOutputRoot",project.output_root]])document.getElementById(id).value=value;
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(project,null,2);
 }
@@ -1542,7 +1542,7 @@ document.getElementById("gameProjectUpdate").onclick=async()=>{
     settings_revision:project.settings_revision,
     name:document.getElementById("gameProjectName").value.trim(),
     repository_root:document.getElementById("gameRepositoryRoot").value.trim(),
-    job_attachments_root:document.getElementById("gameStagingRoot").value.trim(),
+    job_attachments_root:document.getElementById("gameJobAttachmentsRoot").value.trim(),
     output_root:document.getElementById("gameOutputRoot").value.trim()
   };
   const response=await request("/api/game/projects/update",{
@@ -1557,7 +1557,7 @@ function setGameCreateMode(creating){
 }
 document.getElementById("gameProjectNew").onclick=()=>{
   for(const id of ["gameNewProjectId","gameNewProjectName","gameNewRepositoryRoot",
-                   "gameNewStagingRoot","gameNewOutputRoot"])document.getElementById(id).value="";
+                   "gameNewJobAttachmentsRoot","gameNewOutputRoot"])document.getElementById(id).value="";
   setGameCreateMode(true);
 };
 document.getElementById("gameProjectCancel").onclick=()=>setGameCreateMode(false);
@@ -1565,7 +1565,7 @@ document.getElementById("gameProjectPrepare").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
   const message="Für "+project.project_id+" fehlende Projektverzeichnisse anlegen?\\n"+
-    "Repository: "+project.repository_root+"\\nJobAttachments: "+(project.job_attachments_root||project.staging_root)+"\\nOutput: "+project.output_root+
+    "Repository: "+project.repository_root+"\\nJobAttachments: "+(project.job_attachments_root)+"\\nOutput: "+project.output_root+
     "\\nBereits vorhandene Verzeichnisse bleiben erhalten.";
   if(!window.confirm(message))return;
   const response=await request("/api/game/projects/prepare",{
@@ -1690,7 +1690,7 @@ document.getElementById("gameProjectCreate").onclick=async()=>{
     project_id:document.getElementById("gameNewProjectId").value.trim(),
     name:document.getElementById("gameNewProjectName").value.trim(),
     repository_root:document.getElementById("gameNewRepositoryRoot").value.trim(),
-    job_attachments_root:document.getElementById("gameNewStagingRoot").value.trim(),
+    job_attachments_root:document.getElementById("gameNewJobAttachmentsRoot").value.trim(),
     output_root:document.getElementById("gameNewOutputRoot").value.trim()
   };
   const response=await request("/api/game/projects",{

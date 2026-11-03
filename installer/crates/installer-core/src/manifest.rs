@@ -49,7 +49,7 @@ impl ArtifactManifest {
         if filename.is_empty()
             || filename == "."
             || filename == ".."
-            || filename.contains(['/', '\\', ':'])
+            || filename.chars().any(|c| matches!(c, '/' | '\\' | ':'))
             || filename.chars().any(|c| c.is_control())
         {
             return Err(ManifestError::InvalidFilename);

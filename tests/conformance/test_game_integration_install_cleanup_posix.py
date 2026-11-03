@@ -108,6 +108,38 @@ class PosixCleanupTests(unittest.TestCase):
         self.assertEqual((operation / "keep.txt").read_bytes(), b"foreign")
         self.assertTrue(operation.is_dir())
 
+    def test_root_replaced_after_unlink_preserves_replacement(self):
+        capability = inspect_cleanup_backend_capabilities()
+        if capability["state"] != "candidate":
+            self.skipTest("POSIX handle-relative cleanup unavailable: " + capability["reason"])
+        self.stage()
+        old_root = self.base / "old-staging"
+        foreign = self.base / "foreign-root"
+        foreign.mkdir()
+        (foreign / "keep.txt").write_bytes(b"foreign")
+        original_unlink = os.unlink
+        switched = False
+
+        def unlink_then_swap(path, *args, **kwargs):
+            nonlocal switched
+            result = original_unlink(path, *args, **kwargs)
+            if not switched and kwargs.get("dir_fd") is not None:
+                switched = True
+                self.root.rename(old_root)
+                foreign.rename(self.root)
+            return result
+
+        with patch("game_integration_install_cleanup_posix.inspect_cleanup_backend_capabilities",
+                   return_value=capability), patch(
+                   "game_integration_install_cleanup_posix.os.unlink",
+                   side_effect=unlink_then_swap):
+            result = self.cleanup()
+        self.assertTrue(switched)
+        self.assertEqual(result["state"], "partial")
+        self.assertFalse(result["installation_allowed"])
+        self.assertEqual((self.root / "keep.txt").read_bytes(), b"foreign")
+        self.assertTrue((old_root / "op1").exists())
+
     def test_operation_symlink_swap_before_open_is_blocked(self):
         capability = inspect_cleanup_backend_capabilities()
         if capability["state"] != "candidate":

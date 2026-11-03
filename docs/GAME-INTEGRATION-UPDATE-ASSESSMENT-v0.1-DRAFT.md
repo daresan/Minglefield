@@ -83,3 +83,22 @@ The offline conformance fixture uses the identifiers of
 It does not yet fetch or authenticate files from that repository. The next
 integration step must establish an independent trust anchor and run read-only
 tests against actual pinned test assets, including negative tampering cases.
+
+## External fixture staging (2026-11-03)
+
+Two **declarative example** files were added to the `main` branch of
+`daresan/minglefield-integration-test`:
+- `fixtures/assessments/v1.0.0-to-v1.1.0.compatibility.json`
+- `fixtures/assessments/v1.0.0-to-v1.1.0.migration.json`
+
+They name the existing version transition but were added **after** the
+`v1.1.0` tag. Therefore they are NOT part of the tagged release, are NOT
+release-authenticated, and their declared requirements/operations are test
+examples, not verified Game compatibility or a safe migration. Do not silently
+fetch these from `main` while claiming to verify `v1.1.0`.
+
+Next: create an explicitly versioned, immutable fixture release/ref containing
+both files; record its exact commit and independently approved document digests
+in a server-controlled test trust anchor. Then perform read-only fetch-by-ref,
+byte comparison, schema/release binding and tamper tests. No client-provided
+digest or release metadata may substitute for that anchor. No installation.

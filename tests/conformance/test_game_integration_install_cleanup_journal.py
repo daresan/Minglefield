@@ -1,5 +1,6 @@
 """Integration checks for DB-bound read-only cleanup preflight."""
 import hashlib
+import os
 import sys
 import tempfile
 import unittest
@@ -108,6 +109,36 @@ class JournalBoundCleanupTests(unittest.TestCase):
         self.assertEqual(result["reason"], "not_host_owner")
         self.assertFalse(result["deletion_performed"])
         self.assertTrue((self.staging / "op.one").exists())
+
+    def test_posix_cleanup_requires_terminal_journal_and_owner(self):
+        self.prepare_and_stage()
+        def cleanup(*args):
+            return self.policy.cleanup_game_install_staging_posix(
+                *(args or self.args), self.entries, self.staging)
+        pending = cleanup()
+        self.assertEqual(pending["state"], "blocked")
+        self.assertTrue((self.staging / "op.one" / "blob-000000").exists())
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        wrong_owner = cleanup("host.one", "other", "project.one", "op.one")
+        self.assertEqual(wrong_owner["reason"], "not_host_owner")
+        self.assertTrue((self.staging / "op.one").exists())
+        result = cleanup()
+        if os.name == "nt":
+            self.assertEqual(result["reason"], "secure_cleanup_backend_unavailable")
+            self.assertTrue((self.staging / "op.one").exists())
+        else:
+            self.assertEqual(result["state"], "removed")
+            self.assertFalse((self.staging / "op.one").exists())
+        self.assertTrue(self.repo.is_dir())
+
+    def test_posix_cleanup_rejects_wrong_plan_after_cancellation(self):
+        self.prepare_and_stage()
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        wrong = [dict(self.entries[0], sha256="0" * 64)]
+        result = self.policy.cleanup_game_install_staging_posix(
+            *self.args, wrong, self.staging)
+        self.assertEqual(result["reason"], "journal_cleanup_not_authorized")
+        self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
 
     def test_unknown_operation_denied(self):
         self.assertEqual(self.inspect()["reason"], "operation_not_found")

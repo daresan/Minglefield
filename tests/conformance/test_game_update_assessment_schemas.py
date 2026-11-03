@@ -31,6 +31,30 @@ class GameUpdateAssessmentSchemaTests(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertFalse(v.is_valid(bad))
 
+    def test_repository_path_segments_are_not_navigation(self):
+        for name in ("game-update-compatibility-v0.1.schema.json",
+                     "game-update-migration-v0.1.schema.json"):
+            with self.subTest(schema=name):
+                v = validator(name)
+                if "compatibility" in name:
+                    valid = {**BASE, "contract_version": "0.1",
+                             "requirements": [{"capability": "game.api", "constraint": ">=1"}]}
+                else:
+                    valid = {**BASE, "plan_version": "0.1",
+                             "operations": [{"kind": "add", "path": "plugins/main.py"}],
+                             "recovery": {"strategy": "restore_backup"}}
+                for repository in ("../bad", "./bad", "owner/..", "owner/.",
+                                   ".hidden/repo", "owner/.hidden", "owner//repo",
+                                   "/repo", "owner/", "owner\\repo"):
+                    with self.subTest(repository=repository):
+                        bad = {**valid, "release_source":
+                               {"provider": "github", "repository": repository}}
+                        # Hidden names are not navigation; only dot-only segments are forbidden.
+                        if repository in (".hidden/repo", "owner/.hidden"):
+                            self.assertTrue(v.is_valid(bad))
+                        else:
+                            self.assertFalse(v.is_valid(bad))
+
     def test_migration_plan(self):
         v = validator("game-update-migration-v0.1.schema.json")
         valid = {**BASE, "plan_version": "0.1",

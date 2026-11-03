@@ -10,7 +10,7 @@ def delete_relative_test_file(parent_path, child_name, *,
                               expected_parent_volume_serial=None,
                               expected_parent_file_index=None,
                               expected_file_volume_serial=None,
-                              expected_file_index=None):
+                              expected_file_index=None, _test_before_disposition=None):
     def denied(reason):
         return {"state": "blocked", "reason": reason,
                 "deletion_performed": False, "cleanup_allowed": False}
@@ -119,6 +119,19 @@ def delete_relative_test_file(parent_path, child_name, *,
                 return denied("unsafe_staging_hardlink")
             if identity(info) != identities[2:]:
                 return denied("native_file_identity_mismatch")
+            # Test-only deterministic scheduling point; never wired into runtime.
+            if _test_before_disposition is not None:
+                _test_before_disposition()
+            # Verify held handles remain the expected objects after the test hook.
+            if not get_info(parent, ctypes.byref(parent_info)):
+                return denied("native_parent_info_failed")
+            if identity(parent_info) != identities[:2] or parent_info.attributes & 0x400:
+                return denied("native_parent_identity_mismatch")
+            if not get_info(child, ctypes.byref(info)):
+                return denied("native_child_info_failed")
+            if (identity(info) != identities[2:] or info.attributes & 0x400
+                    or info.attributes & 0x10 or info.links != 1):
+                return denied("native_file_identity_changed")
             disposition = Disposition(True)
             if not set_info(child, 4, ctypes.byref(disposition),
                             ctypes.sizeof(disposition)):

@@ -35,5 +35,5 @@ jobs:
       - run: cargo check --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
-      - name: Offline GitHub release provenance checks
-        run: python -m unittest discover -s scripts -p "test_verify_release_source.py" -v
+      - name: Offline installer release preparation tests
+        run: python -m unittest discover -s scripts -p "test_*.py" -v

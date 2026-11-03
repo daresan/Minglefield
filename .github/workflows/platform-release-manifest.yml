@@ -1,0 +1,35 @@
+name: Platform release manifest conformance
+
+on:
+  push:
+    paths:
+      - "server/platform_release_manifest.py"
+      - "tests/conformance/test_platform_release_manifest.py"
+      - ".github/workflows/platform-release-manifest.yml"
+  pull_request:
+    paths:
+      - "server/platform_release_manifest.py"
+      - "tests/conformance/test_platform_release_manifest.py"
+      - ".github/workflows/platform-release-manifest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifest-validation:
+    name: Platform manifest / ${{ matrix.os }} / Python 3.11
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run platform release manifest conformance
+        run: python -B -m unittest discover -s tests/conformance -p "test_platform_release_manifest.py" -v

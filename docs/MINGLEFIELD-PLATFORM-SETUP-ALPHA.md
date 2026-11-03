@@ -18,19 +18,18 @@ This work concerns **Minglefield itself**, not the future game integration insta
 
 ## First deliverable: non-mutating environment preflight
 
-`scripts/minglefield-platform-preflight.ps1` checks the explicitly selected
-interpreter, its Python version, declared conformance package constraints,
-and pip dependency consistency. It never installs dependencies, modifies
+`scripts/minglefield_platform_preflight.py` checks the selected
+interpreter, its Python version and declared conformance package constraints. It never installs dependencies, modifies
 a database, launches the gateway, or changes Git state.
 
 Run from repository root:
 
 ```powershell
-$env:MINGLEFIELD_PYTHON = "C:\\path\\to\\minglefield\\python.exe"
-.\\scripts\\minglefield-platform-preflight.ps1
+$mfPython = $env:MINGLEFIELD_PYTHON
+& $mfPython -B scripts/minglefield_platform_preflight.py
 ```
 
-A failing preflight must not trigger an implicit installation.
+The user must select the interpreter explicitly. The Python entry point avoids PowerShell script execution-policy restrictions. A failing preflight must not trigger an implicit installation.
 
 ## Next implementation slices (not yet delivered)
 

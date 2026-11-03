@@ -1,6 +1,8 @@
 //! Shared, side-effect-free installation planning for GUI and CLI.
 //! This crate does not install files, claim Hosts, or establish publisher trust.
 
+pub mod config;
+
 use std::path::{Component, Path};
 
 /// OS-specific paths mirror server/platform_user_paths.py.

@@ -25,7 +25,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 if install_dir.is_some() {
                     return Err((2, "duplicate argument: --install-dir".to_string()));
                 }
-                let path = args.next().filter(|value| !value.starts_with("--"))
+                let path = args
+                    .next()
+                    .filter(|value| !value.starts_with("--"))
                     .ok_or((2, "--install-dir requires a value".to_string()))?;
                 install_dir = Some(path);
             }
@@ -33,7 +35,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 if config_file.is_some() {
                     return Err((2, "duplicate argument: --config".to_string()));
                 }
-                let file = args.next().filter(|value| !value.starts_with("--"))
+                let file = args
+                    .next()
+                    .filter(|value| !value.starts_with("--"))
                     .ok_or((2, "--config requires a file path".to_string()))?;
                 config_file = Some(file);
             }
@@ -130,7 +134,14 @@ mod tests {
             vec!["--silent", "--silent", "--defaults"],
             vec!["--silent", "--defaults", "--defaults"],
             vec!["--silent", "--defaults", "--json", "--json"],
-            vec!["--silent", "--defaults", "--install-dir", "/tmp", "--install-dir", "/tmp"],
+            vec![
+                "--silent",
+                "--defaults",
+                "--install-dir",
+                "/tmp",
+                "--install-dir",
+                "/tmp",
+            ],
             vec!["--silent", "--config", "one", "--config", "two"],
             vec!["--silent", "--config", "--json"],
             vec!["--silent", "--defaults", "--install-dir", "--json"],

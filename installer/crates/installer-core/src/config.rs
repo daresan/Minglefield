@@ -80,11 +80,27 @@ impl InstallerConfig {
                 _ => return Err("unknown configuration key"),
             }
         }
-        if seen.len() != 6 {
-            return Err("missing configuration key");
+        for key in [
+            "version",
+            "install_optional_conda",
+            "install_optional_comfyui",
+            "explicit_optional_consent",
+        ] {
+            if !seen.contains(key) {
+                return Err("missing configuration key");
+            }
         }
         if config.version != CONFIG_VERSION {
             return Err("unsupported configuration version");
+        }
+        if !seen.contains("install_dir") || !seen.contains("data_dir") {
+            let defaults = Self::defaults().map_err(|_| "cannot resolve platform defaults")?;
+            if !seen.contains("install_dir") {
+                config.install_dir = defaults.install_dir;
+            }
+            if !seen.contains("data_dir") {
+                config.data_dir = defaults.data_dir;
+            }
         }
         Ok(config)
     }
@@ -135,6 +151,10 @@ mod tests {
         assert!(InstallerConfig::parse(&format!("{valid}unknown=true\n")).is_err());
         assert!(InstallerConfig::parse(&format!("{valid}version=1\n")).is_err());
         assert!(InstallerConfig::parse("version=1").is_err());
+        let portable = "version=1\ninstall_optional_conda=false\ninstall_optional_comfyui=false\nexplicit_optional_consent=false\n";
+        let parsed = InstallerConfig::parse(portable).unwrap();
+        assert!(!parsed.install_dir.is_empty());
+        assert!(!parsed.data_dir.is_empty());
         assert!(InstallerConfig::parse(&valid.replace("version=1", "version=2")).is_err());
         assert!(InstallerConfig::parse(&valid.replace("conda=false", "conda=TRUE")).is_err());
     }

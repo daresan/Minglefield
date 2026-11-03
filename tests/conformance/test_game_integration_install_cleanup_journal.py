@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
@@ -82,6 +83,51 @@ class JournalBoundCleanupTests(unittest.TestCase):
         wrong_digest = self.policy.inspect_game_install_cleanup_windows_relative(
             *self.args, wrong_entries, self.staging)
         self.assertEqual(wrong_digest["state"], "blocked")
+        self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only native identity probes")
+    def test_windows_relative_file_identity_mismatch_fails_closed(self):
+        self.prepare_and_stage()
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        from game_integration_install_cleanup_windows_relative import (
+            inspect_windows_relative_child)
+        def altered(parent, name):
+            result = inspect_windows_relative_child(parent, name)
+            if result["state"] == "inspected":
+                return dict(result, file_index=result["file_index"] ^ 1)
+            return result
+        with mock.patch(
+            "game_integration_install_cleanup_windows_relative.inspect_windows_relative_child",
+            side_effect=altered):
+            result = self.policy.inspect_game_install_cleanup_windows_relative(
+                *self.args, self.entries, self.staging)
+        self.assertEqual(result["reason"],
+                         "windows_relative_file_identity_changed", result)
+        self.assertFalse(result["deletion_performed"])
+        self.assertTrue((self.staging / "op.one" / "blob-000000").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only native identity probes")
+    def test_windows_relative_parent_identity_mismatch_fails_closed(self):
+        self.prepare_and_stage()
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        from game_integration_install_cleanup_windows import (
+            inspect_windows_directory_handle)
+        calls = [0]
+        def altered(path):
+            result = inspect_windows_directory_handle(path)
+            if result["state"] == "inspected":
+                calls[0] += 1
+                if calls[0] >= 2:
+                    return dict(result, file_index=result["file_index"] ^ 1)
+            return result
+        with mock.patch(
+            "game_integration_install_cleanup_windows.inspect_windows_directory_handle",
+            side_effect=altered):
+            result = self.policy.inspect_game_install_cleanup_windows_relative(
+                *self.args, self.entries, self.staging)
+        self.assertEqual(result["reason"],
+                         "windows_relative_parent_identity_changed", result)
+        self.assertFalse(result["deletion_performed"])
         self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
 
     def test_cancelled_operation_eligible_but_never_deleted(self):

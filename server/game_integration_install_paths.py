@@ -5,6 +5,7 @@ The plan is advisory only. Artifact identity and approval are separate gates.
 import os
 import re
 from pathlib import Path, PurePosixPath
+from game_integration_install_path_safety import has_redirecting_component, is_redirecting_path
 
 _DRIVE = re.compile(r"^[A-Za-z]:")
 _WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
@@ -26,7 +27,7 @@ def _valid_relative_path(value):
 
 
 def inspect_installation_paths(repository_root, destinations):
-    """Fail closed on path escape, collisions, existing files and symlink traversal.
+    """Fail closed on path escape, collisions, existing files and filesystem redirection.
 
     Does not trust the proposed paths or write to disk. Existing destinations
     are conflicts until a separate replacement/backup policy is implemented.
@@ -37,7 +38,7 @@ def inspect_installation_paths(repository_root, destinations):
             type(destinations) is not list or len(destinations) > 10000):
         return denied("invalid_installation_plan")
     root = Path(repository_root)
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir() or has_redirecting_component(root):
         return denied("unsafe_repository_root")
     if not destinations or any(not _valid_relative_path(p) for p in destinations):
         return denied("invalid_destination_path")
@@ -53,7 +54,7 @@ def inspect_installation_paths(repository_root, destinations):
         current = root
         for part in relative.split("/"):
             current = current / part
-            if current.is_symlink():
+            if is_redirecting_path(current):
                 return denied("symlink_in_destination", path=relative)
         if not current.resolve(strict=False).is_relative_to(root_resolved):
             return denied("destination_outside_repository", path=relative)

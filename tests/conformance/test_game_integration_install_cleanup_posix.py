@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 from game_integration_install_cleanup_posix import cleanup_staged_operation_posix
+from game_integration_install_cleanup_backend import inspect_cleanup_backend_capabilities
 from game_integration_install_executor import stage_installation_bytes
 from game_integration_install_staging import validate_staging_manifest
 
@@ -73,6 +74,9 @@ class PosixCleanupTests(unittest.TestCase):
             operation.chmod(original)
 
     def test_operation_replaced_during_unlink_does_not_delete_replacement(self):
+        capability = inspect_cleanup_backend_capabilities()
+        if capability["state"] != "candidate":
+            self.skipTest("POSIX handle-relative cleanup unavailable: " + capability["reason"])
         self.stage()
         original_unlink = os.unlink
         operation = self.root / "op1"
@@ -100,6 +104,9 @@ class PosixCleanupTests(unittest.TestCase):
         self.assertTrue(operation.is_dir())
 
     def test_operation_symlink_swap_before_open_is_blocked(self):
+        capability = inspect_cleanup_backend_capabilities()
+        if capability["state"] != "candidate":
+            self.skipTest("POSIX handle-relative cleanup unavailable: " + capability["reason"])
         self.stage()
         outside = self.base / "outside"
         outside.mkdir()

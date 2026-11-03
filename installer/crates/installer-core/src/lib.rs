@@ -3,24 +3,88 @@
 
 use std::path::{Component, Path};
 
-/// Resolve the current user's default installation destination for both GUI and CLI.
-/// A missing home directory is an error, never a fallback to a relative path.
-pub fn default_destination() -> Result<String, &'static str> {
-    if cfg!(windows) {
-        std::env::var("LOCALAPPDATA")
-            .map(|v| format!("{v}\\\\Programs\\\\Minglefield"))
-            .map_err(|_| "LOCALAPPDATA is not set")
-    } else if cfg!(target_os = "macos") {
-        std::env::var("HOME")
-            .map(|v| format!("{v}/Applications/Minglefield"))
-            .map_err(|_| "HOME is not set")
-    } else {
-        std::env::var("HOME")
-            .map(|v| format!("{v}/.local/opt/Minglefield"))
-            .map_err(|_| "HOME is not set")
+/// OS-specific paths mirror server/platform_user_paths.py.
+/// The returned install and data paths are distinct and are not created here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserPaths {
+    pub install: String,
+    pub data: String,
+}
+
+pub fn user_paths(
+    platform: &str,
+    local_app_data: Option<&str>,
+    home: &str,
+    xdg_data_home: Option<&str>,
+) -> Result<UserPaths, &'static str> {
+    let home = home.trim_end_matches(['/', '\\']);
+    match platform {
+        "win32" => {
+            let local = local_app_data.filter(|value| !value.is_empty())
+                .ok_or("LOCALAPPDATA must be an absolute directory on Windows")?;
+            // Windows absolute paths require a drive prefix or UNC share.
+            let bytes = local.as_bytes();
+            let drive_absolute = bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && (bytes[2] == b'\\' || bytes[2] == b'/');
+            let unc_absolute = local.starts_with("\\\\") || local.starts_with("//");
+            if !drive_absolute && !unc_absolute {
+                return Err("LOCALAPPDATA must be an absolute directory on Windows");
+            }
+            let local = local.trim_end_matches(['/', '\\']);
+            Ok(UserPaths {
+                install: format!("{local}\\Programs\\Minglefield"),
+                data: format!("{local}\\Minglefield"),
+            })
+        }
+        "darwin" => {
+            if !home.starts_with('/') {
+                return Err("HOME must be absolute");
+            }
+            Ok(UserPaths {
+                install: format!("{home}/Applications/Minglefield.app"),
+                data: format!("{home}/Library/Application Support/Minglefield"),
+            })
+        }
+        value if value.starts_with("linux") => {
+            if !home.starts_with('/') {
+                return Err("HOME must be absolute");
+            }
+            let data_root = match xdg_data_home.filter(|value| !value.is_empty()) {
+                Some(value) if value.starts_with('/') => value.trim_end_matches('/').to_owned(),
+                Some(_) => return Err("XDG_DATA_HOME must be absolute"),
+                None => format!("{home}/.local/share"),
+            };
+            Ok(UserPaths {
+                install: format!("{home}/.local/opt/minglefield"),
+                data: format!("{data_root}/minglefield"),
+            })
+        }
+        _ => Err("unsupported operating system"),
     }
 }
 
+pub fn default_user_paths() -> Result<UserPaths, &'static str> {
+    let platform = if cfg!(windows) {
+        "win32"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        return Err("unsupported operating system");
+    };
+    let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .unwrap_or_default();
+    let local = std::env::var("LOCALAPPDATA").ok();
+    let xdg = std::env::var("XDG_DATA_HOME").ok();
+    user_paths(platform, local.as_deref(), &home, xdg.as_deref())
+}
+
+pub fn default_destination() -> Result<String, &'static str> {
+    default_user_paths().map(|paths| paths.install)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -93,6 +157,25 @@ mod tests {
             install_optional_comfyui: false,
             explicit_optional_consent: false,
         }
+    }
+
+    #[test]
+    fn platform_paths_match_python_reference_contract() {
+        let win = user_paths("win32", Some("C:\\Users\\Shadow\\AppData\\Local"), "C:\\Users\\Other", None).unwrap();
+        assert_eq!(win.install, "C:\\Users\\Shadow\\AppData\\Local\\Programs\\Minglefield");
+        assert_eq!(win.data, "C:\\Users\\Shadow\\AppData\\Local\\Minglefield");
+        assert!(user_paths("win32", None, "C:\\Users\\Shadow", None).is_err());
+        assert!(user_paths("win32", Some("relative"), "C:\\Users\\Shadow", None).is_err());
+
+        let mac = user_paths("darwin", None, "/Users/test", None).unwrap();
+        assert_eq!(mac.install, "/Users/test/Applications/Minglefield.app");
+        assert_eq!(mac.data, "/Users/test/Library/Application Support/Minglefield");
+
+        let linux = user_paths("linux", None, "/home/test", Some("/var/tmp/xdg")).unwrap();
+        assert_eq!(linux.install, "/home/test/.local/opt/minglefield");
+        assert_eq!(linux.data, "/var/tmp/xdg/minglefield");
+        assert!(user_paths("linux", None, "/home/test", Some("relative")).is_err());
+        assert!(user_paths("plan9", None, "/home/test", None).is_err());
     }
 
     #[test]

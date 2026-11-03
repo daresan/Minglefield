@@ -326,17 +326,17 @@ class GameProjectHttpTests(unittest.TestCase):
         def releases(*args):
             return {"state": "available", "complete": True, "releases": [
                 {"tag_name": "v1.1.0", "draft": False, "prerelease": False}]}
+        # Capture the original callable before patching its module attribute.
+        # Otherwise importing it inside patch() returns the mock itself and recurses.
+        from game_integration_assessment_approvals import discover_with_operator_approvals as real
+        def injected_discovery(entry, catalog, **kwargs):
+            return real(entry, catalog, **{**kwargs, "fetcher": releases,
+                                         "compare_fetcher": lambda *args: {"state": "unknown"}})
         with patch("game_integration_registry.load_registry", return_value=registry), patch(
                 "game_integration_assessment_loader.load_pinned_assessment_bytes",
                 side_effect=load), patch(
-                "game_integration_updates.fetch_releases", side_effect=releases), patch(
-                "game_integration_assessment_approvals.discover_with_operator_approvals"
-        ) as wrapper:
-            # Delegate through the real discovery with injected external release I/O.
-            from game_integration_assessment_approvals import discover_with_operator_approvals as real
-            wrapper.side_effect = lambda entry, catalog, **kwargs: real(
-                entry, catalog, **{**kwargs, "fetcher": releases,
-                                  "compare_fetcher": lambda *args: {"state": "unknown"}})
+                "game_integration_assessment_approvals.discover_with_operator_approvals",
+                side_effect=injected_discovery):
             manifest.write_text(json.dumps({"format_version": "0.1", "approvals": [row]}))
             self.assertEqual(self.request("GET", route)[0], 401)
             self.assertEqual(self.request("GET", route, self.other)[0], 404)

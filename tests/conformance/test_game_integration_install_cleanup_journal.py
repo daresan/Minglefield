@@ -143,6 +143,36 @@ class JournalBoundCleanupTests(unittest.TestCase):
         self.assertFalse(result["deletion_performed"])
         self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
 
+    @unittest.skipUnless(os.name == "nt", "Windows-only native deletion")
+    def test_windows_experimental_cleanup_requires_terminal_journal(self):
+        self.prepare_and_stage()
+        filename = "blob-000000"
+        pending = self.policy.cleanup_game_install_staging_windows_file_experimental(
+            *self.args, self.entries, self.staging, filename)
+        self.assertEqual(pending["reason"], "journal_cleanup_not_authorized")
+        self.assertTrue((self.staging / "op.one" / filename).exists())
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        wrong_owner = self.policy.cleanup_game_install_staging_windows_file_experimental(
+            "host.one", "other", "project.one", "op.one",
+            self.entries, self.staging, filename)
+        self.assertEqual(wrong_owner["reason"], "not_host_owner")
+        wrong_digest = self.policy.cleanup_game_install_staging_windows_file_experimental(
+            *self.args, [dict(self.entries[0], sha256="0" * 64)],
+            self.staging, filename)
+        self.assertEqual(wrong_digest["reason"], "journal_cleanup_not_authorized")
+        self.assertTrue((self.staging / "op.one" / filename).exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only native deletion")
+    def test_windows_experimental_cleanup_deletes_only_journal_bound_blob(self):
+        self.prepare_and_stage()
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        result = self.policy.cleanup_game_install_staging_windows_file_experimental(
+            *self.args, self.entries, self.staging, "blob-000000")
+        self.assertEqual(result["state"], "removed", result)
+        self.assertFalse((self.staging / "op.one" / "blob-000000").exists())
+        self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
+        self.assertTrue(self.repo.is_dir())
+
     def test_cancelled_operation_eligible_but_never_deleted(self):
         self.prepare_and_stage()
         self.assertEqual(self.policy.cancel_prepared_game_install(

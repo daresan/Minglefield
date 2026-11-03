@@ -6,22 +6,22 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 class PlatformPathError(ValueError):
     pass
 
 
-def user_paths(*, platform: str | None = None, environ=None, home: str | Path | None = None) -> dict[str, Path]:
+def user_paths(*, platform: str | None = None, environ=None, home: str | Path | None = None) -> dict[str, Path | PureWindowsPath]:
     platform = sys.platform if platform is None else platform
     env = os.environ if environ is None else environ
     home_path = Path.home() if home is None else Path(home)
     if platform == "win32":
         local = env.get("LOCALAPPDATA")
-        if not local or not Path(local).is_absolute():
+        if not local or not PureWindowsPath(local).is_absolute():
             raise PlatformPathError("LOCALAPPDATA must be an absolute directory on Windows")
-        base = Path(local)
+        base = PureWindowsPath(local)
         return {"install": base / "Programs" / "Minglefield",
                 "data": base / "Minglefield"}
     if platform == "darwin":

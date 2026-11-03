@@ -6,6 +6,7 @@ This module never claims artifact integrity or installation.
 from packaging.version import Version, InvalidVersion
 from urllib.parse import quote
 from game_release_metadata import fetch_releases, fetch_compare_files
+from game_integration_assessment import assess_compatibility, assess_migration
 
 
 def _version(value):
@@ -94,10 +95,8 @@ def _discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
             "verification_state":"unknown",
             "preview":{"state":"incomplete","release_notes":release.get("release_notes",""),
                        "changed_files":changed,
-                       "compatibility":{"state":"unknown","reason":"no_verified_compatibility_contract",
-                                        "requires_manual_review":True},
-                       "migration":{"state":"unknown","reason":"no_verified_migration_plan",
-                                    "requires_manual_review":True},
+                       "compatibility":assess_compatibility(),
+                       "migration":assess_migration(),
                        "artifact_integrity":{"state":"unknown"},
                        "installation_allowed":False},
             "note":"Version comparison only; installation and artifact integrity unverified."}

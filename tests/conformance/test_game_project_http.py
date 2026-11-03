@@ -55,7 +55,7 @@ class GameProjectHttpTests(unittest.TestCase):
     def test_host_integration_source_settings_owner_scoped(self):
         endpoint = "/api/host/settings"
         payload = {"host_id": "host.one", "settings": {
-            "staging_root": "", "output_root": "",
+            "job_attachments_root": "", "output_root": "",
             "trusted_integration_sources": ["daresan/minglefield-integration-test"]}}
         self.assertEqual(self.request("POST", endpoint, self.other, payload)[0], 400)
         status, data = self.request("POST", endpoint, self.owner, payload)
@@ -67,7 +67,7 @@ class GameProjectHttpTests(unittest.TestCase):
         self.assertEqual(self.request("GET", endpoint + "?host_id=host.one", self.other)[0], 403)
         for bad in (["../evil"], ["daresan/repo", "daresan/repo"], ["https://example.com/x"]):
             invalid = {"host_id": "host.one", "settings": {
-                "staging_root": "", "output_root": "",
+                "job_attachments_root": "", "output_root": "",
                 "trusted_integration_sources": bad}}
             self.assertNotEqual(self.request("POST", endpoint, self.owner, invalid)[0], 200)
         status, data = self.request("GET", endpoint + "?host_id=host.one", self.owner)
@@ -78,7 +78,7 @@ class GameProjectHttpTests(unittest.TestCase):
         path = "/api/game/projects?host_id=host.one"
         payload = dict(host_id="host.one", project_id="game.one", name="Game One",
                        repository_root=str(self.root / "repo"),
-                       staging_root=str(self.root / "stage"),
+                       job_attachments_root=str(self.root / "stage"),
                        output_root=str(self.root / "output"))
         self.assertEqual(self.request("GET", path)[0], 401)
         self.assertEqual(self.request("POST", "/api/game/projects", payload=payload)[0], 401)
@@ -114,7 +114,7 @@ class GameProjectHttpTests(unittest.TestCase):
     def test_project_update_http_contract(self):
         payload = dict(host_id="host.one", project_id="game.one", name="Original",
                        repository_root=str(self.root / "repo"),
-                       staging_root=str(self.root / "stage"),
+                       job_attachments_root=str(self.root / "stage"),
                        output_root=str(self.root / "output"))
         self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
         update = dict(payload, name="Updated", settings_revision=1)
@@ -144,11 +144,11 @@ class GameProjectHttpTests(unittest.TestCase):
         status, data = self.request("POST", endpoint + "/update", self.owner, update)
         self.assertEqual(status, 200, data)
         conflicting = dict(update, settings_revision=2,
-                           staging_root=str(self.root / "different"))
+                           job_attachments_root=str(self.root / "different"))
         status, data = self.request("POST", endpoint + "/update",
                                     self.owner, conflicting)
         self.assertEqual(status, 400, data)
-        self.assertEqual(data["error"], "conflicting_job_attachments_roots")
+        self.assertEqual(data["error"], "invalid_project_update")
         status, data = self.request("GET", endpoint + "?host_id=host.one", self.owner)
         self.assertEqual(data["projects"][0]["settings_revision"], 2)
 
@@ -172,7 +172,7 @@ class GameProjectHttpTests(unittest.TestCase):
         marker = existing / "keep.txt"
         marker.write_text("preserve")
         payload = dict(host_id="host.one", project_id="game.remove", name="Temporary",
-                       repository_root=str(existing), staging_root=str(self.root / "stage"),
+                       repository_root=str(existing), job_attachments_root=str(self.root / "stage"),
                        output_root=str(self.root / "output"))
         self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
         deletion = dict(host_id="host.one", project_id="game.remove", settings_revision=1)
@@ -190,7 +190,7 @@ class GameProjectHttpTests(unittest.TestCase):
         repo.mkdir()
         payload=dict(host_id="host.one",project_id="game.manifest.http",
                      name="Manifest HTTP",repository_root=str(repo),
-                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+                     job_attachments_root=str(repo/"staging"),output_root=str(repo/"output"))
         self.assertEqual(self.request("POST","/api/game/projects",
                                       self.owner,payload)[0],201)
         body=dict(host_id="host.one",project_id="game.manifest.http",
@@ -211,7 +211,7 @@ class GameProjectHttpTests(unittest.TestCase):
         repo.mkdir()
         payload=dict(host_id="host.one",project_id="game.report",
                      name="Integration Report",repository_root=str(repo),
-                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+                     job_attachments_root=str(repo/"staging"),output_root=str(repo/"output"))
         self.assertEqual(self.request("POST","/api/game/projects",
                                       self.owner,payload)[0],201)
         route="/api/game/integrations?host_id=host.one&project_id=game.report"
@@ -243,7 +243,7 @@ class GameProjectHttpTests(unittest.TestCase):
         repo.mkdir()
         payload=dict(host_id="host.one",project_id="game.update",
                      name="Update",repository_root=str(repo),
-                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+                     job_attachments_root=str(repo/"staging"),output_root=str(repo/"output"))
         self.assertEqual(self.request("POST","/api/game/projects",
                                       self.owner,payload)[0],201)
         route="/api/game/integration/update-status?host_id=host.one&project_id=game.update"
@@ -267,7 +267,7 @@ class GameProjectHttpTests(unittest.TestCase):
         repo.mkdir()
         payload=dict(host_id="host.one",project_id="game.release.report",
                      name="Release Report",repository_root=str(repo),
-                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+                     job_attachments_root=str(repo/"staging"),output_root=str(repo/"output"))
         self.assertEqual(self.request("POST","/api/game/projects",self.owner,payload)[0],201)
         route="/api/game/integration/releases?host_id=host.one&project_id=game.release.report"
         self.assertEqual(self.request("GET",route)[0],401)
@@ -286,7 +286,7 @@ class GameProjectHttpTests(unittest.TestCase):
         project = "game.local.release"
         payload = dict(host_id="host.one", project_id=project, name="Local release",
                        repository_root=str(repository),
-                       staging_root=str(repository / "staging"),
+                       job_attachments_root=str(repository / "staging"),
                        output_root=str(repository / "output"))
         self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
         (repository / ".minglefield").mkdir()
@@ -319,7 +319,7 @@ class GameProjectHttpTests(unittest.TestCase):
             self.assertEqual(calls, [])
             self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
                 "host_id": "host.one", "settings": {
-                    "staging_root": "", "output_root": "",
+                    "job_attachments_root": "", "output_root": "",
                     "trusted_integration_sources": [source["repository"]]}})[0], 200)
             status, allowed = self.request("GET", route, self.owner)
             self.assertEqual(status, 200)
@@ -329,7 +329,7 @@ class GameProjectHttpTests(unittest.TestCase):
             self.assertEqual(allowed["updates"][0]["verification_state"], "unknown")
             self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
                 "host_id": "host.one", "settings": {
-                    "staging_root": "", "output_root": "",
+                    "job_attachments_root": "", "output_root": "",
                     "trusted_integration_sources": []}})[0], 200)
             status, revoked = self.request("GET", route, self.owner)
             self.assertEqual(status, 200)
@@ -342,7 +342,7 @@ class GameProjectHttpTests(unittest.TestCase):
         repo.mkdir()
         project="game.multi"
         payload=dict(host_id="host.one",project_id=project,name="Multi",repository_root=str(repo),
-                     staging_root=str(repo/"staging"),output_root=str(repo/"output"))
+                     job_attachments_root=str(repo/"staging"),output_root=str(repo/"output"))
         self.assertEqual(self.request("POST","/api/game/projects",self.owner,payload)[0],201)
         (repo/".minglefield").mkdir()
         (repo/".minglefield/project.json").write_text(json.dumps({"schema_version":1,"project_id":project}))
@@ -363,7 +363,7 @@ class GameProjectHttpTests(unittest.TestCase):
                 raise OSError("offline")
             return {"state":"available","releases":[{"tag_name":"1.0","release_notes":"<script>untrusted</script>"}]}
         self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
-            "host_id": "host.one", "settings": {"staging_root": "", "output_root": "",
+            "host_id": "host.one", "settings": {"job_attachments_root": "", "output_root": "",
                 "trusted_integration_sources": ["alice/one", "alice/two"]}})[0], 200)
         # Exercise the real inspector, validator and discovery engine with only external I/O mocked.
         import game_integration_updates as updates
@@ -394,7 +394,7 @@ class GameProjectHttpTests(unittest.TestCase):
         repo.mkdir()
         project = "game.approval.http"
         payload = dict(host_id="host.one", project_id=project, name="Approval HTTP",
-                       repository_root=str(repo), staging_root=str(repo / "staging"),
+                       repository_root=str(repo), job_attachments_root=str(repo / "staging"),
                        output_root=str(repo / "output"))
         self.assertEqual(self.request("POST", "/api/game/projects", self.owner, payload)[0], 201)
         (repo / ".minglefield").mkdir()
@@ -419,7 +419,7 @@ class GameProjectHttpTests(unittest.TestCase):
                "commit": "6df11272a9ca14dcfb8dc3bbe26b29c189d12253",
                "sha256": hashlib.sha256(raw).hexdigest()}
         self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
-            "host_id": "host.one", "settings": {"staging_root": "", "output_root": "",
+            "host_id": "host.one", "settings": {"job_attachments_root": "", "output_root": "",
                 "trusted_integration_sources": [source["repository"]]}})[0], 200)
         manifest = self.root / "operator_approvals.json"
         self.store._host_policy._assessment_manifest_path = manifest

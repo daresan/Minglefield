@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
-from game_integration_install_cleanup_windows import inspect_windows_directory_handle
+from game_integration_install_cleanup_windows import (inspect_windows_directory_handle,
+                                                      inspect_windows_staging_binding)
 
 
 class WindowsCleanupHandleTests(unittest.TestCase):
@@ -20,6 +21,42 @@ class WindowsCleanupHandleTests(unittest.TestCase):
                 self.assertIsInstance(result["file_index"], int)
             else:
                 self.assertEqual(result["reason"], "windows_only")
+
+    def test_staging_binding_platform_gate_and_invalid_operation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "staging"
+            root.mkdir()
+            (root / "op1").mkdir()
+            result = inspect_windows_staging_binding(root, "op1")
+            self.assertFalse(result["cleanup_allowed"])
+            self.assertFalse(result["deletion_performed"])
+            if os.name == "nt":
+                self.assertEqual(result["state"], "inspected")
+                for invalid in ("../outside", "..", "C:escape", "op1/child"):
+                    self.assertEqual(
+                        inspect_windows_staging_binding(root, invalid)["state"],
+                        "blocked")
+            else:
+                self.assertEqual(result["reason"], "windows_only")
+
+    @unittest.skipUnless(os.name == "nt", "Windows native handle test")
+    def test_staging_binding_rejects_junction_operation(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "staging"
+            target = Path(tmp) / "foreign"
+            root.mkdir()
+            target.mkdir()
+            (target / "keep").write_text("keep")
+            junction = root / "op1"
+            proc = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction), str(target)],
+                capture_output=True)
+            if proc.returncode:
+                self.skipTest("Junction creation unavailable")
+            result = inspect_windows_staging_binding(root, "op1")
+            self.assertEqual(result["reason"], "windows_reparse_point")
+            self.assertEqual((target / "keep").read_text(), "keep")
 
     @unittest.skipUnless(os.name == "nt", "Windows native handle test")
     def test_file_is_not_directory(self):

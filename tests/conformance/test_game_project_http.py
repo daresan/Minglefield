@@ -52,6 +52,28 @@ class GameProjectHttpTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_host_integration_source_settings_owner_scoped(self):
+        endpoint = "/api/host/settings"
+        payload = {"host_id": "host.one", "settings": {
+            "staging_root": "", "output_root": "",
+            "trusted_integration_sources": ["daresan/minglefield-integration-test"]}}
+        self.assertEqual(self.request("POST", endpoint, self.other, payload)[0], 403)
+        status, data = self.request("POST", endpoint, self.owner, payload)
+        self.assertEqual(status, 200, data)
+        status, data = self.request("GET", endpoint + "?host_id=host.one", self.owner)
+        self.assertEqual(status, 200)
+        self.assertEqual(data["settings"]["trusted_integration_sources"],
+                         ["daresan/minglefield-integration-test"])
+        self.assertEqual(self.request("GET", endpoint + "?host_id=host.one", self.other)[0], 403)
+        for bad in (["../evil"], ["daresan/repo", "daresan/repo"], ["https://example.com/x"]):
+            invalid = {"host_id": "host.one", "settings": {
+                "staging_root": "", "output_root": "",
+                "trusted_integration_sources": bad}}
+            self.assertNotEqual(self.request("POST", endpoint, self.owner, invalid)[0], 200)
+        status, data = self.request("GET", endpoint + "?host_id=host.one", self.owner)
+        self.assertEqual(data["settings"]["trusted_integration_sources"],
+                         ["daresan/minglefield-integration-test"])
+
     def test_authenticated_project_lifecycle_and_isolation(self):
         path = "/api/game/projects?host_id=host.one"
         payload = dict(host_id="host.one", project_id="game.one", name="Game One",

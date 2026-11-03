@@ -32,6 +32,13 @@ class RuntimeImportAuditTests(unittest.TestCase):
         entry = self.write("main.py", "import importlib\nimportlib.import_module('plugin')\n")
         self.assertEqual(audit(entry, self.root)["dynamic_import_review"][0]["kind"], "import_module")
 
+    def test_actual_alpha_gateway_audit(self):
+        from scripts.platform_runtime_import_audit import ENTRY, SERVER
+        report = audit(ENTRY, SERVER)
+        self.assertIn("private_alpha_gateway.py", report["local_modules"])
+        self.assertTrue(report["local_modules"])
+        self.assertEqual(report["entry"], "private_alpha_gateway.py")
+
     def test_reject_outside_root(self):
         entry = self.write("main.py", "import os\n")
         other = self.root / "nested"

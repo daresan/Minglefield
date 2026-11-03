@@ -2220,7 +2220,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 return
             if path == "/api/host/assets/stage":
                 from pathlib import Path
-                from game_asset_staging import ProjectAssetStaging, StagingError, MAX_ASSET_BYTES
+                from game_job_attachments import ProjectJobAttachments, JobAttachmentsError, MAX_ASSET_BYTES
                 policy=getattr(service,"_host_policy",None)
                 host_id=self.headers.get("X-Minglefield-Host","")
                 filename=self.headers.get("X-Minglefield-Filename","")
@@ -2240,10 +2240,10 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(403,{"error":"host_not_owned"})
                     return
                 try:
-                    staging=ProjectAssetStaging(host_id,Path(configured))
+                    staging=ProjectJobAttachments(host_id,Path(configured))
                     record=staging.stage(filename,self.rfile,int(length))
                     self.reply(201,{"state":"staged","asset":record,"comfy_transferred":False})
-                except (StagingError,OSError,ValueError) as exc:
+                except (JobAttachmentsError,OSError,ValueError) as exc:
                     self.reply(400,{"error":"staging_failed","detail":str(exc)[:160]})
                 return
             if path == "/api/host/comfy/upload":
@@ -2476,7 +2476,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     if type(workflow) is not dict:
                         raise ValueError("invalid_workflow")
                     from staged_comfy_assets import ASSET_PREFIX, staged_record, upload_staged_asset
-                    from game_asset_staging import StagingError
+                    from game_job_attachments import JobAttachmentsError
                     settings=policy.host_settings(body["host_id"],principal.user_id)
                     root=(settings or {}).get("staging_root","")
                     file_bindings={p["binding"] for p in context["metadata"].get("parameters",[])
@@ -2678,7 +2678,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     current_choices={}
                     supplied=body.get("parameters") or {}
                     from staged_comfy_assets import ASSET_PREFIX, staged_record
-                    from game_asset_staging import StagingError
+                    from game_job_attachments import JobAttachmentsError
                     file_bindings={p["binding"] for p in (context or {}).get("parameters",[])
                                    if p.get("type")=="file"}
                     staged_bindings={k for k,v in supplied.items()
@@ -2692,7 +2692,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
                         try:
                             for binding in staged_bindings:
                                 staged_record(body["host_id"],root,supplied[binding])
-                        except (StagingError,OSError,ValueError):
+                        except (JobAttachmentsError,OSError,ValueError):
                             self.reply(400,{"error":"staged_asset_unavailable"})
                             return
                     if context and context["parameters"]:

@@ -14,7 +14,7 @@ def recovery_classification(state):
         return {"state": "manual_recovery_required",
                 "auto_retry_allowed": False,
                 "recovery_action": "inspect_files_and_journal"}
-    if state in ("committed", "rolled_back"):
+    if state in ("committed", "rolled_back", "cancelled"):
         return {"state": state, "auto_retry_allowed": False,
                 "recovery_action": "none"}
     return {"state": "manual_recovery_required",

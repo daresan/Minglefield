@@ -159,3 +159,67 @@ def inspect_windows_staging_binding(root, operation_id):
     finally:
         for handle in reversed(handles):
             close(handle)
+
+
+def inspect_windows_staged_file(path):
+    """Read-only native handle probe for a single staged regular file.
+
+    Reject reparse points, directories and hardlinks before a future cleanup
+    executor may consider a file. This does not grant deletion authority and
+    does not protect against a subsequent path swap.
+    """
+    def denied(reason):
+        return {"state": "blocked", "reason": reason,
+                "cleanup_allowed": False, "deletion_performed": False}
+    if os.name != "nt":
+        return denied("windows_only")
+    if not isinstance(path, (str, os.PathLike)) or not os.fspath(path):
+        return denied("invalid_staged_file_path")
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    open_file = kernel32.CreateFileW
+    open_file.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                          ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                          wintypes.HANDLE]
+    open_file.restype = wintypes.HANDLE
+    close = kernel32.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+
+    class Info(ctypes.Structure):
+        _fields_ = [("attributes", wintypes.DWORD),
+                    ("created", wintypes.FILETIME),
+                    ("accessed", wintypes.FILETIME),
+                    ("modified", wintypes.FILETIME),
+                    ("volume", wintypes.DWORD),
+                    ("size_high", wintypes.DWORD),
+                    ("size_low", wintypes.DWORD),
+                    ("links", wintypes.DWORD),
+                    ("index_high", wintypes.DWORD),
+                    ("index_low", wintypes.DWORD)]
+
+    get_info = kernel32.GetFileInformationByHandle
+    get_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Info)]
+    get_info.restype = wintypes.BOOL
+    invalid = ctypes.c_void_p(-1).value
+    handle = open_file(os.path.abspath(path), 0x80, 0x1 | 0x2, None, 3,
+                       0x00200000, None)  # OPEN_REPARSE_POINT
+    if handle in (None, invalid):
+        return denied("windows_staged_file_open_failed")
+    try:
+        info = Info()
+        if not get_info(handle, ctypes.byref(info)):
+            return denied("windows_staged_file_info_failed")
+        if info.attributes & 0x400:
+            return denied("windows_reparse_point")
+        if info.attributes & 0x10:
+            return denied("not_regular_file")
+        if info.links != 1:
+            return denied("unsafe_staging_hardlink")
+        return {"state": "inspected", "reason": "native_staged_file_observed",
+                "volume_serial": int(info.volume),
+                "file_index": (int(info.index_high) << 32) | int(info.index_low),
+                "cleanup_allowed": False, "deletion_performed": False}
+    finally:
+        close(handle)

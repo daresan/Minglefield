@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"server"))
 from game_integration_updates import discover_integration_update
+from game_integration_assessment import assess_compatibility, assess_migration
 
 SOURCE={"provider":"github","repository":"alice/godot"}
 ENTRY={"integration_id":"community.alice.godot","declared_version":"1.2.3",
@@ -32,6 +33,8 @@ class GameIntegrationUpdateTests(unittest.TestCase):
         self.assertEqual(preview["release_notes"],"Upgrade")
         self.assertEqual(preview["changed_files"],{"state":"unknown","files":[],
                          "comparison_url":"https://github.com/alice/godot/compare/1.2.3...v1.3.0"})
+        self.assertEqual(preview["compatibility"], assess_compatibility())
+        self.assertEqual(preview["migration"], assess_migration())
         self.assertEqual(preview["compatibility"]["state"],"unknown")
         self.assertEqual(preview["compatibility"]["reason"],"no_verified_compatibility_contract")
         self.assertIs(preview["compatibility"]["requires_manual_review"],True)

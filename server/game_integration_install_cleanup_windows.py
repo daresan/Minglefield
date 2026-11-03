@@ -76,3 +76,72 @@ def inspect_windows_directory_handle(path):
                       | int(info.nFileIndexLow))
     finally:
         close_handle(handle)
+
+
+def inspect_windows_staging_binding(root, operation_id):
+    """Inspect root and operation while both no-delete-share handles are held.
+
+    Read-only diagnostic, not a cleanup authorization. The parent-to-child
+    open is still path-based; a future executor must use native relative
+    opens and handle-based disposition before permitting deletion.
+    """
+    import re
+    def denied(reason):
+        return {"state": "blocked", "reason": reason,
+                "cleanup_allowed": False, "deletion_performed": False}
+    if os.name != "nt":
+        return denied("windows_only")
+    if (not isinstance(operation_id, str) or not operation_id
+            or operation_id in (".", "..")
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", operation_id)
+            or operation_id.endswith((".", " "))):
+        return denied("invalid_install_operation")
+    from game_integration_install_path_safety import has_redirecting_component
+    if has_redirecting_component(root):
+        return denied("unsafe_installation_staging_root")
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    open_file = kernel32.CreateFileW
+    open_file.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                          ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                          wintypes.HANDLE]
+    open_file.restype = wintypes.HANDLE
+    close = kernel32.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    get_info = kernel32.GetFileInformationByHandle
+    class Info(ctypes.Structure):
+        _fields_ = [("attributes", wintypes.DWORD),
+                    ("created", wintypes.FILETIME),
+                    ("accessed", wintypes.FILETIME),
+                    ("modified", wintypes.FILETIME),
+                    ("volume", wintypes.DWORD),
+                    ("size_high", wintypes.DWORD),
+                    ("size_low", wintypes.DWORD),
+                    ("links", wintypes.DWORD),
+                    ("index_high", wintypes.DWORD),
+                    ("index_low", wintypes.DWORD)]
+    get_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Info)]
+    get_info.restype = wintypes.BOOL
+    invalid = ctypes.c_void_p(-1).value
+    handles = []
+    try:
+        for path in (root, os.path.join(root, operation_id)):
+            handle = open_file(os.path.abspath(path), 0x80, 0x1 | 0x2,
+                               None, 3, 0x02000000 | 0x00200000, None)
+            if handle in (None, invalid):
+                return denied("windows_directory_open_failed")
+            handles.append(handle)
+            info = Info()
+            if not get_info(handle, ctypes.byref(info)):
+                return denied("windows_directory_info_failed")
+            if info.attributes & 0x400:
+                return denied("windows_reparse_point")
+            if not info.attributes & 0x10:
+                return denied("not_directory")
+        return {"state": "inspected", "reason": "native_staging_handles_observed",
+                "cleanup_allowed": False, "deletion_performed": False}
+    finally:
+        for handle in reversed(handles):
+            close(handle)

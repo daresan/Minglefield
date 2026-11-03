@@ -6,10 +6,10 @@ On a trusted developer workstation with Node.js/npm, Rust and Tauri OS prerequis
 
 ```powershell
 cd installer/gui
-npm install
-npm run dev
+npm.cmd install
+npm.cmd run dev
 ```
 
-This is a development command, **not** an end-user prerequisite. Do not commit `node_modules` or `src-tauri/target`. Before release, pin dependencies with a lockfile, establish a fully offline verified asset/build pipeline, add platform packaging, and test the packaged entrypoints. The workspace root `installer/Cargo.toml` deliberately excludes this separate Tauri crate for now, so existing Rust CI remains independent of Tauri OS prerequisites.
+This is a development command, **not** an end-user prerequisite. Do not commit `node_modules` or `src-tauri/target`. On Shadow PowerShell use `npm.cmd` to avoid the blocked `npm.ps1` shim without changing execution policy. Before release, pin dependencies with a lockfile, establish a fully offline verified asset/build pipeline, add platform packaging, and test the packaged entrypoints. The workspace root `installer/Cargo.toml` deliberately excludes this separate Tauri crate for now, so existing Rust CI remains independent of Tauri OS prerequisites.
 
 Both GUI and CLI use the same Rust planning function, but this does not yet establish a common packaged executable or silent installation. Those are still required by the phase specification.

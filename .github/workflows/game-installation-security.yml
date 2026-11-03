@@ -5,21 +5,7 @@ on:
     branches:
       - main
       - 'feat/game-integration-updates'
-    paths:
-      - 'server/game_integration_install*.py'
-      - 'server/sec01_host_commit_policy_sim.py'
-      - 'server/private_alpha_auth.py'
-      - 'tests/conformance/test_game_integration_install*.py'
-      - '.github/workflows/game-installation-security.yml'
-      - 'requirements-ci.txt'
   pull_request:
-    paths:
-      - 'server/game_integration_install*.py'
-      - 'server/sec01_host_commit_policy_sim.py'
-      - 'server/private_alpha_auth.py'
-      - 'tests/conformance/test_game_integration_install*.py'
-      - '.github/workflows/game-installation-security.yml'
-      - 'requirements-ci.txt'
   workflow_dispatch:
 
 permissions:

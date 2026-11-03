@@ -140,6 +140,20 @@ def inspect_windows_staging_binding(root, operation_id):
                 return denied("windows_reparse_point")
             if not info.attributes & 0x10:
                 return denied("not_directory")
+        # A second, path-based observation detects a changed binding while
+        # the native handles are still held. This remains a diagnostic, not
+        # a substitute for native handle-relative opens in a writer.
+        for path, handle in zip((root, os.path.join(root, operation_id)), handles):
+            observed = inspect_windows_directory_handle(path)
+            if observed["state"] != "inspected":
+                return denied("windows_staging_binding_changed")
+            held = Info()
+            if not get_info(handle, ctypes.byref(held)):
+                return denied("windows_directory_info_failed")
+            if (observed["volume_serial"] != int(held.volume)
+                    or observed["file_index"] !=
+                    ((int(held.index_high) << 32) | int(held.index_low))):
+                return denied("windows_staging_binding_changed")
         return {"state": "inspected", "reason": "native_staging_handles_observed",
                 "cleanup_allowed": False, "deletion_performed": False}
     finally:

@@ -57,7 +57,7 @@ class GameProjectHttpTests(unittest.TestCase):
         payload = {"host_id": "host.one", "settings": {
             "staging_root": "", "output_root": "",
             "trusted_integration_sources": ["daresan/minglefield-integration-test"]}}
-        self.assertEqual(self.request("POST", endpoint, self.other, payload)[0], 403)
+        self.assertEqual(self.request("POST", endpoint, self.other, payload)[0], 400)
         status, data = self.request("POST", endpoint, self.owner, payload)
         self.assertEqual(status, 200, data)
         status, data = self.request("GET", endpoint + "?host_id=host.one", self.owner)

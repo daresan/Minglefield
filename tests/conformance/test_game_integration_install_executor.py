@@ -1,5 +1,6 @@
 """Isolated staging tests; game repository must remain unchanged."""
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -36,14 +37,24 @@ class IsolatedInstallationStagingTests(unittest.TestCase):
         result = self.stage()
         self.assertEqual(result["state"], "staged")
         self.assertFalse(result["installation_allowed"])
-        for name, data in self.files.items():
-            self.assertEqual((self.staging / "operation.one" / name).read_bytes(), data)
-            self.assertFalse((self.repo / name).exists())
+        operation = self.staging / "operation.one"
+        mapping = json.loads((operation / "manifest.json").read_text("utf-8"))
+        self.assertEqual(mapping["plan_sha256"], result["plan_sha256"])
+        self.assertEqual(result["layout"], "flat-v1")
+        self.assertEqual(len(mapping["files"]), len(self.files))
+        for entry in mapping["files"]:
+            self.assertEqual((operation / entry["blob"]).read_bytes(),
+                             self.files[entry["path"]])
+            self.assertEqual(entry["sha256"],
+                             hashlib.sha256(self.files[entry["path"]]).hexdigest())
+            self.assertFalse((self.repo / entry["path"]).exists())
+        self.assertEqual(sorted(p.name for p in operation.iterdir()),
+                         ["blob-000000", "blob-000001", "manifest.json"])
 
     def test_existing_operation_is_not_overwritten(self):
         self.assertEqual(self.stage()["state"], "staged")
         self.assertEqual(self.stage()["reason"], "operation_staging_already_exists")
-        self.assertEqual((self.staging / "operation.one" / "assets/model.glb").read_bytes(), b"model")
+        self.assertEqual((self.staging / "operation.one" / "blob-000000").read_bytes(), b"model")
 
     def test_invalid_bytes_do_not_create_operation_directory(self):
         result = self.stage(loader=lambda name: b"tampered")

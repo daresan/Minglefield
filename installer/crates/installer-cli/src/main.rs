@@ -28,9 +28,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             }
             "--help" | "-h" => {
                 println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH]");
-                println!(
-                    "Config: UTF-8 key=value, version=1, optional install_dir/data_dir."
-                );
+                println!("Config: UTF-8 key=value, version=1, optional install_dir/data_dir.");
                 println!("This prototype validates and prints a plan; nothing is installed.");
                 return Ok(());
             }
@@ -79,8 +77,8 @@ mod tests {
     fn rejects_missing_config_and_missing_option_values() {
         assert_eq!(
             run(["--silent".to_string(), "--config".to_string()])
-                .unwrap_err()
-                .0,
+            .unwrap_err()
+            .0,
             2
         );
         assert_eq!(
@@ -89,8 +87,8 @@ mod tests {
                 "--defaults".to_string(),
                 "--install-dir".to_string()
             ])
-                .unwrap_err()
-                .0,
+            .unwrap_err()
+            .0,
             2
         );
         assert_eq!(
@@ -99,8 +97,8 @@ mod tests {
                 "--config".to_string(),
                 "__minglefield_missing_config__".to_string()
             ])
-                .unwrap_err()
-                .0,
+            .unwrap_err()
+            .0,
             3
         );
     }

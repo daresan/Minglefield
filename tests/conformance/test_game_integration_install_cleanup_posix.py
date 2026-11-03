@@ -94,7 +94,12 @@ class PosixCleanupTests(unittest.TestCase):
                 replacement.rename(operation)
             return original_unlink(path, *args, **kwargs)
 
-        with patch("game_integration_install_cleanup_posix.os.unlink",
+        # Mocking os.unlink changes the function object, invalidating
+        # membership in os.supports_dir_fd. Preserve the already-verified
+        # capability result so this test exercises the actual unlink race.
+        with patch("game_integration_install_cleanup_posix.inspect_cleanup_backend_capabilities",
+                   return_value=capability), patch(
+                   "game_integration_install_cleanup_posix.os.unlink",
                    side_effect=swap_then_unlink):
             result = self.cleanup()
         self.assertTrue(switched, result)
@@ -123,7 +128,11 @@ class PosixCleanupTests(unittest.TestCase):
                 operation.symlink_to(outside, target_is_directory=True)
             return original_open(path, *args, **kwargs)
 
-        with patch("game_integration_install_cleanup_posix.os.open",
+        # The mocked os.open is not the original object in
+        # os.supports_dir_fd; retain the real pre-mock platform result.
+        with patch("game_integration_install_cleanup_posix.inspect_cleanup_backend_capabilities",
+                   return_value=capability), patch(
+                   "game_integration_install_cleanup_posix.os.open",
                    side_effect=swap_before_open):
             result = self.cleanup()
         self.assertTrue(swapped, result)

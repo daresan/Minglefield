@@ -54,3 +54,41 @@ def plan_windows_cleanup_progress(expected_files, observed_files):
                         remaining_files=[_MANIFEST])
     return response("partial", "progress_requires_durable_evidence",
                     remaining_files=[])
+
+
+def inspect_windows_cleanup_recovery(expected_files, observed_files, progress):
+    """Read-only reconciliation. Recorded removals are evidence, not authority.
+
+    An interrupted intent remains unresolved even if its file is missing.
+    This routine never returns a next deletion target for partial cleanup.
+    """
+    base = plan_windows_cleanup_progress(expected_files, observed_files)
+    if base["state"] == "blocked":
+        return base
+    def blocked(reason):
+        return {"state": "blocked", "reason": reason,
+                "cleanup_allowed": False, "deletion_performed": False,
+                "auto_retry_allowed": False}
+    if not isinstance(progress, dict) or progress.get("state") not in (
+            "recorded_snapshot", "manual_recovery_required"):
+        return blocked("invalid_cleanup_progress")
+    removed = progress.get("removed_files")
+    unresolved = progress.get("unresolved_files")
+    if (type(removed) is not list or type(unresolved) is not list
+            or any(type(n) is not str for n in removed + unresolved)
+            or len(set(removed + unresolved)) != len(removed + unresolved)):
+        return blocked("invalid_cleanup_progress")
+    expected = set(expected_files)
+    observed = set(observed_files)
+    if set(removed + unresolved) - expected:
+        return blocked("cleanup_progress_unknown_file")
+    if set(removed) & observed:
+        return blocked("recorded_removed_file_still_present")
+    if unresolved:
+        return blocked("unresolved_cleanup_intent")
+    if expected - observed != set(removed):
+        return blocked("missing_files_without_cleanup_evidence")
+    return {"state": "consistent_snapshot", "reason": "read_only_reconciliation",
+            "remaining_files": sorted(observed),
+            "cleanup_allowed": False, "deletion_performed": False,
+            "auto_retry_allowed": False}

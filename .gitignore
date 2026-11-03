@@ -1,2 +1,9 @@
 # Machine-specific interpreter and development notes; never portable defaults.
 /DEVELOPMENT.local.md
+
+# Installer local build outputs and dependency caches.
+/installer/target/
+/installer/gui/node_modules/
+/installer/gui/dist/
+/installer/gui/src-tauri/target/
+/installer/gui/src-tauri/gen/

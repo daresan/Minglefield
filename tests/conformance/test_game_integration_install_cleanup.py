@@ -18,7 +18,7 @@ class CleanupPreflightTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.base = Path(temporary.name)
+        self.base = Path(temporary.name).resolve(strict=True)
         self.repo = self.base / "repo"
         self.root = self.base / "staging"
         self.repo.mkdir()

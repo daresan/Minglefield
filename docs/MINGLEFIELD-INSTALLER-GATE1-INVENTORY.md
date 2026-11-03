@@ -153,3 +153,12 @@ Compare a native OS-specific installer around a packaged Python launcher, a cros
 5. Complete the matrix with specific acceptance criteria; **then** proceed to Gate 2 framework evaluation.
 
 No production installer, full dependency closure, platform signing plan, or clean-machine test is claimed.
+
+## Product decision update: first Alpha package and licensing direction (2026-11-03)
+
+The first deliverable is an **installable package of the current Minglefield Alpha**, clearly labeled as experimental. Installer and build pipeline must be **version-agnostic**: a future version is delivered by repackaging new app/runtime artifacts with a validated release manifest, not by changing installer source for each release. `0.1.0-alpha.1` is only a candidate version.
+
+The user has chosen a Blender-like GPL open-source direction. **Proposed** Minglefield core SPDX identifier: `GPL-3.0-or-later`; this is not the same as claiming Blender's exact license is GPL-3.0-or-later. A license file is **not yet present** in the inspected branch; do not claim one has been applied. Before distributing binaries, audit ownership and all bundled third-party components, then publish actual license and notices. Keep marketplace/service transaction fees distinct from GPL software freedoms: the existing 5% revenue policy cannot be an extra condition on redistribution/use of GPL code.
+
+**Revised sequencing:** prototype packaging of the current Alpha now; Gate 2 selects a reusable package format, launch wrapper, release metadata and GUI installer technology; production hardening is a later milestone, while installer-specific security (especially Host provisioning and update integrity) remains a prerequisite for installation release.
+

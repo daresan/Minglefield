@@ -965,6 +965,34 @@ class HostCommitPolicy:
                 journal_plan_sha256=row[1], journal_state=row[0],
                 owner_authorized=True)
 
+    def inspect_game_install_cleanup_backend(self, host_id, owner_id, project_id,
+                                             operation_id, entries,
+                                             installation_staging_root):
+        """Journal-bound platform capability assessment; never delete files.
+
+        Deliberately separate from the POSIX primitive: a filesystem writer
+        could replace the operation after inspection. No cleanup capability
+        is minted, and this method must not be exposed as a write endpoint.
+        """
+        from game_integration_install_cleanup_backend import (
+            inspect_cleanup_backend_capabilities)
+        inspection = self.inspect_game_install_cleanup(
+            host_id, owner_id, project_id, operation_id, entries,
+            installation_staging_root)
+        backend = inspect_cleanup_backend_capabilities()
+        if inspection["state"] != "eligible_snapshot":
+            return {"state": "blocked", "reason": inspection["reason"],
+                    "backend": backend["backend"],
+                    "deletion_performed": False, "cleanup_allowed": False}
+        if backend["state"] != "candidate":
+            return {"state": "blocked", "reason": backend["reason"],
+                    "backend": backend["backend"],
+                    "deletion_performed": False, "cleanup_allowed": False}
+        return {"state": "candidate_snapshot",
+                "reason": "journal_and_platform_preflight_passed",
+                "backend": backend["backend"],
+                "deletion_performed": False, "cleanup_allowed": False}
+
     def game_install_journal_status(self, host_id, owner_id, project_id):
         """Read-only owner-scoped operation history; no cross-host disclosure."""
         with self.authority.store._tx() as db:

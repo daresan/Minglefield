@@ -123,3 +123,30 @@ Next implementation slices, in order:
 4. Expose preview/confirm/recovery status through existing Games and Hosts architecture, with an actual browser test before milestone acceptance. Do not introduce a central approval requirement or hardcoded local machine paths.
 
 Do not claim P1.4f.4 complete until tampering, partial failures, crash recovery and UI confirmation have been exercised.
+
+## Cross-platform verification policy (2026-11-03)
+
+Minglefield targets **Windows, Linux and macOS**. The Windows Shadow workstation
+is the currently available **manual** testing environment; neither Linux nor
+macOS hardware is currently available to the project operator. This does not
+justify Windows-only filesystem semantics or platform-specific runtime paths.
+
+For P1.4f.4:
+- Use portable forward-slash relative installation paths and reject traversal,
+  symlink escapes, Windows-reserved names, case-folding collisions and existing
+  destinations until explicit backup/replacement handling exists.
+- Isolate platform-sensitive file operations (atomic rename/replacement,
+  filesystem sync, locking, directory metadata) behind an explicit adapter.
+  Never assume identical durability guarantees across filesystems or OSes.
+- Add a **small GitHub Actions matrix** with `windows-latest`, `ubuntu-latest`
+  and `macos-latest` for focused installation and recovery tests. Keep the
+  broad conformance suite on its existing cadence. Monitor Actions consumption,
+  particularly macOS runner cost.
+- Treat green hosted CI as **automated compatibility evidence**, not as a
+  substitute for manual installation testing on Linux/macOS. Record skipped
+  symlink tests and any OS-specific skips instead of counting them as coverage.
+- Do not mark the matrix verified until the actual GitHub Actions jobs run and
+  pass. A committed workflow alone is not a passing result.
+
+This policy preserves operator-controlled source trust and does not add a
+central registry or central installation approval service.

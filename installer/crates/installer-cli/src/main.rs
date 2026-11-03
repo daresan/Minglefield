@@ -28,7 +28,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             }
             "--help" | "-h" => {
                 println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH]");
-                println!("Config format: UTF-8 key=value; version=1 and all six keys are required.");
+                println!(
+                    "Config format: UTF-8 key=value; version=1 and all six keys are required."
+                );
                 println!("This prototype validates and prints a plan; nothing is installed.");
                 return Ok(());
             }
@@ -44,8 +46,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let mut config = if let Some(file) = config_file {
         let text = std::fs::read_to_string(&file)
             .map_err(|err| (3, format!("cannot read config: {err}")))?;
-        InstallerConfig::parse(&text)
-            .map_err(|err| (3, format!("invalid config: {err}")))?
+        InstallerConfig::parse(&text).map_err(|err| (3, format!("invalid config: {err}")))?
     } else {
         InstallerConfig::defaults()
             .map_err(|err| (3, format!("cannot determine defaults: {err:?}")))?

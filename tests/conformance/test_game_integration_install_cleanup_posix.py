@@ -139,6 +139,27 @@ class PosixCleanupTests(unittest.TestCase):
         self.assertEqual(result["state"], "blocked")
         self.assertEqual((outside / "keep.txt").read_bytes(), b"foreign")
 
+    def test_foreign_staging_owner_is_rejected_before_deletion(self):
+        self.stage()
+        actual_uid = os.geteuid()
+        with patch("game_integration_install_cleanup_posix.os.geteuid",
+                   return_value=actual_uid + 1):
+            result = self.cleanup()
+        self.assertEqual(result["reason"], "staging_root_owner_mismatch")
+        self.assertFalse(result["deletion_performed"])
+        self.assertTrue((self.root / "op1" / "manifest.json").exists())
+
+    def test_hardlinked_blob_is_not_deleted(self):
+        self.stage()
+        blob = self.root / "op1" / "blob-000000"
+        external = self.base / "external-hardlink"
+        os.link(blob, external)
+        result = self.cleanup()
+        self.assertEqual(result["reason"], "unsafe_staging_entry")
+        self.assertFalse(result["deletion_performed"])
+        self.assertEqual(external.read_bytes(), self.payload)
+        self.assertTrue(blob.exists())
+
     def test_prepared_journal_does_not_delete(self):
         self.stage()
         result = self.cleanup(journal_state="prepared")

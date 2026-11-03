@@ -162,3 +162,14 @@ The user has chosen a Blender-like GPL open-source direction. **Proposed** Mingl
 
 **Revised sequencing:** prototype packaging of the current Alpha now; Gate 2 selects a reusable package format, launch wrapper, release metadata and GUI installer technology; production hardening is a later milestone, while installer-specific security (especially Host provisioning and update integrity) remains a prerequisite for installation release.
 
+
+## Marketplace scope and 5% fee clarification (2026-11-03)
+
+**Binding project decision:** The 5% commission applies **only to transactions actually conducted through the future official Minglefield Online Community Marketplace**. It is **not** a license royalty, a framework-wide commerce levy, or a condition for using, modifying, distributing, self-hosting or commercially exploiting GPL-covered Minglefield code.
+
+The official online Marketplace is **planned, not implemented, and not part of this repository or the first installable Alpha package**. No Marketplace backend, marketplace transaction fee enforcement, billing or operator-right restrictions are to be added to the installer or GPL core as part of this phase.
+
+The project founder intends to **reserve operation of the official Minglefield Online Community Marketplace** for themselves for now, to the extent legally available. Distinguish rights in the official service's name/branding, domain, infrastructure, operator accounts, contracts and any separately developed proprietary service code from the GPL rights in the open-source core. Do **not** assert that GPL licensing prohibits third parties from building or operating independent compatible marketplace services. Trademark/service terms, ownership and competition-law implications require jurisdiction-specific legal review.
+
+Future Marketplace terms may specify a 5% commission on transactions processed by that service, with transparent pricing and contractual acceptance. This is outside the current installer, repository distribution and runtime dependency closure.
+

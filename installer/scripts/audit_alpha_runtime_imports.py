@@ -18,6 +18,8 @@ def audit(server_dir, entrypoint=ENTRYPOINT):
     modules = {path.stem: path for path in server_dir.glob("*.py") if path.is_file()}
     if entrypoint not in modules:
         raise ValueError("entrypoint not found: " + entrypoint)
+    # Support both package imports (server.module) and direct script imports.
+    package_name = server_dir.name
     visited = set()
     pending = [entrypoint]
     external = {}
@@ -39,13 +41,24 @@ def audit(server_dir, entrypoint=ENTRYPOINT):
         for node in ast.walk(tree):
             candidates = []
             if isinstance(node, ast.Import):
-                candidates = [alias.name.split(".", 1)[0] for alias in node.names]
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    candidates.append(parts[1] if parts[0] == package_name and len(parts) > 1 else parts[0])
             elif isinstance(node, ast.ImportFrom):
                 if node.level:
-                    errors.append({"module": name, "error": "relative import requires manual review"})
-                    continue
-                if node.module:
+                    # The server directory is a single top-level package.
+                    # A single-dot import targets a sibling module; deeper
+                    # relatives cannot be resolved safely by this auditor.
+                    if node.level != 1 or not node.module:
+                        errors.append({"module": name, "error": "unresolved relative import"})
+                        continue
                     candidates = [node.module.split(".", 1)[0]]
+                elif node.module:
+                    parts = node.module.split(".")
+                    if parts[0] == package_name and len(parts) > 1:
+                        candidates = [parts[1]]
+                    else:
+                        candidates = [parts[0]]
             elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in (
                 "__import__", "eval", "exec"
             ):
@@ -57,6 +70,8 @@ def audit(server_dir, entrypoint=ENTRYPOINT):
             for imported in candidates:
                 if imported in modules:
                     local.add(imported)
+                elif imported == package_name:
+                    errors.append({"module": name, "error": "unresolved local package import"})
                 elif imported not in sys.stdlib_module_names and imported != "__future__":
                     external.setdefault(imported, set()).add(name)
         local_edges[name] = sorted(local)

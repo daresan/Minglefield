@@ -1,0 +1,8 @@
+[package]
+name = "minglefield-installer-cli"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+minglefield-installer-core = { path = "../installer-core" }

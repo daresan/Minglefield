@@ -63,6 +63,12 @@ class HostCommitPolicy:
                 repository_root TEXT NOT NULL, staging_root TEXT NOT NULL,
                 output_root TEXT NOT NULL, settings_revision INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(host_id,project_id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS sec01_game_install_journal(
+                operation_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
+                owner_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                state TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_settings(\n                host_id TEXT PRIMARY KEY, settings TEXT NOT NULL)""")
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
                 host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,
@@ -771,6 +777,58 @@ class HostCommitPolicy:
             return {"staging_root": settings.get("staging_root", ""),
                     "output_root": settings.get("output_root", ""),
                     "trusted_integration_sources": settings.get("trusted_integration_sources", [])}
+
+    def prepare_game_install_journal(self, host_id, owner_id, project_id,
+                                     operation_id, plan_sha256):
+        """Reserve an immutable, owner-scoped operation. No file mutation."""
+        import re
+        from game_integration_install_journal import initial_journal_state
+        if (not all(ident(v) for v in (host_id,owner_id,project_id,operation_id))
+                or type(plan_sha256) is not str
+                or not re.fullmatch(r"[a-f0-9]{64}",plan_sha256)):
+            return {"state":"denied","reason":"invalid_install_operation"}
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return {"state":"denied","reason":"not_host_owner"}
+            if db.execute("""SELECT 1 FROM alpha_game_projects
+                    WHERE host_id=? AND owner_id=? AND project_id=?""",
+                    (host_id,owner_id,project_id)).fetchone() is None:
+                return {"state":"denied","reason":"project_not_found"}
+            row=db.execute("""SELECT host_id,owner_id,project_id,state,plan_sha256
+                FROM sec01_game_install_journal WHERE operation_id=?""",
+                (operation_id,)).fetchone()
+            if row is not None:
+                if row[:3]!=(host_id,owner_id,project_id) or row[4]!=plan_sha256:
+                    return {"state":"denied","reason":"operation_id_conflict"}
+                return {"state":row[3],"reason":"idempotent_replay",
+                        "operation_id":operation_id}
+            db.execute("""INSERT INTO sec01_game_install_journal
+                (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+                VALUES(?,?,?,?,?,?)""",
+                (operation_id,host_id,owner_id,project_id,initial_journal_state(),
+                 plan_sha256))
+        return {"state":"prepared","reason":"operation_recorded",
+                "operation_id":operation_id}
+
+    def game_install_journal_status(self, host_id, owner_id, project_id):
+        """Read-only owner-scoped operation history; no cross-host disclosure."""
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return None
+            if db.execute("""SELECT 1 FROM alpha_game_projects
+                WHERE host_id=? AND owner_id=? AND project_id=?""",
+                (host_id,owner_id,project_id)).fetchone() is None:
+                return None
+            rows=db.execute("""SELECT operation_id,state,plan_sha256,created_at,updated_at
+                FROM sec01_game_install_journal
+                WHERE host_id=? AND owner_id=? AND project_id=?
+                ORDER BY created_at,operation_id""",
+                (host_id,owner_id,project_id)).fetchall()
+        return [dict(operation_id=op,state=state,plan_sha256=digest,
+                     created_at=created,updated_at=updated)
+                for op,state,digest,created,updated in rows]
 
     def save_host_settings(self, host_id, owner_id, settings):
         from pathlib import Path

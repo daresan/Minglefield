@@ -1527,7 +1527,7 @@ function showSelectedGameProject(){
   refreshSelectedGameUpdateSignal();
   if(!project)return;
   for(const [id,value] of [["gameProjectId",project.project_id],["gameProjectName",project.name],
-      ["gameRepositoryRoot",project.repository_root],["gameStagingRoot",project.staging_root],
+      ["gameRepositoryRoot",project.repository_root],["gameStagingRoot",project.job_attachments_root||project.staging_root],
       ["gameOutputRoot",project.output_root]])document.getElementById(id).value=value;
   document.getElementById("gameProjectStatus").textContent=JSON.stringify(project,null,2);
 }
@@ -1542,7 +1542,7 @@ document.getElementById("gameProjectUpdate").onclick=async()=>{
     settings_revision:project.settings_revision,
     name:document.getElementById("gameProjectName").value.trim(),
     repository_root:document.getElementById("gameRepositoryRoot").value.trim(),
-    staging_root:document.getElementById("gameStagingRoot").value.trim(),
+    job_attachments_root:document.getElementById("gameStagingRoot").value.trim(),
     output_root:document.getElementById("gameOutputRoot").value.trim()
   };
   const response=await request("/api/game/projects/update",{
@@ -1565,7 +1565,7 @@ document.getElementById("gameProjectPrepare").onclick=async()=>{
   const project=gameProjects.find(x=>x.project_id===document.getElementById("gameProjectSelect").value);
   if(!project)return;
   const message="Für "+project.project_id+" fehlende Projektverzeichnisse anlegen?\\n"+
-    "Repository: "+project.repository_root+"\\nStaging: "+project.staging_root+"\\nOutput: "+project.output_root+
+    "Repository: "+project.repository_root+"\\nJobAttachments: "+(project.job_attachments_root||project.staging_root)+"\\nOutput: "+project.output_root+
     "\\nBereits vorhandene Verzeichnisse bleiben erhalten.";
   if(!window.confirm(message))return;
   const response=await request("/api/game/projects/prepare",{
@@ -1690,7 +1690,7 @@ document.getElementById("gameProjectCreate").onclick=async()=>{
     project_id:document.getElementById("gameNewProjectId").value.trim(),
     name:document.getElementById("gameNewProjectName").value.trim(),
     repository_root:document.getElementById("gameNewRepositoryRoot").value.trim(),
-    staging_root:document.getElementById("gameNewStagingRoot").value.trim(),
+    job_attachments_root:document.getElementById("gameNewStagingRoot").value.trim(),
     output_root:document.getElementById("gameNewOutputRoot").value.trim()
   };
   const response=await request("/api/game/projects",{

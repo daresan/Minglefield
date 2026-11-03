@@ -2,6 +2,7 @@
 //! This crate does not install files, claim Hosts, or establish publisher trust.
 
 pub mod config;
+pub mod consent;
 pub mod integrity;
 pub mod manifest;
 pub mod publisher;

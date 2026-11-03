@@ -16,6 +16,8 @@ ENTRY = SERVER / "private_alpha_gateway.py"
 
 
 def audit(entry: Path, module_root: Path) -> dict:
+    # Normalize both sides once: Windows CI temp roots may use 8.3 aliases.
+    module_root = module_root.resolve(strict=True)
     pending = [entry.resolve()]
     visited = set()
     external = set()
@@ -26,7 +28,7 @@ def audit(entry: Path, module_root: Path) -> dict:
         path = pending.pop()
         if path in visited:
             continue
-        if not path.is_file() or not path.is_relative_to(module_root.resolve()):
+        if not path.is_file() or not path.is_relative_to(module_root):
             raise ValueError("module outside audited source tree")
         visited.add(path)
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

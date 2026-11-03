@@ -6,7 +6,7 @@ This module never claims artifact integrity or installation.
 from packaging.version import Version, InvalidVersion
 from urllib.parse import quote
 from game_release_metadata import fetch_releases, fetch_compare_files
-from game_integration_assessment import assess_compatibility, assess_migration
+from game_integration_assessment_preview import preview_release_assessments
 
 
 def _version(value):
@@ -20,7 +20,7 @@ def _version(value):
 
 
 def _discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
-                                compare_fetcher=fetch_compare_files):
+                                compare_fetcher=fetch_compare_files, assessment_resolver=None):
     """Compare a declared version against stable releases from a matching curated source."""
     if not isinstance(entry,dict) or not isinstance(catalog,dict):
         return {"state":"unknown","reason":"invalid_input"}
@@ -84,6 +84,10 @@ def _discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
                          "comparison_url":comparison_url}
         except (ValueError,TypeError,KeyError,OSError):
             pass
+    assessments=preview_release_assessments(
+        integration_id=entry["integration_id"], release_source=source,
+        from_version=entry["declared_version"], to_version=release["tag_name"],
+        resolver=assessment_resolver)
     return {"state":"unknown","reason":"installation_not_verified",
             "version_comparison":"newer_release_than_declared" if latest>installed else "no_newer_release_than_declared",
             "declared_version":entry["declared_version"],
@@ -95,8 +99,8 @@ def _discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
             "verification_state":"unknown",
             "preview":{"state":"incomplete","release_notes":release.get("release_notes",""),
                        "changed_files":changed,
-                       "compatibility":assess_compatibility(),
-                       "migration":assess_migration(),
+                       "compatibility":assessments["compatibility"],
+                       "migration":assessments["migration"],
                        "artifact_integrity":{"state":"unknown"},
                        "installation_allowed":False},
             "note":"Version comparison only; installation and artifact integrity unverified."}
@@ -106,7 +110,8 @@ def discover_integration_update(entry, catalog, *, fetcher=fetch_releases,
                                 compare_fetcher=fetch_compare_files):
     """Discovery states compare declarations only; installation state stays unknown."""
     result = _discover_integration_update(entry, catalog, fetcher=fetcher,
-                                         compare_fetcher=compare_fetcher)
+                                         compare_fetcher=compare_fetcher,
+                                         assessment_resolver=assessment_resolver)
     errors = {"invalid_input", "invalid_registry_catalog", "invalid_release_data",
               "release_source_unavailable"}
     result.setdefault("comparison_state", "error" if result.get("reason") in errors else "unknown")

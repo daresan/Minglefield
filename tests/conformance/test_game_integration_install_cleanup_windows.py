@@ -8,7 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 from game_integration_install_cleanup_windows import (inspect_windows_directory_handle,
-                                                      inspect_windows_staging_binding)
+                                                      inspect_windows_staging_binding,
+                                                      inspect_windows_staged_file)
 
 
 class WindowsCleanupHandleTests(unittest.TestCase):
@@ -108,6 +109,37 @@ class WindowsCleanupHandleTests(unittest.TestCase):
                                      "volume_serial": 0, "file_index": -1}):
                 result = inspect_windows_staging_binding(root, "op1")
             self.assertEqual(result["reason"], "windows_staging_binding_changed")
+            self.assertFalse(result["deletion_performed"])
+
+    def test_staged_file_probe_is_read_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file = Path(tmp) / "blob-000000"
+            file.write_bytes(b"keep")
+            result = inspect_windows_staged_file(file)
+            self.assertFalse(result["cleanup_allowed"])
+            self.assertFalse(result["deletion_performed"])
+            self.assertEqual(file.read_bytes(), b"keep")
+            if os.name == "nt":
+                self.assertEqual(result["state"], "inspected")
+            else:
+                self.assertEqual(result["reason"], "windows_only")
+
+    @unittest.skipUnless(os.name == "nt", "Windows native handle test")
+    def test_staged_file_hardlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file = Path(tmp) / "blob-000000"
+            link = Path(tmp) / "outside-hardlink"
+            file.write_bytes(b"keep")
+            os.link(file, link)
+            result = inspect_windows_staged_file(file)
+            self.assertEqual(result["reason"], "unsafe_staging_hardlink")
+            self.assertEqual(link.read_bytes(), b"keep")
+
+    @unittest.skipUnless(os.name == "nt", "Windows native handle test")
+    def test_staged_file_directory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = inspect_windows_staged_file(tmp)
+            self.assertEqual(result["state"], "blocked")
             self.assertFalse(result["deletion_performed"])
 
     @unittest.skipUnless(os.name == "nt", "Windows native handle test")

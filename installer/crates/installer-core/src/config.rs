@@ -20,6 +20,14 @@ pub enum ConfigError {
     MissingPlatformDirectory(&'static str),
 }
 
+fn parse_bool(value: &str) -> Result<bool, &'static str> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err("boolean must be true or false"),
+    }
+}
+
 impl InstallerConfig {
     pub fn defaults() -> Result<Self, ConfigError> {
         let paths = default_user_paths().map_err(ConfigError::MissingPlatformDirectory)?;
@@ -31,6 +39,54 @@ impl InstallerConfig {
             install_optional_comfyui: false,
             explicit_optional_consent: false,
         })
+    }
+
+    /// Parse a versioned configuration without allowing unknown keys or implicit consent.
+    /// Text file syntax is strict key=value, with UTF-8, no escaping or interpolation.
+    pub fn parse(text: &str) -> Result<Self, &'static str> {
+        let mut config = Self {
+            version: 0,
+            install_dir: String::new(),
+            data_dir: String::new(),
+            install_optional_conda: false,
+            install_optional_comfyui: false,
+            explicit_optional_consent: false,
+        };
+        let mut seen = std::collections::HashSet::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (key, value) = line.split_once('=').ok_or("invalid configuration line")?;
+            let key = key.trim();
+            let value = value.trim();
+            if !seen.insert(key) {
+                return Err("duplicate configuration key");
+            }
+            match key {
+                "version" => config.version = value.parse().map_err(|_| "invalid version")?,
+                "install_dir" => config.install_dir = value.to_owned(),
+                "data_dir" => config.data_dir = value.to_owned(),
+                "install_optional_conda" => {
+                    config.install_optional_conda = parse_bool(value)?;
+                }
+                "install_optional_comfyui" => {
+                    config.install_optional_comfyui = parse_bool(value)?;
+                }
+                "explicit_optional_consent" => {
+                    config.explicit_optional_consent = parse_bool(value)?;
+                }
+                _ => return Err("unknown configuration key"),
+            }
+        }
+        if seen.len() != 6 {
+            return Err("missing configuration key");
+        }
+        if config.version != CONFIG_VERSION {
+            return Err("unsupported configuration version");
+        }
+        Ok(config)
     }
 
     pub fn preview(&self, mode: Mode) -> Result<InstallPlan, ConfigError> {
@@ -70,6 +126,17 @@ mod tests {
             install_optional_comfyui: false,
             explicit_optional_consent: false,
         }
+    }
+
+    #[test]
+    fn parser_rejects_unknown_duplicate_and_incomplete_config() {
+        let valid = "version=1\ninstall_dir=/tmp/minglefield\ndata_dir=/tmp/minglefield-data\ninstall_optional_conda=false\ninstall_optional_comfyui=false\nexplicit_optional_consent=false\n";
+        assert!(InstallerConfig::parse(valid).is_ok());
+        assert!(InstallerConfig::parse(&format!("{valid}unknown=true\n")).is_err());
+        assert!(InstallerConfig::parse(&format!("{valid}version=1\n")).is_err());
+        assert!(InstallerConfig::parse("version=1").is_err());
+        assert!(InstallerConfig::parse(&valid.replace("version=1", "version=2")).is_err());
+        assert!(InstallerConfig::parse(&valid.replace("conda=false", "conda=TRUE")).is_err());
     }
 
     #[test]

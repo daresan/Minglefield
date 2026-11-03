@@ -53,6 +53,37 @@ class JournalBoundCleanupTests(unittest.TestCase):
             self.staging, "op.one", self.repo, self.entries,
             lambda _: self.payload)["state"], "staged")
 
+    def test_windows_relative_inspection_requires_terminal_journal(self):
+        self.prepare_and_stage()
+        pending = self.policy.inspect_game_install_cleanup_windows_relative(
+            *self.args, self.entries, self.staging)
+        self.assertEqual(pending["state"], "blocked", pending)
+        self.assertFalse(pending["deletion_performed"])
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        result = self.policy.inspect_game_install_cleanup_windows_relative(
+            *self.args, self.entries, self.staging)
+        if os.name == "nt":
+            self.assertEqual(result["state"], "relative_candidate_snapshot", result)
+            self.assertEqual(result["file_count"], 2)
+        else:
+            self.assertEqual(result["reason"], "windows_only")
+        self.assertFalse(result["cleanup_allowed"])
+        self.assertFalse(result["deletion_performed"])
+        self.assertTrue((self.staging / "op.one" / "blob-000000").exists())
+
+    def test_windows_relative_inspection_wrong_owner_and_digest_denied(self):
+        self.prepare_and_stage()
+        self.policy.cancel_prepared_game_install(*self.args, self.digest)
+        wrong_owner = self.policy.inspect_game_install_cleanup_windows_relative(
+            "host.one", "wrong.owner", "project.one", "op.one",
+            self.entries, self.staging)
+        self.assertEqual(wrong_owner["state"], "blocked")
+        wrong_entries = [dict(self.entries[0], sha256="0" * 64)]
+        wrong_digest = self.policy.inspect_game_install_cleanup_windows_relative(
+            *self.args, wrong_entries, self.staging)
+        self.assertEqual(wrong_digest["state"], "blocked")
+        self.assertTrue((self.staging / "op.one" / "manifest.json").exists())
+
     def test_cancelled_operation_eligible_but_never_deleted(self):
         self.prepare_and_stage()
         self.assertEqual(self.policy.cancel_prepared_game_install(

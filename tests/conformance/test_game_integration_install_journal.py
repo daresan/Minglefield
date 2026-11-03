@@ -8,7 +8,42 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 from private_alpha_auth import AlphaAuthStore
 from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
 from sec01_host_commit_policy_sim import HostCommitPolicy
-from game_integration_install_journal import recovery_classification
+from game_integration_install_journal import recovery_classification, inspect_journal_transition
+
+
+class InstallJournalTransitionTests(unittest.TestCase):
+    def test_authorized_verified_forward_transitions(self):
+        for before, after in (
+                ("prepared", "applying"), ("applying", "committed"),
+                ("applying", "rollback_required"),
+                ("rollback_required", "rolled_back"),
+                ("rollback_required", "manual_recovery_required"),
+                ("manual_recovery_required", "rolled_back"),
+                ("prepared", "cancelled")):
+            with self.subTest(before=before, after=after):
+                result = inspect_journal_transition(
+                    before, after, owner_authorized=True, plan_verified=True)
+                self.assertEqual(result["state"], "transition_permitted")
+                self.assertFalse(result["mutation_performed"])
+
+    def test_no_unauthorized_or_unverified_activation(self):
+        for before, after in (("prepared", "applying"), ("applying", "committed")):
+            self.assertEqual(inspect_journal_transition(
+                before, after, owner_authorized=True)["reason"],
+                "verified_plan_required")
+            self.assertEqual(inspect_journal_transition(
+                before, after, plan_verified=True)["reason"],
+                "owner_authorization_required")
+
+    def test_no_replay_skips_or_terminal_state_mutation(self):
+        for before, after in (
+                ("prepared", "committed"), ("prepared", "rolled_back"),
+                ("committed", "applying"), ("cancelled", "applying"),
+                ("rolled_back", "committed"), ("unknown", "applying")):
+            with self.subTest(before=before, after=after):
+                self.assertEqual(inspect_journal_transition(
+                    before, after, owner_authorized=True,
+                    plan_verified=True)["state"], "blocked")
 
 
 class GameInstallJournalTests(unittest.TestCase):

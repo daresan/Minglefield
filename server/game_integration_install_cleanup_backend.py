@@ -21,7 +21,7 @@ def inspect_cleanup_backend_capabilities():
     required = (os.open, os.stat, os.unlink, os.rmdir)
     if not all(fn in os.supports_dir_fd for fn in required):
         return result("unavailable", "dir_fd_operations_unavailable", "posix")
-    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+    if not isinstance(getattr(os, "O_DIRECTORY", None), int) or not isinstance(getattr(os, "O_NOFOLLOW", None), int):
         return result("unavailable", "nofollow_directory_handles_unavailable", "posix")
     if os.stat not in os.supports_follow_symlinks:
         return result("unavailable", "nofollow_stat_unavailable", "posix")

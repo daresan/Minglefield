@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
@@ -57,6 +58,47 @@ class WindowsCleanupHandleTests(unittest.TestCase):
             result = inspect_windows_staging_binding(root, "op1")
             self.assertEqual(result["reason"], "windows_reparse_point")
             self.assertEqual((target / "keep").read_text(), "keep")
+
+    @unittest.skipUnless(os.name == "nt", "Windows native handle test")
+    def test_native_handles_block_concurrent_operation_rename(self):
+        from game_integration_install_cleanup_windows import (
+            inspect_windows_directory_handle as original_inspect)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "staging"
+            operation = root / "op1"
+            root.mkdir()
+            operation.mkdir()
+            attempted = []
+
+            def attempt_rename(path):
+                if Path(path) == operation and not attempted:
+                    try:
+                        operation.rename(root / "moved")
+                        attempted.append("unexpected_success")
+                    except OSError:
+                        attempted.append("blocked")
+                return original_inspect(path)
+
+            with patch("game_integration_install_cleanup_windows.inspect_windows_directory_handle",
+                       side_effect=attempt_rename):
+                result = inspect_windows_staging_binding(root, "op1")
+            self.assertEqual(attempted, ["blocked"])
+            self.assertEqual(result["state"], "inspected")
+            self.assertTrue(operation.is_dir())
+            self.assertFalse(result["deletion_performed"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows native handle test")
+    def test_changed_native_binding_is_detected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "staging"
+            root.mkdir()
+            (root / "op1").mkdir()
+            with patch("game_integration_install_cleanup_windows.inspect_windows_directory_handle",
+                       return_value={"state": "inspected",
+                                     "volume_serial": 0, "file_index": -1}):
+                result = inspect_windows_staging_binding(root, "op1")
+            self.assertEqual(result["reason"], "windows_staging_binding_changed")
+            self.assertFalse(result["deletion_performed"])
 
     @unittest.skipUnless(os.name == "nt", "Windows native handle test")
     def test_file_is_not_directory(self):

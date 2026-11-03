@@ -61,6 +61,38 @@ Directory inspection: `sdk/` and `services/` currently contain README files only
 
 **Still unverified:** exhaustive import closure across every module, runtime-vs-optional feature reachability, complete transitive dependencies, OS packaging/signing, release executable metadata, macOS data location, and clean-machine tests. These are explicit open checks, not assumed successes.
 
+## Gate 1 authentication and Host settings interface audit (2026-11-03)
+
+### Verified Alpha authentication path
+
+- `private_alpha_auth.py:redeem()` exchanges a valid unredeemed invitation for a persisted, expiring session; `login()` issues a session after password verification. `principal()` checks the bearer token against a nonrevoked, unexpired session and an enabled user; `revoke_session()` and `disable_user()` invalidate sessions.
+- The gateway's `/api/redeem`, `/api/login`, and `/api/password/set` routes are loopback/Origin/Host constrained and locally throttled; the current UI stores the bearer token only for the browser tab. The current gateway explicitly remains **local simulation only**.
+- `/api/host/claim` requires the existing authenticated principal plus a loopback/Host/Origin check and comparison against a bootstrap secret generated on **gateway startup**, then delegates to `HostCommitPolicy.claim_local_host()`. The secret is printed to the console and **not consumed on success**. It must not be reused unchanged for silent installer onboarding.
+- `claim_local_host()` atomically checks enabled owner, existing ownership and executor operator binding; it rejects takeover and is idempotent for the same owner. Installer must call an authorization-preserving service path, not write SQLite ownership rows directly.
+
+### Actual Host configuration coverage
+
+| Host control | Current verified interface | Installer requirement / gap |
+| --- | --- | --- |
+| Owner/claim | `/api/host/claim` + `claim_local_host()` | Add single-use, authenticated, installation-bound local provisioning; preserve remote claims |
+| Job attachments root | `/api/host/settings` and SQLite `sec01_host_settings` | Reuse; preserve existing paths |
+| Output root | Same settings API | Reuse; preserve existing paths |
+| Trusted integration sources | Same settings API | Reuse; no silent trust expansion |
+| ComfyUI runtime config | `/api/host/runtimes` and `sec01_host_runtimes` | Reuse host-owned configuration; optional official standard installation only |
+| Rule priority / enabled / rule config | `/api/host/rules` and existing Alpha UI | Map validated rule fields, defaults and ownership before exposing advanced installer controls |
+| Scheduling / resource limits | Not established by the three-field `save_host_settings()` contract | Verify Host rules/config schema; do not assume generic settings API supports them |
+| Platform update | Alpha `platformUpdateDialog` says no verified update source connected | Separate verified Minglefield platform release/update service from game integration updates |
+
+`HostCommitPolicy.host_settings()` currently returns exactly `job_attachments_root`, `output_root`, `trusted_integration_sources`. `save_host_settings()` rejects unknown fields; therefore installer **must not** insert scheduling, resource limits, or runtime settings into this JSON object. Use the existing specialized Host rules and runtime APIs, extending their validated contracts only where necessary.
+
+### Security acceptance criteria for Gate 4
+
+- Authenticated enabled user + verified local installer invocation; no trust derived from loopback alone.
+- One-time, expiring, narrowly scoped proof bound to installation instance, target Host and intended principal; replay and cross-user attempts fail closed.
+- Ownership conflicts remain denied and must require explicit reviewed migration.
+- Existing user data and Host/runtime settings remain unchanged on failed provisioning or cancelled install.
+- Tests cover login expiry/revocation, concurrent/replayed claim, wrong Host, wrong user, nonlocal caller, origin mismatch, interrupted install and reinstall idempotency.
+
 ## Next Gate 1 verification tasks
 
 1. Traverse nested `sdk/`, `services/`, `integrations/`, workflows and packaging metadata; enumerate actual Python runtime imports and optional import boundaries. Compare with declared requirements.

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
-from game_integration_assessment_provenance import verify_assessment_document_bytes
+from fixture_assessment_trust import verify_pinned_test_assessment
 
 COMMIT = "6df11272a9ca14dcfb8dc3bbe26b29c189d12253"
 SOURCE = {"provider": "github", "repository": "daresan/minglefield-integration-test"}
@@ -47,17 +47,26 @@ def main():
             blob = git(args.repo, "hash-object", "--stdin", data=data).decode().strip()
             if blob != expected_blob:
                 raise ValueError(kind + ": pinned Git blob mismatch")
-            document = json.loads(data.decode("utf-8"))
-            # No independently authenticated digest yet: result MUST stay unknown.
-            result = verify_assessment_document_bytes(
-                kind, data, expected_sha256=hashlib.sha256(data).hexdigest(),
-                independent_digest_authenticated=False, **IDENTITY)
-            if result["state"] != "unknown" or result["provenance_verified"] is not False:
-                raise ValueError(kind + ": untrusted digest promoted to provenance")
-            print(kind + ": pinned Git blob OK; SHA-256 " +
-                  hashlib.sha256(data).hexdigest() +
-                  "; independent provenance UNKNOWN (expected)")
-        print("PASS: pinned fixture integrity and fail-closed provenance boundary")
+            result = verify_pinned_test_assessment(
+                kind, data, source_repository="daresan/minglefield-integration-test",
+                source_commit=COMMIT, integration_id="community.daresan.test",
+                from_version="v1.0.0", to_version="v1.1.0")
+            if result["state"] != "verified" or result["provenance_verified"] is not True:
+                raise ValueError(kind + ": approved fixture digest not verified: " + str(result))
+            tampered = verify_pinned_test_assessment(
+                kind, data + b" ", source_repository="daresan/minglefield-integration-test",
+                source_commit=COMMIT, integration_id="community.daresan.test",
+                from_version="v1.0.0", to_version="v1.1.0")
+            if tampered["state"] != "invalid":
+                raise ValueError(kind + ": modified bytes accepted")
+            wrong_source = verify_pinned_test_assessment(
+                kind, data, source_repository="attacker/repository",
+                source_commit=COMMIT, integration_id="community.daresan.test",
+                from_version="v1.0.0", to_version="v1.1.0")
+            if wrong_source["state"] != "invalid":
+                raise ValueError(kind + ": wrong source accepted")
+            print(kind + ": approved pinned fixture SHA-256 verified; tamper/source denied")
+        print("PASS: test-only pinned fixture provenance and negative controls")
     except (subprocess.CalledProcessError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
         print("FAIL: " + str(exc), file=sys.stderr)
         return 1

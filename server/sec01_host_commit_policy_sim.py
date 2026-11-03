@@ -552,6 +552,7 @@ class HostCommitPolicy:
                             source_state="registry_match"
                         installed.append({
                             "integration_id":entry["integration_id"],
+                            "publisher":entry["publisher"],
                             "declared_version":entry["installed_version"],
                             "declared_verification_status":entry.get("verification_status","unknown"),
                             "trusted_verification_status":"unknown",

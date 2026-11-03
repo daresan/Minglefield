@@ -58,3 +58,25 @@ def make_operator_assessment_resolver(path, *, byte_loader):
     """Build resolver only from a separately provisioned operator manifest."""
     return make_assessment_resolver(read_operator_approvals(path),
                                     byte_loader=byte_loader)
+
+
+def preview_with_operator_approvals(*, manifest_path, byte_loader,
+                                    integration_id, release_source,
+                                    from_version, to_version):
+    """Reload approvals once per preview request, never cache across requests.
+
+    A missing, unreadable, or malformed manifest yields the normal fail-closed
+    unknown preview. The same immutable snapshot covers both document kinds
+    within this one request, preventing mixed approval generations.
+    """
+    from game_integration_assessment_preview import preview_release_assessments
+
+    try:
+        resolver = make_operator_assessment_resolver(
+            manifest_path, byte_loader=byte_loader)
+    except (ValueError, OSError, TypeError):
+        resolver = None
+    return preview_release_assessments(
+        integration_id=integration_id, release_source=release_source,
+        from_version=from_version, to_version=to_version,
+        resolver=resolver)

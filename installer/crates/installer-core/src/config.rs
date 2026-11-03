@@ -39,7 +39,9 @@ impl InstallerConfig {
         }
         let data = std::path::Path::new(&self.data_dir);
         if !data.is_absolute()
-            || data.components().any(|c| matches!(c, std::path::Component::ParentDir))
+            || data
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
         {
             return Err(ConfigError::InvalidDataDirectory);
         }
@@ -74,7 +76,10 @@ mod tests {
     fn version_mismatch_fails_closed() {
         let mut config = base();
         config.version += 1;
-        assert_eq!(config.preview(Mode::Silent), Err(ConfigError::UnsupportedVersion));
+        assert_eq!(
+            config.preview(Mode::Silent),
+            Err(ConfigError::UnsupportedVersion)
+        );
     }
 
     #[test]
@@ -87,7 +92,10 @@ mod tests {
     fn unsafe_data_path_and_optional_installs_fail_closed() {
         let mut config = base();
         config.data_dir = "relative".to_string();
-        assert_eq!(config.preview(Mode::Silent), Err(ConfigError::InvalidDataDirectory));
+        assert_eq!(
+            config.preview(Mode::Silent),
+            Err(ConfigError::InvalidDataDirectory)
+        );
         config = base();
         config.install_optional_comfyui = true;
         assert_eq!(

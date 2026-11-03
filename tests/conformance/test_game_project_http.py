@@ -281,6 +281,9 @@ class GameProjectHttpTests(unittest.TestCase):
             if source=="alice/two":
                 raise OSError("offline")
             return {"state":"available","releases":[{"tag_name":"1.0","release_notes":"<script>untrusted</script>"}]}
+        self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
+            "host_id": "host.one", "settings": {"staging_root": "", "output_root": "",
+                "trusted_integration_sources": ["alice/one", "alice/two"]}})[0], 200)
         # Exercise the real inspector, validator and discovery engine with only external I/O mocked.
         import game_integration_updates as updates
         original=updates.discover_integration_update
@@ -334,6 +337,9 @@ class GameProjectHttpTests(unittest.TestCase):
                "to_version": "v1.1.0",
                "commit": "6df11272a9ca14dcfb8dc3bbe26b29c189d12253",
                "sha256": hashlib.sha256(raw).hexdigest()}
+        self.assertEqual(self.request("POST", "/api/host/settings", self.owner, {
+            "host_id": "host.one", "settings": {"staging_root": "", "output_root": "",
+                "trusted_integration_sources": [source["repository"]]}})[0], 200)
         manifest = self.root / "operator_approvals.json"
         self.store._host_policy._assessment_manifest_path = manifest
         self.addCleanup(setattr, self.store._host_policy, "_assessment_manifest_path", None)

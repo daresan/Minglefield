@@ -14,25 +14,22 @@ class JobAttachmentsSettingsTests(unittest.TestCase):
         self.a = str(Path(self.tmp.name) / "a")
         self.b = str(Path(self.tmp.name) / "b")
 
-    def test_legacy_value_is_preserved_under_new_name(self):
-        old = {"staging_root": self.a, "output_root": self.b}
-        result = normalize_job_attachments(old)
+    def test_canonical_value_is_preserved(self):
+        original = {"job_attachments_root": self.a, "output_root": self.b}
+        result = normalize_job_attachments(original)
         self.assertEqual(result["state"], "normalized")
-        self.assertEqual(result["settings"]["job_attachments_root"],
-                         self.a)
-        self.assertNotIn("staging_root", result["settings"])
-        self.assertEqual(old["staging_root"], self.a)
+        self.assertEqual(result["settings"], original)
         self.assertFalse(result["mutation_performed"])
 
-    def test_conflicting_dual_keys_are_rejected(self):
-        self.assertEqual(normalize_job_attachments({
-            "staging_root": self.a, "job_attachments_root": self.b
-        })["reason"], "conflicting_job_attachments_roots")
-
-    def test_identical_dual_keys_are_accepted(self):
-        result = normalize_job_attachments({
-            "staging_root": self.a, "job_attachments_root": self.a})
-        self.assertEqual(result["settings"], {"job_attachments_root": self.a})
+    def test_legacy_and_dual_key_api_payloads_are_rejected(self):
+        for settings in (
+                {"staging_root": self.a},
+                {"staging_root": self.a, "job_attachments_root": self.a},
+                {"staging_root": self.b, "job_attachments_root": self.a}):
+            with self.subTest(settings=settings):
+                result = normalize_job_attachments(settings)
+                self.assertEqual(result["state"], "blocked")
+                self.assertEqual(result["reason"], "legacy_staging_root_not_accepted")
 
     def test_installation_storage_is_never_conflated(self):
         result = normalize_job_attachments({

@@ -68,6 +68,13 @@ dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);
 </style>
 <header class="app-heading"><h1>Minglefield Private Alpha</h1><button id="platformUpdateIndicator" class="signal-indicator" data-signal="unknown" type="button" aria-haspopup="dialog" title="Minglefield-Update: Status unbekannt"><span class="signal-lamp" aria-hidden="true"></span><span>Minglefield-Update</span></button></header>
 <nav id="alphaNav" aria-label="Bereiche"></nav>
+<section id="projectDocsPanel" class="alphaPanel" hidden aria-label="README und Lizenzbestimmungen">
+<fieldset><legend>README und Lizenzbestimmungen</legend>
+<p>Dokumente des aktuell ausgeführten Minglefield-Quellstands. Diese Ansicht ist keine Lizenzannahme für eine Installation.</p>
+<div class="action-row"><button id="projectDocsReadme" type="button">README anzeigen</button><button id="projectDocsLicense" type="button">Lizenzbestimmungen anzeigen</button></div>
+<p id="projectDocsStatus" role="status" aria-live="polite">Dokument auswählen.</p>
+<pre id="projectDocsContent" style="max-height:65vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere" tabindex="0"></pre>
+</fieldset></section>
 <dialog id="platformUpdateDialog" aria-labelledby="platformUpdateTitle"><h3 id="platformUpdateTitle">Minglefield-Update</h3><p>Derzeit ist keine verifizierte Plattform-Updatequelle angebunden. Status: unbekannt. Es wird kein Update gestartet.</p><form method="dialog"><button>Schließen</button></form></dialog>
 
 <p>Nur lokale Simulation. Kein Tailscale Serve und keine echten Effekte.</p>
@@ -313,29 +320,45 @@ const alphaPanels={
   jobs:[alphaSections[4],document.getElementById("hostJobPanel")],
   hosts:[alphaSections[7]],
   effects:[document.getElementById("effectPanel")],
-  game:[document.getElementById("gameProjectPanel")]
+  game:[document.getElementById("gameProjectPanel")],
+  documents:[document.getElementById("projectDocsPanel")]
 };
 let alphaTab="login";
 for(const [key,label] of [["login","Anmeldung"],["hosts","Hosts"],
-                           ["effects","Effekte"],["jobs","Jobs"],["game","Game"],["agents","Agenten"]]){
+                           ["effects","Effekte"],["jobs","Jobs"],["game","Game"],["agents","Agenten"],["documents","README & Lizenz"]]){
   const button=document.createElement("button");
   button.textContent=label;button.type="button";button.dataset.tab=key;
   button.onclick=()=>{alphaTab=key;renderAlphaTabs();if(key==="game")loadGameProjects();};
   alphaNav.append(button);
 }
 function renderAlphaTabs(){
-  if(!credential)alphaTab="login";
+  if(!credential&&alphaTab!=="documents")alphaTab="login";
   for(const button of alphaNav.querySelectorAll("button")){
-    button.disabled=!credential&&button.dataset.tab!=="login";
+    button.disabled=!credential&&!["login","documents"].includes(button.dataset.tab);
     button.setAttribute("aria-current",button.dataset.tab===alphaTab?"page":"false");
   }
-  for(const section of [...alphaSections,document.getElementById("gameProjectPanel")]){
+  for(const section of [...alphaSections,document.getElementById("gameProjectPanel"),document.getElementById("projectDocsPanel")]){
     section.classList.add("alphaPanel");
     section.hidden=!(alphaPanels[alphaTab]||[]).includes(section);
   }
 
 }
 renderAlphaTabs();
+async function loadProjectDocument(kind){
+  const status=document.getElementById("projectDocsStatus");
+  const content=document.getElementById("projectDocsContent");
+  status.textContent="Dokument wird geladen…";
+  content.textContent="";
+  try{
+    const response=await fetch("/api/project-document?kind="+encodeURIComponent(kind),{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok){status.textContent=data.error||"Dokument nicht verfügbar.";return;}
+    status.textContent=data.filename+" (Nur-Lese-Ansicht)";
+    content.textContent=data.content;
+  }catch(error){status.textContent="Dokument konnte nicht geladen werden: "+String(error);}
+}
+document.getElementById("projectDocsReadme").onclick=()=>loadProjectDocument("readme");
+document.getElementById("projectDocsLicense").onclick=()=>loadProjectDocument("license");
 const updateStatus=()=>{
   renderAlphaTabs();
   if(!credential){statusLine.textContent="Keine aktive Session.";return;}
@@ -1813,6 +1836,27 @@ def handler_for(service, *, local_bootstrap_secret=None):
                                  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
                 self.end_headers()
                 self.wfile.write(page)
+                return
+            if path == "/api/project-document":
+                kind = parse_qs(urlsplit(self.path).query).get("kind", [])
+                if len(kind) != 1 or kind[0] not in ("readme", "license"):
+                    self.reply(400, {"error": "invalid_document"})
+                    return
+                root = Path(__file__).resolve().parent.parent
+                filename = "README.md" if kind[0] == "readme" else "LICENSE"
+                document = root / filename
+                if not document.is_file():
+                    self.reply(404, {"error": "Lizenzdatei noch nicht veröffentlicht." if kind[0] == "license" else "README nicht verfügbar."})
+                    return
+                try:
+                    if document.stat().st_size > 1024 * 1024:
+                        self.reply(413, {"error": "document_too_large"})
+                        return
+                    content = document.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    self.reply(500, {"error": "document_unreadable"})
+                    return
+                self.reply(200, {"filename": filename, "content": content})
                 return
             if path == "/health":
                 self.reply(200, {"status": "simulation_only"})

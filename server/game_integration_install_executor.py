@@ -2,9 +2,10 @@
 
 Writes only under a dedicated installation_staging_root. Does not modify game
 repositories, host job attachments, journal state, or existing operation dirs.
-Not an installation executor or authorization boundary. Path identity checks\nreduce accidental replacement risks but cannot eliminate adversarial TOCTOU\nwithout platform-specific handle-relative operations and exclusive locking.
+Not an installation executor or authorization boundary. Path identity checks reduce accidental replacement risks but cannot eliminate adversarial TOCTOU without platform-specific handle-relative operations and exclusive locking.
 """
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
@@ -79,12 +80,14 @@ def stage_installation_bytes(installation_staging_root, operation_id,
         return blocked("staging_directory_unavailable")
     operation_identity = (operation.stat().st_dev, operation.stat().st_ino)
     try:
-        for relative, data in verified:
+        staged_files = []
+        for index, (relative, data) in enumerate(verified):
             if not _same_directory(root, root_identity) or not _same_directory(operation, operation_identity):
                 return blocked("staging_directory_changed")
-            target = operation.joinpath(*relative.split("/"))
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if (has_redirecting_component(target.parent)
+            # Flat, generated names avoid untrusted nested directory creation.
+            blob_name = f"blob-{index:06d}"
+            target = operation / blob_name
+            if (has_redirecting_component(target)
                     or not _same_directory(root, root_identity)
                     or not _same_directory(operation, operation_identity)):
                 return blocked("unsafe_staging_path")
@@ -96,9 +99,27 @@ def stage_installation_bytes(installation_staging_root, operation_id,
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
+            staged_files.append({"path": relative, "blob": blob_name,
+                                 "size": len(data),
+                                 "sha256": hashlib.sha256(data).hexdigest()})
+        # Write the mapping last. It is metadata, not proof of commit.
+        if not _same_directory(root, root_identity) or not _same_directory(operation, operation_identity):
+            return blocked("staging_directory_changed")
+        mapping = json.dumps({"plan_sha256": plan["plan_sha256"],
+                              "files": staged_files},
+                             sort_keys=True, separators=(",", ":")).encode("utf-8")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(operation / "manifest.json", flags, 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(mapping)
+            stream.flush()
+            os.fsync(stream.fileno())
         return {"state": "staged", "operation_id": operation_id,
                 "plan_sha256": plan["plan_sha256"],
                 "files_staged": len(verified),
+                "layout": "flat-v1",
                 "installation_allowed": False}
     except OSError:
         # Preserve partial operation for explicit inspection. Never recursively

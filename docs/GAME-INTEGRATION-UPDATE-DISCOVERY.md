@@ -150,3 +150,20 @@ For P1.4f.4:
 
 This policy preserves operator-controlled source trust and does not add a
 central registry or central installation approval service.
+
+## Separate workflow staging from integration installation staging
+
+The existing game-project `staging_root` is associated with workflow/job
+file staging (including ComfyUI). **Do not reuse it implicitly** for game
+integration installation or rollback. These are separate lifecycles and
+security domains.
+
+P1.4f.4 `game_integration_install_staging.py` currently implements only an
+in-memory manifest and byte verification; it does not use `staging_root`,
+create directories or mutate files. Future installation transaction storage
+must have a distinct, owner/project-scoped location, explicit configuration
+and cleanup/recovery rules. Do not introduce an unreviewed host-specific
+hardcoded path. Prefer the existing Hosts/Projects configuration architecture,
+but keep workflow staging semantics unchanged. Before enabling writes,
+determine filesystem/volume requirements and prevent overlap with project
+content, workflow staging and Git control metadata.

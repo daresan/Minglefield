@@ -1,4 +1,15 @@
 {
   "registry_version": "0.1",
-  "integrations": []
+  "integrations": [
+    {
+      "integration_id": "community.daresan.test",
+      "name": "Minglefield Integration Test",
+      "publisher": "daresan",
+      "trust_tier": "community",
+      "release_source": {
+        "provider": "github",
+        "repository": "daresan/minglefield-integration-test"
+      }
+    }
+  ]
 }

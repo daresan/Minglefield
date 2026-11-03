@@ -44,6 +44,8 @@ def cleanup_staged_operation_posix(root, operation_id, entries, *,
         # Same-UID writers still require exclusive runtime coordination.
         if root_stat.st_mode & 0o022:
             return result("blocked", "insecure_staging_root_permissions")
+        if root_stat.st_uid != os.geteuid():
+            return result("blocked", "staging_root_owner_mismatch")
         root_path_stat = Path(root).stat(follow_symlinks=False)
         if (root_path_stat.st_dev, root_path_stat.st_ino) != (
                 root_stat.st_dev, root_stat.st_ino):
@@ -55,6 +57,8 @@ def cleanup_staged_operation_posix(root, operation_id, entries, *,
         op_stat = os.fstat(op_fd)
         if op_stat.st_mode & 0o022:
             return result("blocked", "insecure_operation_permissions")
+        if op_stat.st_uid != os.geteuid():
+            return result("blocked", "operation_owner_mismatch")
         if (op_stat.st_dev, op_stat.st_ino) != tuple(check["operation_identity"]):
             return result("blocked", "operation_identity_changed")
         if (before.st_dev, before.st_ino) != (op_stat.st_dev, op_stat.st_ino):
@@ -68,12 +72,15 @@ def cleanup_staged_operation_posix(root, operation_id, entries, *,
             info = os.stat(name, dir_fd=op_fd, follow_symlinks=False)
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
                 return result("blocked", "unsafe_staging_entry")
+            if info.st_uid != os.geteuid():
+                return result("blocked", "staging_entry_owner_mismatch")
         # The caller must ensure no concurrent untrusted filesystem writer
         # can rename/replace this operation. dir_fd protects child traversal,
         # but POSIX cannot atomically compare identity and rmdir by name.
         for name in sorted(expected):
             current = os.stat(name, dir_fd=op_fd, follow_symlinks=False)
-            if not stat.S_ISREG(current.st_mode) or current.st_nlink != 1:
+            if (not stat.S_ISREG(current.st_mode) or current.st_nlink != 1
+                    or current.st_uid != os.geteuid()):
                 return result("partial", "staging_entry_changed", removed)
             os.unlink(name, dir_fd=op_fd)
             removed = True

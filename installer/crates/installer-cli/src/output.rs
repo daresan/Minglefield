@@ -45,7 +45,10 @@ mod tests {
 
     #[test]
     fn json_escapes_windows_paths_and_control_characters() {
-        assert_eq!(quoted("C:\\Test\\\"file\n"), "\"C:\\\\Test\\\\\\\"file\\n\"");
+        assert_eq!(
+            quoted("C:\\Test\\\"file\n"),
+            "\"C:\\\\Test\\\\\\\"file\\n\""
+        );
         assert_eq!(quoted("\u{0001}"), "\"\\u0001\"");
     }
 

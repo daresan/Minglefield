@@ -96,6 +96,17 @@ class GameInstallJournalTests(unittest.TestCase):
         self.assertEqual(self.policy.host_settings(
             "host.one", "user.owner")["job_attachments_root"], root)
 
+    def test_game_project_reports_job_attachments_alias_without_moving_files(self):
+        projects = self.policy.list_game_projects("host.one", "user.owner")
+        self.assertEqual(len(projects), 1)
+        self.assertEqual(projects[0]["job_attachments_root"],
+                         projects[0]["staging_root"])
+        inspected = self.policy.inspect_game_project_paths(
+            "host.one", "user.owner", "game.one")
+        self.assertEqual(inspected["job_attachments_root"],
+                         inspected["staging_root"])
+        self.assertFalse((self.root / "staging").exists())
+
     def test_recovery_is_conservative(self):
         for state in ("prepared", "applying", "rollback_required", "committed",
                       "rolled_back", "unexpected"):

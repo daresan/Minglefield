@@ -65,7 +65,7 @@ def audit(entry: Path, module_root: Path) -> dict:
                     candidate = module_root / top / "__init__.py"
                     pending.append(candidate.resolve())
                     edges.append({"from": path.name, "to": candidate.relative_to(module_root).as_posix()})
-                elif top == module_root.name and (module_root / "__init__.py").is_file():
+                elif top == module_root.name:
                     # Absolute package import, e.g. server.module from server/.
                     if name.startswith(top + "."):
                         sub = name[len(top) + 1:].split(".")[0]

@@ -7,7 +7,9 @@ import os
 
 
 def delete_isolated_regular_file_by_handle(path, *, expected_volume_serial=None,
-                                           expected_file_index=None,\n                                           expected_parent_volume_serial=None,\n                                           expected_parent_file_index=None):
+                                           expected_file_index=None,
+                                           expected_parent_volume_serial=None,
+                                           expected_parent_file_index=None):
     """Delete the opened file object, never a later replacement at its pathname.
 
     The caller must supply expected native file and parent identities.
@@ -28,7 +30,24 @@ def delete_isolated_regular_file_by_handle(path, *, expected_volume_serial=None,
             or not isinstance(expected_file_index, int) or isinstance(expected_file_index, bool)
             or expected_volume_serial < 0 or expected_file_index < 0):
         return result("blocked", "expected_file_identity_required")
-    if (not isinstance(expected_parent_volume_serial, int)\n            or isinstance(expected_parent_volume_serial, bool)\n            or not isinstance(expected_parent_file_index, int)\n            or isinstance(expected_parent_file_index, bool)\n            or expected_parent_volume_serial < 0 or expected_parent_file_index < 0):\n        return result("blocked", "expected_parent_identity_required")\n    from game_integration_install_cleanup_windows import inspect_windows_directory_handle\n\n    def parent_matches():\n        parent = inspect_windows_directory_handle(os.path.dirname(os.path.abspath(path)))\n        return (parent["state"] == "inspected"\n                and parent["volume_serial"] == expected_parent_volume_serial\n                and parent["file_index"] == expected_parent_file_index)\n\n    if not parent_matches():\n        return result("blocked", "native_parent_identity_mismatch")\n    import ctypes\n    from ctypes import wintypes
+    if (not isinstance(expected_parent_volume_serial, int)
+            or isinstance(expected_parent_volume_serial, bool)
+            or not isinstance(expected_parent_file_index, int)
+            or isinstance(expected_parent_file_index, bool)
+            or expected_parent_volume_serial < 0 or expected_parent_file_index < 0):
+        return result("blocked", "expected_parent_identity_required")
+    from game_integration_install_cleanup_windows import inspect_windows_directory_handle
+
+    def parent_matches():
+        parent = inspect_windows_directory_handle(os.path.dirname(os.path.abspath(path)))
+        return (parent["state"] == "inspected"
+                and parent["volume_serial"] == expected_parent_volume_serial
+                and parent["file_index"] == expected_parent_file_index)
+
+    if not parent_matches():
+        return result("blocked", "native_parent_identity_mismatch")
+    import ctypes
+    from ctypes import wintypes
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     create = kernel.CreateFileW
     create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
@@ -74,7 +93,12 @@ def delete_isolated_regular_file_by_handle(path, *, expected_volume_serial=None,
         if (int(info.volume) != expected_volume_serial
                 or observed_index != expected_file_index):
             return result("blocked", "native_file_identity_mismatch")
-        # Defense in depth only: this path-based parent observation is not\n        # atomic with file open/disposition. A future executor must use\n        # handle-relative child opens and bind the journal transaction.\n        if not parent_matches():\n            return result("blocked", "native_parent_identity_mismatch")\n        disposition = Disposition(True)
+        # Defense in depth only: this path-based parent observation is not
+        # atomic with file open/disposition. A future executor must use
+        # handle-relative child opens and bind the journal transaction.
+        if not parent_matches():
+            return result("blocked", "native_parent_identity_mismatch")
+        disposition = Disposition(True)
         # FILE_INFO_BY_HANDLE_CLASS FileDispositionInfo = 4
         if not set_info(handle, 4, ctypes.byref(disposition),
                         ctypes.sizeof(disposition)):

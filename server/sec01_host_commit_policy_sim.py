@@ -774,7 +774,10 @@ class HostCommitPolicy:
             row=db.execute("SELECT settings FROM sec01_host_settings WHERE host_id=?",
                            (host_id,)).fetchone()
             settings = json.loads(row[0]) if row else {}
-            return {"staging_root": settings.get("staging_root", ""),
+            job_root = settings.get("job_attachments_root",
+                                    settings.get("staging_root", ""))
+            return {"staging_root": job_root,
+                    "job_attachments_root": job_root,
                     "output_root": settings.get("output_root", ""),
                     "trusted_integration_sources": settings.get("trusted_integration_sources", [])}
 
@@ -865,9 +868,18 @@ class HostCommitPolicy:
 
     def save_host_settings(self, host_id, owner_id, settings):
         from pathlib import Path
-        if type(settings) is not dict or not {"staging_root","output_root"} <= set(settings) or (
-                set(settings) - {"staging_root","output_root","trusted_integration_sources"}):
+        from game_job_attachments_settings import normalize_job_attachments
+        normalized = normalize_job_attachments(settings)
+        if normalized["state"] != "normalized":
+            return HostDecision("denied", normalized["reason"])
+        canonical = normalized["settings"]
+        if "output_root" not in canonical or (
+                set(canonical) - {"job_attachments_root","output_root",
+                                  "trusted_integration_sources"}):
             return HostDecision("denied","invalid_settings")
+        # The persisted legacy key is retained until all job consumers migrate.
+        settings = {**canonical, "staging_root": canonical["job_attachments_root"]}
+        settings.pop("job_attachments_root")
         for value in (settings["staging_root"],settings["output_root"]):
             if type(value) is not str or (value and
                     (not Path(value).is_absolute() or len(value)>1024)):

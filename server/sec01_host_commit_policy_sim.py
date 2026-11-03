@@ -929,8 +929,10 @@ class HostCommitPolicy:
                 WHERE host_id=? AND owner_id=? AND project_id=?
                 ORDER BY created_at,operation_id""",
                 (host_id,owner_id,project_id)).fetchall()
+        from game_integration_install_journal import recovery_classification
         return [dict(operation_id=op,state=state,plan_sha256=digest,
-                     created_at=created,updated_at=updated)
+                     created_at=created,updated_at=updated,
+                     recovery=recovery_classification(state))
                 for op,state,digest,created,updated in rows]
 
     def save_host_settings(self, host_id, owner_id, settings):

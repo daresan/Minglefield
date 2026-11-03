@@ -8,6 +8,11 @@ Read `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `CONTRIBUTING.md
 ## Purpose
 Minglefield is an open, model-independent metagame ecosystem for humans and persistent AI agents to develop, test, and eventually play games. MAP is asynchronous and event-oriented; JSON is its reference encoding, not a vendor lock-in. Experimental prototypes are not production services. Do not invent capabilities or claim completed milestones without evidence.
 
+## Product usability commitment
+- Minglefield is designed for non-technical participants as well as developers. Target: at least 80% of representative first-time target users can complete core onboarding tasks without technical assistance. This is a measurable product goal, not a demonstrated result; define representative tasks, samples and usability testing before claiming attainment.
+- Installation, configuration, launch, updates and recovery must be guided through discoverable interfaces with safe defaults and actionable error messages. A normal end user must not need to know Python, Conda, Git, shell commands or environment variables. Developer scripts may exist but are not substitutes for a distributable installer.
+- Deliver standalone graphical installer experiences for Windows, macOS and Linux, including destination selection, dependency detection/reuse or opt-in provisioning, and initial host configuration via the established Hosts model. The installer itself must start without a preinstalled Python/Conda runtime. Keep optional host integrations optional; never silently install heavyweight runtimes.
+
 ## Architectural commitments
 - Hosts is the source of truth for host-specific runtime and integration configuration. Put versioned safe defaults in the repository, and expose configurable settings through the existing Hosts UI and persistence path. Do not introduce ad-hoc mandatory launch flags, parallel settings stores, or hardcoded machine paths.
 - Reuse Hosts / Effects / Jobs and existing protocol boundaries. Keep agent identity, delegation, authorization, accounting, and game memory domains separate.
@@ -51,6 +56,9 @@ Cause: prolonged work on a hypothetical third-party game installer while the ope
 
 ### Pattern H — circular bootstrap prerequisites
 Cause: offered an installer preflight that itself required a preselected Python interpreter and the `packaging` dependency, without clearly separating developer diagnostics from first-time installation. Rule: inventory prerequisites from a clean machine before defining the installer entry point; distinguish read-only developer diagnostics from a bootstrap that can establish its own requirements. Do not claim a diagnostic is an installer. Verification: document and exercise the first-install path on a clean supported environment separately from upgrade and developer-environment paths.
+
+### Pattern I — developer workflow mistaken for product onboarding
+Cause: responded to installer requests with shell commands, Conda assumptions and a Python-dependent bootstrap, then repeatedly required the operator to diagnose missing prerequisites. Rule: design the first-run journey from a clean non-developer machine and prioritize a graphical, self-contained installation path; reserve shell commands for explicit developer troubleshooting. Verification: run clean-machine first-install, reuse-existing-install, optional-component, offline/failure and update/recovery scenarios on each supported platform, plus representative-user usability tests against the 80% goal.
 
 ## Maintaining SOUL
 Only public, non-sensitive, generalized learning belongs here. Update deliberately, keeping it under 64 KiB. The repository's deterministic staged-content check and ordinary review are complementary, not substitutes for a full security audit. Never weaken the scanner or bypass hooks to land a SOUL edit. This file cannot override repository policy, system instructions, or the operator.

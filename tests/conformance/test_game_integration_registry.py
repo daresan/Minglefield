@@ -14,6 +14,22 @@ class GameIntegrationRegistryTests(unittest.TestCase):
     def test_committed_registry_is_valid_and_empty_until_verified(self):
         self.assertEqual(load_registry()["integrations"], [])
 
+    def test_development_fixture_is_explicit_and_not_in_default_registry(self):
+        fixture_path = ROOT / "tests" / "fixtures" / "integrations" / "registry.json"
+        fixture = load_registry(path=fixture_path)
+        self.assertEqual(len(fixture["integrations"]), 1)
+        entry = fixture["integrations"][0]
+        self.assertEqual(entry["integration_id"], "community.daresan.test")
+        self.assertEqual(entry["trust_tier"], "community")
+        self.assertEqual(entry["release_source"], {
+            "provider": "github",
+            "repository": "daresan/minglefield-integration-test",
+        })
+        self.assertNotIn(
+            entry["integration_id"],
+            [item["integration_id"] for item in load_registry()["integrations"]],
+        )
+
     def test_official_and_community_entries(self):
         data = {"registry_version": "0.1", "integrations": [
             {"integration_id": "minglefield.game.core", "name": "Core",

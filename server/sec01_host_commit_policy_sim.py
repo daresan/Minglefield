@@ -1041,6 +1041,34 @@ class HostCommitPolicy:
                 "backend": backend["backend"],
                 "deletion_performed": False, "cleanup_allowed": False}
 
+    def inspect_game_install_cleanup_windows(self, host_id, owner_id, project_id,
+                                             operation_id, entries,
+                                             installation_staging_root):
+        """Journal-bound read-only Windows staging inspection.
+
+        A successful snapshot is not an authorization token. The root must
+        originate from trusted host configuration, never an HTTP request.
+        """
+        import os
+        from game_integration_install_cleanup_windows import (
+            inspect_windows_staging_snapshot)
+
+        def blocked(reason):
+            return {"state": "blocked", "reason": reason, "backend": "windows",
+                    "cleanup_allowed": False, "deletion_performed": False}
+
+        inspection = self.inspect_game_install_cleanup(
+            host_id, owner_id, project_id, operation_id, entries,
+            installation_staging_root)
+        if inspection["state"] != "eligible_snapshot":
+            return blocked(inspection["reason"])
+        if os.name != "nt":
+            return blocked("windows_only")
+        # Only the independently checked preflight may supply filenames.
+        return inspect_windows_staging_snapshot(
+            installation_staging_root, operation_id,
+            inspection["observed_files"])
+
     def game_install_journal_status(self, host_id, owner_id, project_id):
         """Read-only owner-scoped operation history; no cross-host disclosure."""
         with self.authority.store._tx() as db:

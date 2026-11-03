@@ -79,11 +79,11 @@ Directory inspection: `sdk/` and `services/` currently contain README files only
 | Output root | Same settings API | Reuse; preserve existing paths |
 | Trusted integration sources | Same settings API | Reuse; no silent trust expansion |
 | ComfyUI runtime config | `/api/host/runtimes` and `sec01_host_runtimes` | Reuse host-owned configuration; optional official standard installation only |
-| Rule priority / enabled / rule config | `/api/host/rules` and existing Alpha UI | Map validated rule fields, defaults and ownership before exposing advanced installer controls |
-| Scheduling / resource limits | Not established by the three-field `save_host_settings()` contract | Verify Host rules/config schema; do not assume generic settings API supports them |
+| Rule priority / enabled / rule config | `/api/host/rules` and existing Alpha UI | Job policy only; installer must not change these rules |
+| Scheduling / resource limits | Existing Host job policy, not installer configuration | Out of installer scope; do not create or change rules |
 | Platform update | Alpha `platformUpdateDialog` says no verified update source connected | Separate verified Minglefield platform release/update service from game integration updates |
 
-`HostCommitPolicy.host_settings()` currently returns exactly `job_attachments_root`, `output_root`, `trusted_integration_sources`. `save_host_settings()` rejects unknown fields; therefore installer **must not** insert scheduling, resource limits, or runtime settings into this JSON object. Use the existing specialized Host rules and runtime APIs, extending their validated contracts only where necessary.
+`HostCommitPolicy.host_settings()` currently returns exactly `job_attachments_root`, `output_root`, `trusted_integration_sources`. `save_host_settings()` rejects unknown fields; therefore installer **must not** insert scheduling, resource limits, or runtime settings into this JSON object. Use the Host runtime APIs only for installation-related connections; Host job-rule APIs remain outside installer scope.
 
 ### Security acceptance criteria for Gate 4
 
@@ -93,13 +93,11 @@ Directory inspection: `sdk/` and `services/` currently contain README files only
 - Existing user data and Host/runtime settings remain unchanged on failed provisioning or cancelled install.
 - Tests cover login expiry/revocation, concurrent/replayed claim, wrong Host, wrong user, nonlocal caller, origin mismatch, interrupted install and reinstall idempotency.
 
-## Gate 1 Host rule schema and release boundary audit (2026-11-03)
+## Gate 1 responsibility correction — installer versus Host job policy (2026-11-03)
 
-The Alpha UI's `hostConfig()` emits `mode`, `idle_only`, `gpu_max_percent`, `max_parallel_effects`, `timezone`, `weekdays`, `start_minute` and `end_minute`. The separate rule request supplies `host_id`, `rule_id`, `priority`, `enabled` and `config`.
+The existing Host rules (`HostCommitPolicy.upsert_rule()`, `/api/host/rules`) govern **job admission, execution approval, scheduling and resource conditions**. They are **not installer settings**. The installer must **not** create, modify, migrate or reset Host job-approval rules as part of installation or first-run onboarding. The earlier proposal to expose these rules in installer Advanced settings is withdrawn.
 
-`HostCommitPolicy._validate()` checks the complete rule shape: mode is `automatic` or `manual`; `idle_only` is Boolean; GPU threshold is null or integer 0–100; parallel limit is null or integer 1–1024; weekdays are a nonempty unique subset of 0–6; time bounds are integers 0–1440 and must differ; timezone must resolve through `zoneinfo.ZoneInfo`. `upsert_rule()` requires nonnegative integer priority, Boolean enabled, and Host-owner or explicitly provisioned legacy Host-admin authority. The existing Host rule model therefore covers the advanced scheduling and resource-limit controls, without extending the three-field Host storage-settings object.
-
-**Installer contract:** expose validated defaults and advanced controls through existing owner-authorized Host rule API; preserve existing rules on reinstall; avoid inserting fixture administrators or bypassing `_admin()`. On bundled Python, verify IANA timezone data availability across Windows/macOS/Linux; `ZoneInfo` behavior depends on runtime/platform timezone database and may need an explicitly declared `tzdata` distribution. This is a **packaging requirement to test**, not an assertion that the current runtime already bundles `tzdata`.
+Installer scope: application installation and discovery, runtime dependency provisioning, update/repair/uninstall, and minimal authorized local Host registration. First-run may configure an optional Host-owned runtime connection (e.g. ComfyUI) through existing runtime APIs with consent. The Hosts UI retains exclusive responsibility for job authorization rules and execution policies.
 
 **Release/update distinction:** `server/game_release_metadata.py`, `server/game_integration_updates.py`, and `server/game_integration_assessment_*.py` implement **game integration release discovery/assessment**; they do not constitute a verified Minglefield platform release feed. The Alpha `platformUpdateDialog` explicitly reports no verified platform update source. Platform version identity, artifact provenance, signing, migration and rollback remain new product contracts.
 
@@ -111,13 +109,13 @@ The Alpha UI's `hostConfig()` emits `mode`, `idle_only`, `gpu_max_percent`, `max
 - Explicit framework selection ADR comparing cross-platform GUI installers, Python embedding, per-user install, code signing/notarization, repair/update and rollback.
 - CI release-build design distinct from third-party game installer workflows; isolated launch and per-build dependency verification on each supported OS.
 
-Gate 1 is **not yet signed off**. The Host rule/API portion is verified by code inspection, not by executing new tests.
+Gate 1 is **not yet signed off**. The responsibility boundary is clarified; no installer-specific job-rule implementation is planned.
 
 ## Next Gate 1 verification tasks
 
 1. Traverse nested `sdk/`, `services/`, `integrations/`, workflows and packaging metadata; enumerate actual Python runtime imports and optional import boundaries. Compare with declared requirements.
 2. Trace local login/session creation and claim request validation to specify a one-time provisioning handshake without weakening authentication.
-3. Verify all Host settings currently available in UI/API versus promised installer Advanced fields; record missing fields explicitly.
+3. Verify only installation-related Host registration and optional runtime connection APIs; keep job policy/rules outside installer scope.
 4. Identify current release/version metadata, update APIs, filesystem/data migration strategy and relevant regression tests.
 5. Complete the matrix with specific acceptance criteria; **then** proceed to Gate 2 framework evaluation.
 

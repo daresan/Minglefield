@@ -6,10 +6,13 @@ Only call with a disposable test file under a trusted private directory.
 import os
 
 
-def delete_isolated_regular_file_by_handle(path, *, expected_volume_serial=None,\n                                           expected_file_index=None):
+def delete_isolated_regular_file_by_handle(path, *, expected_volume_serial=None,
+                                           expected_file_index=None):
     """Delete the opened file object, never a later replacement at its pathname.
 
-    The caller must supply the expected native identity of the exact file.\n    A replaced file is rejected after opening, before disposition.\n    This low-level primitive is intentionally not an authorization boundary.
+    The caller must supply the expected native identity of the exact file.
+    A replaced file is rejected after opening, before disposition.
+    This low-level primitive is intentionally not an authorization boundary.
     Callers must independently establish owner, journal, root, plan and
     directory binding; until then production cleanup remains disabled.
     """
@@ -21,7 +24,12 @@ def delete_isolated_regular_file_by_handle(path, *, expected_volume_serial=None,
         return result("blocked", "windows_only")
     if not isinstance(path, (str, os.PathLike)) or not os.fspath(path):
         return result("blocked", "invalid_file_path")
-    if (not isinstance(expected_volume_serial, int) or isinstance(expected_volume_serial, bool)\n            or not isinstance(expected_file_index, int) or isinstance(expected_file_index, bool)\n            or expected_volume_serial < 0 or expected_file_index < 0):\n        return result("blocked", "expected_file_identity_required")\n    import ctypes\n    from ctypes import wintypes
+    if (not isinstance(expected_volume_serial, int) or isinstance(expected_volume_serial, bool)
+            or not isinstance(expected_file_index, int) or isinstance(expected_file_index, bool)
+            or expected_volume_serial < 0 or expected_file_index < 0):
+        return result("blocked", "expected_file_identity_required")
+    import ctypes
+    from ctypes import wintypes
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     create = kernel.CreateFileW
     create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,

@@ -2,6 +2,7 @@
 //! This crate does not install files, claim Hosts, or establish publisher trust.
 
 pub mod config;
+pub mod integrity;
 
 use std::path::{Component, Path};
 

@@ -93,6 +93,26 @@ Directory inspection: `sdk/` and `services/` currently contain README files only
 - Existing user data and Host/runtime settings remain unchanged on failed provisioning or cancelled install.
 - Tests cover login expiry/revocation, concurrent/replayed claim, wrong Host, wrong user, nonlocal caller, origin mismatch, interrupted install and reinstall idempotency.
 
+## Gate 1 Host rule schema and release boundary audit (2026-11-03)
+
+The Alpha UI's `hostConfig()` emits `mode`, `idle_only`, `gpu_max_percent`, `max_parallel_effects`, `timezone`, `weekdays`, `start_minute` and `end_minute`. The separate rule request supplies `host_id`, `rule_id`, `priority`, `enabled` and `config`.
+
+`HostCommitPolicy._validate()` checks the complete rule shape: mode is `automatic` or `manual`; `idle_only` is Boolean; GPU threshold is null or integer 0–100; parallel limit is null or integer 1–1024; weekdays are a nonempty unique subset of 0–6; time bounds are integers 0–1440 and must differ; timezone must resolve through `zoneinfo.ZoneInfo`. `upsert_rule()` requires nonnegative integer priority, Boolean enabled, and Host-owner or explicitly provisioned legacy Host-admin authority. The existing Host rule model therefore covers the advanced scheduling and resource-limit controls, without extending the three-field Host storage-settings object.
+
+**Installer contract:** expose validated defaults and advanced controls through existing owner-authorized Host rule API; preserve existing rules on reinstall; avoid inserting fixture administrators or bypassing `_admin()`. On bundled Python, verify IANA timezone data availability across Windows/macOS/Linux; `ZoneInfo` behavior depends on runtime/platform timezone database and may need an explicitly declared `tzdata` distribution. This is a **packaging requirement to test**, not an assertion that the current runtime already bundles `tzdata`.
+
+**Release/update distinction:** `server/game_release_metadata.py`, `server/game_integration_updates.py`, and `server/game_integration_assessment_*.py` implement **game integration release discovery/assessment**; they do not constitute a verified Minglefield platform release feed. The Alpha `platformUpdateDialog` explicitly reports no verified platform update source. Platform version identity, artifact provenance, signing, migration and rollback remain new product contracts.
+
+### Gate 1 remaining verification / Gate 2 entry conditions
+
+- Full transitive runtime import and dynamic import audit, with executable feature boundaries and optional integration classification; source inspection so far is a partial dependency map.
+- Version/build metadata and platform distribution identity contract, including source-only versus executable-only recognition.
+- Stable packaged application launch, process supervision, startup failure handling, persistent data location on macOS and Linux.
+- Explicit framework selection ADR comparing cross-platform GUI installers, Python embedding, per-user install, code signing/notarization, repair/update and rollback.
+- CI release-build design distinct from third-party game installer workflows; isolated launch and per-build dependency verification on each supported OS.
+
+Gate 1 is **not yet signed off**. The Host rule/API portion is verified by code inspection, not by executing new tests.
+
 ## Next Gate 1 verification tasks
 
 1. Traverse nested `sdk/`, `services/`, `integrations/`, workflows and packaging metadata; enumerate actual Python runtime imports and optional import boundaries. Compare with declared requirements.

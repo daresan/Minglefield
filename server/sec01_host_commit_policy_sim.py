@@ -811,6 +811,34 @@ class HostCommitPolicy:
         return {"state":"prepared","reason":"operation_recorded",
                 "operation_id":operation_id}
 
+    def cancel_prepared_game_install(self, host_id, owner_id, project_id,
+                                     operation_id, plan_sha256):
+        """Cancel only a still-prepared operation; never undo applied files."""
+        import re
+        if (not all(ident(v) for v in (host_id,owner_id,project_id,operation_id))
+                or type(plan_sha256) is not str
+                or re.fullmatch(r"[a-f0-9]{64}",plan_sha256) is None):
+            return {"state":"denied","reason":"invalid_install_operation"}
+        with self.authority.store._tx() as db:
+            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
+                          (host_id,owner_id)).fetchone() is None:
+                return {"state":"denied","reason":"not_host_owner"}
+            row=db.execute("""SELECT state,plan_sha256 FROM sec01_game_install_journal
+                WHERE operation_id=? AND host_id=? AND owner_id=? AND project_id=?""",
+                (operation_id,host_id,owner_id,project_id)).fetchone()
+            if row is None:
+                return {"state":"denied","reason":"operation_not_found"}
+            if row[1]!=plan_sha256:
+                return {"state":"denied","reason":"plan_digest_conflict"}
+            if row[0]=="cancelled":
+                return {"state":"cancelled","reason":"idempotent_replay"}
+            if row[0]!="prepared":
+                return {"state":"denied","reason":"operation_not_cancellable"}
+            db.execute("""UPDATE sec01_game_install_journal
+                SET state='cancelled',updated_at=CURRENT_TIMESTAMP
+                WHERE operation_id=? AND state='prepared'""",(operation_id,))
+        return {"state":"cancelled","reason":"prepared_operation_cancelled"}
+
     def game_install_journal_status(self, host_id, owner_id, project_id):
         """Read-only owner-scoped operation history; no cross-host disclosure."""
         with self.authority.store._tx() as db:

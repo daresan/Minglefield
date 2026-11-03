@@ -1120,7 +1120,8 @@ class HostCommitPolicy:
             if inspection["state"] != "eligible_snapshot":
                 return blocked(inspection["reason"])
             from game_integration_install_cleanup_windows import (
-                inspect_windows_staging_snapshot)
+                inspect_windows_staging_snapshot, inspect_windows_staged_file,
+                inspect_windows_directory_handle)
             snapshot = inspect_windows_staging_snapshot(
                 installation_staging_root, operation_id,
                 inspection["observed_files"])
@@ -1128,10 +1129,30 @@ class HostCommitPolicy:
                 return blocked(snapshot["reason"])
             import os.path
             operation_path = os.path.join(installation_staging_root, operation_id)
+            parent_before = inspect_windows_directory_handle(operation_path)
+            if parent_before["state"] != "inspected":
+                return blocked(parent_before["reason"])
+            parent_identity = (parent_before["volume_serial"],
+                               parent_before["file_index"])
             for filename in inspection["observed_files"]:
+                # Both independent probes must identify the same filesystem
+                # object. A snapshot alone is never a reusable capability.
+                absolute = inspect_windows_staged_file(
+                    os.path.join(operation_path, filename))
+                if absolute["state"] != "inspected":
+                    return blocked(absolute["reason"])
                 child = inspect_windows_relative_child(operation_path, filename)
                 if child["state"] != "inspected":
                     return blocked(child["reason"])
+                if ((absolute["volume_serial"], absolute["file_index"]) !=
+                        (child["volume_serial"], child["file_index"])):
+                    return blocked("windows_relative_file_identity_changed")
+                parent_after = inspect_windows_directory_handle(operation_path)
+                if parent_after["state"] != "inspected":
+                    return blocked(parent_after["reason"])
+                if ((parent_after["volume_serial"], parent_after["file_index"]) !=
+                        parent_identity):
+                    return blocked("windows_relative_parent_identity_changed")
             return {"state": "relative_candidate_snapshot",
                     "reason": "journal_and_relative_handles_inspected",
                     "backend": "windows", "file_count": len(inspection["observed_files"]),

@@ -69,3 +69,15 @@ The installer/first-run flow may register the local Host and configure only the 
 ## Explicit non-goals and open decisions
 
 Not part of this phase: third-party game installer expansion, federated marketplaces, any additional ComfyUI models, custom nodes, extensions or workflows, remote-host ownership bypass, or mandatory central trust service. Exact GUI toolkit, OS distribution formats, Python packaging strategy, optional Conda distribution/license, ComfyUI acquisition policy and security design for local provisioning remain **open** until inventory and review. No production-ready installer, complete runtime dependency list, security review, or usability measurement is claimed yet.
+
+## Updated product decision: alpha release and reusable repackaging (2026-11-03)
+
+- **Ship the present functional Alpha as the first installable product release**, explicitly labeled experimental/local Alpha, rather than delaying the installer until a production-ready server exists. The release version `0.1.0-alpha.1` is a **proposal**, not an assigned tag.
+- **Installer must be release-agnostic**: separate packaging/build logic and signed/versioned release metadata from installer UI and installation lifecycle; future releases are produced by repackaging new application artifacts, not rewriting the installer.
+- First package includes only the current Minglefield Alpha app/backend and mandatory runtime dependencies. Optional standard ComfyUI remains opt-in; no models or custom extensions. Do not confuse third-party game install with platform install.
+- Alpha status and known limitations must be disclosed in installer and release notes. Local-only gateway must not be advertised as a production network service.
+- Define a stable package manifest with product ID, semantic version/channel, OS/architecture, application entry point, dependency lock/hash inventory, payload checksums, data schema/migration compatibility, source license/attribution and publisher/update provenance.
+- **Open-source licensing direction:** user selected a Blender-like GPL family model, with `GPL-3.0-or-later` proposed for Minglefield-owned core code. This is a *project licensing decision in principle*, not a claim that Blender itself uses GPLv3-only or that legal rights are already cleared. Final adoption requires copyright-holder authorization, dependency license review, notices and the actual LICENSE/SPDX changes.
+- The Minglefield marketplace/service 5% commercial rule must **not** be imposed as a condition on GPL code use, copying, modification or redistribution. Any marketplace/service commission belongs to separate voluntary contractual transactions and requires legal review; do not silently rewrite existing policy.
+- Do not block internal Alpha packaging engineering on production-readiness or a future product release. Public distribution remains subject to confirming redistribution rights, attribution and dependency compatibility.
+

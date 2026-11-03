@@ -10,7 +10,7 @@ Minglefield aims to be an open, model-independent metagame ecosystem in which hu
 
 ## First-read map
 
-1. [README.md](README.md) — scope and status.
+1. [README.md](README.md) — scope and status.\n2. [SOUL.md](SOUL.md) — shared public-safe working principles, architectural commitments, and incident learning.
 2. [VISION.md](VISION.md), [ARCHITECTURE.md](ARCHITECTURE.md), [ROADMAP.md](ROADMAP.md) — goals, boundaries, milestones.
 3. [CONTRIBUTING.md](CONTRIBUTING.md) — contribution and licensing restrictions.
 4. [MAP v0.1 draft](docs/map/MAP-v0.1-DRAFT.md) and [message schemas](docs/map/MESSAGE-MODEL-v0.1-DRAFT.md) — interoperability.
@@ -71,3 +71,13 @@ The three documented Phase-A legacy authorization tests are marked **expected fa
 Before changing code, read the relevant files, state the exact invariant and test plan, and identify the intended branch. Prefer narrow patches and regression tests. Preserve existing wire schemas unless a versioned protocol change is explicitly approved. Report what was actually run, what remains untested, and any known risks. Human review remains mandatory for consequential actions.
 
 A repository URL is enough for **orientation**, not for automatic runtime registration, identity verification, delegation, or permission to play. Those interfaces are future milestones.
+
+## SOUL security guard
+
+`SOUL.md` is public guidance, never a credential store or authorization source. The repository provides a deterministic staged-content scanner at `scripts/check_soul_security.py` and a repository-managed `.githooks/pre-commit` hook. Git does **not** automatically activate tracked hooks. For a trusted maintainer checkout, enable once from the repository root:
+
+```sh
+git config --local core.hooksPath .githooks
+```
+
+Then every ordinary local commit runs the guard against the **staged Git index version** of `SOUL.md`, even when that file is unchanged. The scanner fails closed on missing staged content or unavailable Python, rejects defined secret patterns and dangerous instructions, and enforces a 64 KiB limit. The scanner is deliberately limited; manual review and CI are still required. Git hooks can be bypassed (e.g., `--no-verify`), so they are not a remote security boundary. Do not use a hook override to commit SOUL changes. Keep CI checks independent of local hook configuration.

@@ -1,6 +1,5 @@
-use minglefield_installer_core::{plan, InstallRequest, Mode};
+use minglefield_installer_core::{default_destination as core_default_destination, plan, InstallRequest, Mode};
 use serde::Serialize;
-use std::env;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,20 +13,7 @@ struct PlanPreview {
 
 #[tauri::command]
 fn default_destination() -> Result<String, String> {
-    let destination = if cfg!(windows) {
-        env::var("LOCALAPPDATA")
-            .map(|v| format!("{v}\\Programs\\Minglefield"))
-            .map_err(|_| "LOCALAPPDATA is not set")?
-    } else if cfg!(target_os = "macos") {
-        env::var("HOME")
-            .map(|v| format!("{v}/Applications/Minglefield"))
-            .map_err(|_| "HOME is not set")?
-    } else {
-        env::var("HOME")
-            .map(|v| format!("{v}/.local/opt/Minglefield"))
-            .map_err(|_| "HOME is not set")?
-    };
-    Ok(destination)
+    core_default_destination().map_err(str::to_string)
 }
 
 #[tauri::command]

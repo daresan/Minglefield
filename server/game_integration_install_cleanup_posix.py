@@ -84,6 +84,21 @@ def cleanup_staged_operation_posix(root, operation_id, entries, *,
                 return result("partial", "staging_entry_changed", removed)
             os.unlink(name, dir_fd=op_fd)
             removed = True
+            # A replaced operation path must never cause the next iteration
+            # to act on a different directory. The open handle stays bound
+            # to the original inode; check its parent binding after each
+            # mutation to stop as early as possible.
+            binding = os.stat(operation_id, dir_fd=root_fd,
+                              follow_symlinks=False)
+            if (binding.st_dev, binding.st_ino) != (
+                    op_stat.st_dev, op_stat.st_ino):
+                return result("partial", "operation_identity_changed", removed)
+        # Recheck both ends of the root -> operation binding. These checks
+        # narrow the window but cannot make name-based rmdir atomic.
+        root_binding = Path(root).stat(follow_symlinks=False)
+        if (root_binding.st_dev, root_binding.st_ino) != (
+                root_stat.st_dev, root_stat.st_ino):
+            return result("partial", "staging_root_identity_changed", removed)
         again = os.stat(operation_id, dir_fd=root_fd, follow_symlinks=False)
         if (again.st_dev, again.st_ino) != (op_stat.st_dev, op_stat.st_ino):
             return result("partial", "operation_identity_changed", removed)

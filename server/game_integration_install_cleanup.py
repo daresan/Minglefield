@@ -64,8 +64,8 @@ def inspect_staging_cleanup(installation_staging_root, operation_id, entries,
             return result("blocked", "unexpected_or_unsafe_staging_entry")
         identity = operation.stat(follow_symlinks=False)
         return result("eligible_snapshot", "cleanup_preflight_checked",
-                      "operation_identity": [identity.st_dev, identity.st_ino],
-                      "observed_files": sorted(p.name for p in children),
-                      "staging_state": snapshot["state"])
+                      operation_identity=[identity.st_dev, identity.st_ino],
+                      observed_files=sorted(p.name for p in children),
+                      staging_state=snapshot["state"])
     except OSError:
         return result("blocked", "staging_unreadable")

@@ -42,7 +42,10 @@ pub fn plan(request: &InstallRequest) -> Result<InstallPlan, PlanError> {
     if !path.is_absolute() {
         return Err(PlanError::RelativeDestination);
     }
-    if path.components().any(|component| matches!(component, Component::ParentDir)) {
+    if path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
         return Err(PlanError::InvalidDestination);
     }
     if (request.install_optional_conda || request.install_optional_comfyui)
@@ -95,7 +98,12 @@ mod tests {
         let mut req = request();
         req.install_dir = "relative/path".into();
         assert_eq!(plan(&req), Err(PlanError::RelativeDestination));
-        req.install_dir = format!("{}{}..{}other", std::env::temp_dir().display(), std::path::MAIN_SEPARATOR, std::path::MAIN_SEPARATOR);
+        req.install_dir = format!(
+            "{}{}..{}other",
+            std::env::temp_dir().display(),
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR
+        );
         assert_eq!(plan(&req), Err(PlanError::InvalidDestination));
     }
 

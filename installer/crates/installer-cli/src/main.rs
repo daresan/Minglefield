@@ -31,16 +31,24 @@ fn main() -> ExitCode {
         }
     }
     if !silent || !defaults {
-        eprintln!("prototype requires --silent --defaults; GUI and config loading are not implemented");
+        eprintln!(
+            "prototype requires --silent --defaults; GUI and config loading are not implemented"
+        );
         return ExitCode::from(2);
     }
     let destination = install_dir.unwrap_or_else(|| {
         if cfg!(windows) {
-            env::var("LOCALAPPDATA").map(|v| format!("{v}\\Programs\\Minglefield")).unwrap_or_default()
+            env::var("LOCALAPPDATA")
+                .map(|v| format!("{v}\\Programs\\Minglefield"))
+                .unwrap_or_default()
         } else if cfg!(target_os = "macos") {
-            env::var("HOME").map(|v| format!("{v}/Applications/Minglefield")).unwrap_or_default()
+            env::var("HOME")
+                .map(|v| format!("{v}/Applications/Minglefield"))
+                .unwrap_or_default()
         } else {
-            env::var("HOME").map(|v| format!("{v}/.local/opt/Minglefield")).unwrap_or_default()
+            env::var("HOME")
+                .map(|v| format!("{v}/.local/opt/Minglefield"))
+                .unwrap_or_default()
         }
     });
     let request = InstallRequest {

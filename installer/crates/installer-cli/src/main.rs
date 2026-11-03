@@ -4,8 +4,11 @@ use minglefield_installer_core::Mode;
 use std::env;
 use std::process::ExitCode;
 
+mod output;
+
 fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let mut args = args.into_iter();
+    let mut json = false;
     let mut silent = false;
     let mut defaults = false;
     let mut install_dir: Option<String> = None;
@@ -13,6 +16,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--silent" => silent = true,
+            "--json" => json = true,
             "--defaults" => defaults = true,
             "--install-dir" => {
                 install_dir = Some(
@@ -27,7 +31,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 );
             }
             "--help" | "-h" => {
-                println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH]");
+                println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH] [--json]");
                 println!("Config: UTF-8 key=value, version=1, optional install_dir/data_dir.");
                 println!("This prototype validates and prints a plan; nothing is installed.");
                 return Ok(());
@@ -55,15 +59,25 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let plan = config
         .preview(Mode::Silent)
         .map_err(|err| (3, format!("invalid installation plan: {err:?}")))?;
-    println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+    if json {
+        println!("{}", output::success(&config, &plan));
+    } else {
+        println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+    }
     Ok(())
 }
 
 fn main() -> ExitCode {
-    match run(env::args().skip(1)) {
+    let args: Vec<String> = env::args().skip(1).collect();
+    let json = args.iter().any(|arg| arg == "--json");
+    match run(args) {
         Ok(()) => ExitCode::SUCCESS,
         Err((code, message)) => {
-            eprintln!("{message}");
+            if json {
+                println!("{}", output::failure(code, &message));
+            } else {
+                eprintln!("{message}");
+            }
             ExitCode::from(code)
         }
     }

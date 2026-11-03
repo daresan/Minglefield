@@ -21,7 +21,6 @@ def audit(entry: Path, module_root: Path) -> dict:
     pending = [entry.resolve()]
     visited = set()
     external = set()
-    missing = set()
     dynamic = []
     edges = []
     while pending:
@@ -38,12 +37,18 @@ def audit(entry: Path, module_root: Path) -> dict:
             elif isinstance(node, ast.ImportFrom):
                 if node.level:
                     names = [node.module or ""]
-                    dynamic.append({"file": path.name, "line": node.lineno,
-                                    "kind": "relative-import-needs-review"})
+                    if node.level != 1 or not node.module:
+                        dynamic.append({"file": path.name, "line": node.lineno,
+                                        "kind": "relative-import-needs-review"})
                 else:
                     names = [node.module] if node.module else []
             else:
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("__import__", "eval", "exec"):
+                    if (node.func.id == "__import__" and node.args
+                            and isinstance(node.args[0], ast.Constant)
+                            and isinstance(node.args[0].value, str)
+                            and node.args[0].value in sys.stdlib_module_names):
+                        continue
                     dynamic.append({"file": path.name, "line": node.lineno,
                                     "kind": node.func.id})
                 elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "import_module":
@@ -60,6 +65,15 @@ def audit(entry: Path, module_root: Path) -> dict:
                     candidate = module_root / top / "__init__.py"
                     pending.append(candidate.resolve())
                     edges.append({"from": path.name, "to": candidate.relative_to(module_root).as_posix()})
+                elif top == module_root.name and (module_root / "__init__.py").is_file():
+                    # Absolute package import, e.g. server.module from server/.
+                    if name.startswith(top + "."):
+                        sub = name[len(top) + 1:].split(".")[0]
+                        target = module_root / (sub + ".py")
+                        if target.is_file():
+                            pending.append(target.resolve())
+                            edges.append({"from": path.name, "to": target.name})
+                    continue
                 elif top in sys.stdlib_module_names or top == "__future__":
                     continue
                 else:

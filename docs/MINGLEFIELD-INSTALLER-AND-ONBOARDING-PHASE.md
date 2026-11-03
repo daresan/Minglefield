@@ -16,6 +16,10 @@ Support Windows, macOS and Linux with self-starting installers that require no p
 - **Existing installation:** detect and offer safe reuse/repair/update without silently replacing an existing environment, Host ownership, settings, SQLite database, user data, or unrelated files.
 - **No installation detected:** provision the local Host during first run; do not require the user to manually copy or enter a Host claim token.
 
+## Windows installation destination (binding default)
+
+For Windows, the **default installation scope is current-user only**, without administrator privileges. Install application binaries under `%LOCALAPPDATA%\\Programs\\Minglefield` (or the OS-recommended per-user application location when packaging requires it); keep persistent application data separately under `%LOCALAPPDATA%\\Minglefield` or an explicitly versioned user-data location. Never use `Program Files` as the default destination, modify system-wide Python/Conda installations, or request elevation for the standard path. A user-selected custom destination remains supported, with explicit permissions checks. Discovery must still find **existing** Minglefield installations in system-wide locations, even though new installs default to per-user scope. Uninstall must not silently delete persistent user data.
+
 ## Existing Minglefield discovery — platform defaults and manual location
 
 On Windows, macOS and Linux, search the operating system's standard application installation locations and applicable installation registrations/metadata, including system-wide and per-user locations. Do not assume the developer's personal directory structure, shell PATH, or Conda setup. The user can always browse to a **custom directory**, especially when automatic discovery finds nothing or misses the intended installation.

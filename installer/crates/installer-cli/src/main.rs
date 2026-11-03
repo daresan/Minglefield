@@ -15,20 +15,27 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let mut config_file: Option<String> = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--silent" => silent = true,
-            "--json" => json = true,
-            "--defaults" => defaults = true,
+            "--silent" if !silent => silent = true,
+            "--json" if !json => json = true,
+            "--defaults" if !defaults => defaults = true,
+            "--silent" | "--json" | "--defaults" => {
+                return Err((2, format!("duplicate argument: {arg}")));
+            }
             "--install-dir" => {
-                install_dir = Some(
-                    args.next()
-                        .ok_or((2, "--install-dir requires a value".to_string()))?,
-                );
+                if install_dir.is_some() {
+                    return Err((2, "duplicate argument: --install-dir".to_string()));
+                }
+                let path = args.next().filter(|value| !value.starts_with("--"))
+                    .ok_or((2, "--install-dir requires a value".to_string()))?;
+                install_dir = Some(path);
             }
             "--config" => {
-                config_file = Some(
-                    args.next()
-                        .ok_or((2, "--config requires a file path".to_string()))?,
-                );
+                if config_file.is_some() {
+                    return Err((2, "duplicate argument: --config".to_string()));
+                }
+                let file = args.next().filter(|value| !value.starts_with("--"))
+                    .ok_or((2, "--config requires a file path".to_string()))?;
+                config_file = Some(file);
             }
             "--help" | "-h" => {
                 println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH] [--json]");

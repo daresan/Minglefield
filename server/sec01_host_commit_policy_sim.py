@@ -1158,6 +1158,85 @@ class HostCommitPolicy:
                     "backend": "windows", "file_count": len(inspection["observed_files"]),
                     "cleanup_allowed": False, "deletion_performed": False}
 
+    def cleanup_game_install_staging_windows_file_experimental(
+            self, host_id, owner_id, project_id, operation_id, entries,
+            installation_staging_root, filename):
+        """Internal Windows single-file experiment; no HTTP or bulk cleanup.
+
+        Journal authorization and fresh identity probes occur under one SQLite
+        writer transaction. This can leave a partially cleaned operation and
+        must not be treated as a complete cleanup or reusable authorization.
+        Trusted server configuration must supply the staging root.
+        """
+        import os
+        from game_integration_install_cleanup import inspect_staging_cleanup
+        from game_integration_install_staging import validate_staging_manifest
+
+        def blocked(reason):
+            return {"state": "blocked", "reason": reason, "backend": "windows",
+                    "cleanup_allowed": False, "deletion_performed": False}
+        if os.name != "nt":
+            return blocked("windows_only")
+        plan = validate_staging_manifest(entries)
+        if plan["state"] != "valid":
+            return blocked(plan["reason"])
+        if not all(ident(value) for value in (
+                host_id, owner_id, project_id, operation_id)):
+            return blocked("invalid_install_operation")
+        with self.authority.store._tx() as db:
+            if db.execute("""SELECT 1 FROM sec01_host_owners
+                    WHERE host_id=? AND owner_id=?""",
+                    (host_id, owner_id)).fetchone() is None:
+                return blocked("not_host_owner")
+            if db.execute("""SELECT 1 FROM alpha_game_projects
+                    WHERE host_id=? AND owner_id=? AND project_id=?""",
+                    (host_id, owner_id, project_id)).fetchone() is None:
+                return blocked("project_not_found")
+            row = db.execute("""SELECT state,plan_sha256
+                    FROM sec01_game_install_journal
+                    WHERE operation_id=? AND host_id=? AND owner_id=?
+                    AND project_id=?""",
+                    (operation_id, host_id, owner_id, project_id)).fetchone()
+            if row is None:
+                return blocked("operation_not_found")
+            preflight = inspect_staging_cleanup(
+                installation_staging_root, operation_id, entries,
+                journal_operation_id=operation_id,
+                journal_plan_sha256=row[1], journal_state=row[0],
+                owner_authorized=True)
+            if preflight["state"] != "eligible_snapshot":
+                return blocked(preflight["reason"])
+            if filename not in preflight["observed_files"]:
+                return blocked("file_not_in_verified_operation")
+            from game_integration_install_cleanup_windows import (
+                inspect_windows_staging_snapshot,
+                inspect_windows_directory_handle, inspect_windows_staged_file)
+            from game_integration_install_cleanup_windows_relative import (
+                inspect_windows_relative_child)
+            from game_integration_install_cleanup_windows_relative_delete import (
+                delete_relative_test_file)
+            snapshot = inspect_windows_staging_snapshot(
+                installation_staging_root, operation_id,
+                preflight["observed_files"])
+            if snapshot["state"] != "candidate_snapshot":
+                return blocked(snapshot["reason"])
+            parent_path = os.path.join(installation_staging_root, operation_id)
+            parent = inspect_windows_directory_handle(parent_path)
+            child = inspect_windows_relative_child(parent_path, filename)
+            absolute = inspect_windows_staged_file(os.path.join(parent_path, filename))
+            for probe in (parent, child, absolute):
+                if probe["state"] != "inspected":
+                    return blocked(probe["reason"])
+            if ((child["volume_serial"], child["file_index"]) !=
+                    (absolute["volume_serial"], absolute["file_index"])):
+                return blocked("windows_relative_file_identity_changed")
+            return delete_relative_test_file(
+                parent_path, filename,
+                expected_parent_volume_serial=parent["volume_serial"],
+                expected_parent_file_index=parent["file_index"],
+                expected_file_volume_serial=child["volume_serial"],
+                expected_file_index=child["file_index"])
+
     def game_install_journal_status(self, host_id, owner_id, project_id):
         """Read-only owner-scoped operation history; no cross-host disclosure."""
         with self.authority.store._tx() as db:

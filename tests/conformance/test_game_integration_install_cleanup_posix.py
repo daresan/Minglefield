@@ -93,7 +93,7 @@ class PosixCleanupTests(unittest.TestCase):
         with patch("game_integration_install_cleanup_posix.os.unlink",
                    side_effect=swap_then_unlink):
             result = self.cleanup()
-        self.assertTrue(switched)
+        self.assertTrue(switched, result)
         self.assertEqual(result["state"], "partial")
         self.assertEqual(result["reason"], "operation_identity_changed")
         self.assertEqual((operation / "keep.txt").read_bytes(), b"foreign")
@@ -119,7 +119,7 @@ class PosixCleanupTests(unittest.TestCase):
         with patch("game_integration_install_cleanup_posix.os.open",
                    side_effect=swap_before_open):
             result = self.cleanup()
-        self.assertTrue(swapped)
+        self.assertTrue(swapped, result)
         self.assertEqual(result["state"], "blocked")
         self.assertEqual((outside / "keep.txt").read_bytes(), b"foreign")
 

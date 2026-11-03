@@ -38,11 +38,15 @@ class WindowsNativeDispositionTests(unittest.TestCase):
             path.write_bytes(b"original")
             identity = inspect_windows_staged_file(path)
             self.assertEqual(identity["state"], "inspected")
+            parent = inspect_windows_directory_handle(tmp)
+            self.assertEqual(parent["state"], "inspected")
             path.rename(displaced)
             path.write_bytes(b"replacement")
             result = delete_isolated_regular_file_by_handle(
                 path, expected_volume_serial=identity["volume_serial"],
-                expected_file_index=identity["file_index"])
+                expected_file_index=identity["file_index"],
+                expected_parent_volume_serial=parent["volume_serial"],
+                expected_parent_file_index=parent["file_index"])
             self.assertEqual(result["reason"], "native_file_identity_mismatch")
             self.assertEqual(path.read_bytes(), b"replacement")
             self.assertEqual(displaced.read_bytes(), b"original")
@@ -99,9 +103,12 @@ class WindowsNativeDispositionTests(unittest.TestCase):
             other = Path(tmp) / "link"
             path.write_bytes(b"payload")
             os.link(path, other)
+            parent = inspect_windows_directory_handle(tmp)
+            self.assertEqual(parent["state"], "inspected")
             result = delete_isolated_regular_file_by_handle(
                 path, expected_volume_serial=0, expected_file_index=0,
-                expected_parent_volume_serial=0, expected_parent_file_index=0)
+                expected_parent_volume_serial=parent["volume_serial"],
+                expected_parent_file_index=parent["file_index"])
             self.assertEqual(result["reason"], "unsafe_staging_hardlink")
             self.assertTrue(path.exists())
             self.assertEqual(other.read_bytes(), b"payload")

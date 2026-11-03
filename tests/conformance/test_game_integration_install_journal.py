@@ -53,6 +53,33 @@ class GameInstallJournalTests(unittest.TestCase):
         self.assertIsNone(self.policy.game_install_journal_status(
             "host.one", "user.other", "game.one"))
 
+    def test_pending_operation_blocks_second_plan_until_cancelled(self):
+        first = ("host.one", "user.owner", "game.one", "op.one", "a" * 64)
+        second = ("host.one", "user.owner", "game.one", "op.two", "b" * 64)
+        self.assertEqual(self.policy.prepare_game_install_journal(*first)["state"],
+                         "prepared")
+        self.assertEqual(self.policy.prepare_game_install_journal(*second)["reason"],
+                         "project_install_operation_pending")
+        self.assertEqual(self.policy.cancel_prepared_game_install(*first)["state"],
+                         "cancelled")
+        self.assertEqual(self.policy.cancel_prepared_game_install(*first)["reason"],
+                         "idempotent_replay")
+        self.assertEqual(self.policy.prepare_game_install_journal(*second)["state"],
+                         "prepared")
+        self.assertEqual(self.policy.prepare_game_install_journal(*first)["state"],
+                         "cancelled")
+
+    def test_cancel_requires_matching_owner_and_plan_digest(self):
+        args = ("host.one", "user.owner", "game.one", "op.one", "a" * 64)
+        self.policy.prepare_game_install_journal(*args)
+        self.assertEqual(self.policy.cancel_prepared_game_install(
+            "host.one", "user.other", "game.one", "op.one", "a" * 64)["reason"],
+            "not_host_owner")
+        self.assertEqual(self.policy.cancel_prepared_game_install(
+            *args[:4], "b" * 64)["reason"], "plan_digest_conflict")
+        self.assertEqual(self.policy.game_install_journal_status(*args[:3])[0]["state"],
+                         "prepared")
+
     def test_recovery_is_conservative(self):
         for state in ("prepared", "applying", "rollback_required", "committed",
                       "rolled_back", "unexpected"):

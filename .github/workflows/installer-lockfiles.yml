@@ -1,7 +1,9 @@
 name: Commit Tauri GUI dependency lockfiles
 
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/installer-lockfiles.yml'
 
 permissions:
   contents: write

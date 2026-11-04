@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod git_tools_v2;
 pub mod integrity;
 pub mod manifest;
+pub mod migration_destination;
 pub mod publisher;
 pub mod release_source;
 pub mod schema_compatibility;

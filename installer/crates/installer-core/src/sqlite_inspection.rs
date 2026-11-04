@@ -36,6 +36,8 @@ pub enum InspectionError {
     DatabaseError,
     IntegrityFailed,
     TooManyTables,
+    PasswordRequired,
+    UnlockFailed,
 }
 
 /// Opens the source read-only and backs up a transactionally consistent view
@@ -43,12 +45,41 @@ pub enum InspectionError {
 /// active database; no source schema or user data is modified here.
 /// The result does not establish that a database belongs to Minglefield.
 pub fn inspect_sqlite(path: &Path) -> Result<SqliteInspection, InspectionError> {
+    inspect_sqlite_with_password(path, "")
+}
+
+/// Inspects plaintext SQLite without a key, or SQLCipher databases with an
+/// explicit key. A failed encrypted unlock never falls back to plaintext.
+/// The supplied key is never interpolated into SQL or included in errors.
+pub fn inspect_sqlite_with_password(
+    path: &Path,
+    password: &str,
+) -> Result<SqliteInspection, InspectionError> {
     let metadata = std::fs::symlink_metadata(path).map_err(|_| InspectionError::NotRegularFile)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(InspectionError::NotRegularFile);
     }
+    let mut header = [0_u8; 16];
+    {
+        use std::io::Read;
+        let mut file = std::fs::File::open(path).map_err(|_| InspectionError::DatabaseError)?;
+        file.read_exact(&mut header)
+            .map_err(|_| InspectionError::DatabaseError)?;
+    }
+    let plaintext = &header == b"SQLite format 3\\0";
+    if !plaintext && password.is_empty() {
+        return Err(InspectionError::PasswordRequired);
+    }
     let source = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| InspectionError::DatabaseError)?;
+    if !plaintext {
+        source
+            .pragma_update(None, "key", password)
+            .map_err(|_| InspectionError::UnlockFailed)?;
+        source
+            .query_row("SELECT count(*) FROM sqlite_master", [], |row| row.get::<_, i64>(0))
+            .map_err(|_| InspectionError::UnlockFailed)?;
+    }
     let mut snapshot = Connection::open_in_memory().map_err(|_| InspectionError::DatabaseError)?;
     {
         let backup =

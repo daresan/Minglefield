@@ -77,7 +77,9 @@ pub fn inspect_sqlite_with_password(
             .pragma_update(None, "key", password)
             .map_err(|_| InspectionError::UnlockFailed)?;
         source
-            .query_row("SELECT count(*) FROM sqlite_master", [], |row| row.get::<_, i64>(0))
+            .query_row("SELECT count(*) FROM sqlite_master", [], |row| {
+                row.get::<_, i64>(0)
+            })
             .map_err(|_| InspectionError::UnlockFailed)?;
     }
     let mut snapshot = Connection::open_in_memory().map_err(|_| InspectionError::DatabaseError)?;

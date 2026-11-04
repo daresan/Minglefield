@@ -6,11 +6,11 @@ On a trusted developer workstation with Node.js/npm, Rust and Tauri OS prerequis
 
 ```powershell
 cd installer/gui
-npm.cmd install
+npm.cmd ci
 npm.cmd run dev
 ```
 
-This is a development command, **not** an end-user prerequisite. Do not commit `node_modules` or `src-tauri/target`. On Shadow PowerShell use `npm.cmd` to avoid the blocked `npm.ps1` shim without changing execution policy. Before release, pin dependencies with a lockfile, establish a fully offline verified asset/build pipeline, add platform packaging, and test the packaged entrypoints. The workspace root `installer/Cargo.toml` deliberately excludes this separate Tauri crate for now, so existing Rust CI remains independent of Tauri OS prerequisites.
+This is a development command, **not** an end-user prerequisite. Do not commit `node_modules` or `src-tauri/target`. On Shadow PowerShell use `npm.cmd` to avoid the blocked `npm.ps1` shim without changing execution policy. Before release, establish a fully offline verified asset/build pipeline and test the packaged entrypoints on supported operating systems. The npm and Cargo lockfiles are already tracked and native preview packaging is now exercised in CI. The workspace root `installer/Cargo.toml` deliberately excludes this separate Tauri crate for now, so existing Rust CI remains independent of Tauri OS prerequisites.
 
 Both GUI and CLI use the same Rust planning function, but this does not yet establish a common packaged executable or silent installation. Those are still required by the phase specification.
 
@@ -51,4 +51,4 @@ Platform packaging and OS security prompts must be documented honestly; Minglefi
 
 The `tauri-gui` job in `.github/workflows/installer-rust.yml` now runs on Windows, Ubuntu and macOS. It checks Tauri Rust formatting, compiles and lints the separate `src-tauri` crate, runs its Rust tests and builds the Vite frontend. Linux runners install the WebKitGTK 4.1 and related development libraries.
 
-Both `package-lock.json` and `src-tauri/Cargo.lock` are tracked. CI installs frontend dependencies with `npm ci` and checks, lints and tests the Tauri Rust backend using Cargo `--locked`. This fixes dependency resolution, but does **not** establish bit-for-bit reproducible binaries or verified artifact provenance. The job checks compilation, **not** native bundles, installation or GUI interaction.
+Both `package-lock.json` and `src-tauri/Cargo.lock` are tracked. CI installs frontend dependencies with `npm ci` and checks, lints and tests the Tauri Rust backend using Cargo `--locked`. This fixes dependency resolution, but does **not** establish bit-for-bit reproducible binaries or verified artifact provenance. This job checks compilation, **not** native installation or GUI interaction. The separate `Tauri native package smoke builds` workflow produces unsigned, non-released `.exe` (NSIS), `.deb`, and `.dmg` preview packages on Windows, Ubuntu and macOS. These packages are not yet a functional Minglefield installer; creating a bundle does not verify install, launch, upgrade, removal or OS trust prompts.

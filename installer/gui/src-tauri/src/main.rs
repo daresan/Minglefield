@@ -44,6 +44,29 @@ fn framework_license() -> LicenseInfo {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadmeInfo {
+    text: &'static str,
+}
+
+#[tauri::command]
+fn application_readme() -> ReadmeInfo {
+    ReadmeInfo {
+        text: include_str!("../../../../README.md"),
+    }
+}
+
+#[cfg(test)]
+mod readme_tests {
+    #[test]
+    fn embedded_application_readme_is_present() {
+        let readme = super::application_readme();
+        assert!(readme.text.starts_with("# Minglefield"));
+        assert!(readme.text.len() > 500);
+    }
+}
+
 #[cfg(test)]
 mod license_tests {
     #[test]
@@ -157,6 +180,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             default_configuration,
             framework_license,
+            application_readme,
             inspect_source_path,
             preview_install_plan
         ])

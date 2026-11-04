@@ -71,6 +71,19 @@ jobs:
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: Install GUI dependencies (bootstrap until lockfile is committed)
         run: npm install --no-audit --no-fund --ignore-scripts
+      - name: Generate GUI Rust lockfile (bootstrap only)
+        if: runner.os == 'Linux'
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+      - name: Upload GUI dependency lockfiles for review
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-gui-lockfiles
+          path: |
+            installer/gui/package-lock.json
+            installer/gui/src-tauri/Cargo.lock
+          if-no-files-found: error
+          retention-days: 14
       - name: Build GUI frontend
         run: npm run web:build
       - name: Compile Tauri GUI Rust backend (bootstrap until lockfile is committed)

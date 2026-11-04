@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { previewArguments } from "./preview-arguments.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -52,14 +53,15 @@ async function loadDefault() {
 document.querySelector("#preview").addEventListener("click", async () => {
   result.textContent = "Validating…";
   try {
-    if (!defaultConfig) throw new Error("Default configuration unavailable");
-    const advanced = document.querySelector('input[name="setup-mode"]:checked').value === "advanced";
-    const useConfig = advanced && document.querySelector('input[name="mode"]:checked').value === "config";
-    const plan = await invoke("preview_install_plan", {
-      installDir: advanced ? destination.value : defaultConfig.installDir,
-      dataDir: advanced ? dataDirectory.value : defaultConfig.dataDir,
-      configText: useConfig ? configText.value : null
+    const args = previewArguments({
+      setupMode: document.querySelector('input[name="setup-mode"]:checked').value,
+      advancedSource: document.querySelector('input[name="mode"]:checked').value,
+      defaults: defaultConfig,
+      installDir: destination.value,
+      dataDir: dataDirectory.value,
+      configText: configText.value
     });
+    const plan = await invoke("preview_install_plan", args);
     result.textContent = JSON.stringify(plan, null, 2);
   } catch (error) {
     result.textContent = "Plan rejected: " + String(error);

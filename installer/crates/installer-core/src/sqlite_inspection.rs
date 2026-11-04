@@ -66,7 +66,7 @@ pub fn inspect_sqlite_with_password(
         file.read_exact(&mut header)
             .map_err(|_| InspectionError::DatabaseError)?;
     }
-    let plaintext = &header == b"SQLite format 3\\0";
+    let plaintext = &header == b"SQLite format 3\0";
     if !plaintext && password.is_empty() {
         return Err(InspectionError::PasswordRequired);
     }

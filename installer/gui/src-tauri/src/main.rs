@@ -119,6 +119,7 @@ struct DataInventoryItem {
     sqlite_page_size: Option<u32>,
     sqlite_user_version: Option<u32>,
     sqlite_application_id: Option<u32>,
+    schema_version_status: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -133,6 +134,22 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
             sqlite_page_size: candidate.sqlite_page_size,
             sqlite_user_version: candidate.sqlite_user_version,
             sqlite_application_id: candidate.sqlite_application_id,
+            schema_version_status: if candidate.kind == "sqlite_database" {
+                use minglefield_installer_core::schema_versions::{
+                    classify_header, HeaderVersionStatus,
+                };
+                Some(match classify_header(
+                    candidate.sqlite_application_id.unwrap_or(0),
+                    candidate.sqlite_user_version.unwrap_or(0),
+                    None,
+                ) {
+                    HeaderVersionStatus::LegacyUnversioned => "legacy_unversioned_unverified",
+                    HeaderVersionStatus::UnregisteredApplication => "unregistered_application",
+                    HeaderVersionStatus::VersionedUnverified(_) => "versioned_unverified",
+                })
+            } else {
+                None
+            },
         })
         .collect()
 }

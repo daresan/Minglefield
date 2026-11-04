@@ -107,6 +107,16 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
       : "No known data candidates found at the checked locations. This does not prove the directory contains no Minglefield data.";
   } catch (error) { output.textContent = "Data inspection failed: " + String(error); }
 });
+document.querySelector("#inspect-default-data").addEventListener("click", async () => {
+  const output = document.querySelector("#data-result");
+  output.textContent = "Inspecting per-user Minglefield application data…";
+  try {
+    const items = await invoke("inspect_default_user_data");
+    output.textContent = items.length
+      ? JSON.stringify(items, null, 2)
+      : "No known candidates in the default application data directory. Other user-selected data locations may still contain migratable data.";
+  } catch (error) { output.textContent = "Application data inspection failed: " + String(error); }
+});
 loadDefault();
 loadFrameworkLicense();
 loadApplicationReadme();

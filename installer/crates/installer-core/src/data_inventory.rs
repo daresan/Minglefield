@@ -22,12 +22,8 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
         ("project.json", "project_config"),
         ("hosts.json", "host_config"),
         ("config.json", "app_config"),
-        ("minglefield.db", "sqlite_database"),
-        ("data/minglefield.db", "sqlite_database"),
-        ("data/alpha.db", "sqlite_database"),
-        ("alpha.sqlite3", "sqlite_database"),
     ];
-    known
+    let mut results: Vec<DataCandidate> = known
         .iter()
         .filter_map(|(relative, kind)| {
             let path = root.join(relative);
@@ -90,7 +86,46 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                 sqlite_application_id,
             })
         })
-        .collect()
+        .collect();
+    // Scan only direct children of the selected data directory, not arbitrary
+    // source trees. The SQLite magic header, not the filename, identifies candidates.
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten().take(4096) {
+            let path = entry.path();
+            let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if !meta.file_type().is_file() || meta.len() < 100 || meta.len() > 1024 * 1024 * 1024 {
+                continue;
+            }
+            use std::io::Read;
+            let mut header = [0u8; 100];
+            let Ok(mut file) = std::fs::File::open(&path) else {
+                continue;
+            };
+            if file.read_exact(&mut header).is_err() || &header[..16] != b"SQLite format 3\\0" {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let size = u16::from_be_bytes([header[16], header[17]]);
+            results.push(DataCandidate {
+                relative_path: name.to_owned(),
+                kind: "sqlite_database",
+                status: "sqlite_header_valid_unverified",
+                sqlite_page_size: Some(if size == 1 { 65536 } else { u32::from(size) }),
+                sqlite_user_version: Some(u32::from_be_bytes([
+                    header[60], header[61], header[62], header[63],
+                ])),
+                sqlite_application_id: Some(u32::from_be_bytes([
+                    header[68], header[69], header[70], header[71],
+                ])),
+            });
+        }
+    }
+    results.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    results
 }
 
 #[cfg(test)]
@@ -110,7 +145,8 @@ mod tests {
         let mut header = [0u8; 100];
         header[..16].copy_from_slice(b"SQLite format 3\0");
         header[16..18].copy_from_slice(&4096u16.to_be_bytes());
-        std::fs::write(root.join("minglefield.db"), header).unwrap();
+        std::fs::write(root.join("custom-name.anything"), header).unwrap();
+        std::fs::write(root.join("not-a-database.sqlite3"), b"not sqlite").unwrap();
         std::fs::write(
             root.join("untrusted.py"),
             b"raise Exception('must not execute')",
@@ -118,7 +154,9 @@ mod tests {
         .unwrap();
         let found = inspect_data_directory(&root);
         assert_eq!(found.len(), 2);
+        assert_eq!(found[0].relative_path, ".minglefield/project.json");
         assert_eq!(found[0].status, "json_candidate_unvalidated");
+        assert_eq!(found[1].relative_path, "custom-name.anything");
         assert_eq!(found[1].status, "sqlite_header_valid_unverified");
         assert_eq!(found[1].sqlite_page_size, Some(4096));
         assert_eq!(found[1].sqlite_user_version, Some(0));

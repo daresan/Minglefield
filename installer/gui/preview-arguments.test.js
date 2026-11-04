@@ -28,3 +28,11 @@ test("missing defaults and unknown modes fail closed", () => {
   assert.throws(() => previewArguments({ ...dirty, setupMode: "unexpected", advancedSource: "defaults" }));
   assert.throws(() => previewArguments({ ...dirty, setupMode: "advanced", advancedSource: "unexpected" }));
 });
+
+
+test("standard review overrides are explicit, effective, and do not activate optional components", () => {
+  assert.deepEqual(previewArguments({ ...dirty, setupMode: "standard", advancedSource: "config",
+    standardOverrides: { installDir: "/review/app", dataDir: null } }), {
+      installDir: "/review/app", dataDir: "/user/data", configText: null
+    });
+});

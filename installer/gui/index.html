@@ -18,7 +18,21 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 </section><section class="wizard-page" data-wizard-page="data-review" hidden>
 <h2>Review and correct detected settings</h2>
 <p class="help">Changes on this page affect only the installation preview. No source database is modified.</p>
-<div class="mode" role="group" aria-label="Review categories">
+<p class="help">Edit the application data before migration. Existing values must be loaded from the selected database; credentials, password hashes, sessions, and audit records are not editable.</p>
+<div class="mode" role="group" aria-label="Application data categories">
+<button type="button" class="secondary" id="data-tab-login">Anmeldung</button>
+<button type="button" class="secondary" id="data-tab-hosts">Hosts</button>
+<button type="button" class="secondary" id="data-tab-effects">Effekte</button>
+<button type="button" class="secondary" id="data-tab-jobs">Jobs</button>
+<button type="button" class="secondary" id="data-tab-games">Games</button>
+</div>
+<section id="data-editor-login"><h3>Anmeldung</h3><div id="data-fields-login"></div></section>
+<section id="data-editor-hosts" hidden><h3>Hosts</h3><div id="data-fields-hosts"></div></section>
+<section id="data-editor-effects" hidden><h3>Effekte</h3><div id="data-fields-effects"></div></section>
+<section id="data-editor-jobs" hidden><h3>Jobs</h3><div id="data-fields-jobs"></div></section>
+<section id="data-editor-games" hidden><h3>Games</h3><div id="data-fields-games"></div></section>
+<p id="data-editor-status" class="help" role="status">Database field mapping is not yet available. Migration cannot proceed until actual values can be loaded and saved.</p>
+</section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">Review the effective paths, database and security settings, then validate the combined installation and migration plan. Execution remains unavailable until the migration core is verified.</p><div class="mode" role="group" aria-label="Review categories">
 <button type="button" class="secondary" id="review-tab-paths">Paths</button>
 <button type="button" class="secondary" id="review-tab-database">Database</button>
 <button type="button" class="secondary" id="review-tab-security">Security</button>
@@ -31,7 +45,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <pre id="review-database-summary">No database inspected yet.</pre>
 <p class="help">Database schema and user records are read-only. Editing records requires a verified migration mapping and is not yet available.</p></section>
 <section id="review-security" hidden><p id="review-security-summary" class="help">Database encryption and migration are not yet enabled.</p></section>
-</section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">This preview does not install Minglefield or optional software. Review the generated plan; installation remains disabled until the shared installer core supports verified execution.</p><h3>Effective configuration</h3><pre id="review-effective-summary" role="status" aria-live="polite">Review settings on the previous page.</pre><button id="preview" type="button">Validate installation plan</button>
+<h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
 <small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>
 </main><script type="module" src="/main.js"></script></body></html>

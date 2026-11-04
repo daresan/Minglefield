@@ -9,9 +9,7 @@ pub enum NewDatabasePasswordError {
     MissingSpecialCharacter,
 }
 
-pub fn validate_new_database_password(
-    password: &str,
-) -> Result<(), NewDatabasePasswordError> {
+pub fn validate_new_database_password(password: &str) -> Result<(), NewDatabasePasswordError> {
     if password.chars().count() < 8 {
         return Err(NewDatabasePasswordError::TooShort);
     }
@@ -21,7 +19,10 @@ pub fn validate_new_database_password(
     if !password.chars().any(|c| c.is_ascii_digit()) {
         return Err(NewDatabasePasswordError::MissingDigit);
     }
-    if !password.chars().any(|c| !c.is_alphanumeric() && !c.is_whitespace()) {
+    if !password
+        .chars()
+        .any(|c| !c.is_alphanumeric() && !c.is_whitespace())
+    {
         return Err(NewDatabasePasswordError::MissingSpecialCharacter);
     }
     Ok(())

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { previewArguments } from "./preview-arguments.js";
 import { validateDestinationPassword } from "./database-password-policy.js";
 import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js";
+import { assessLegacyAlphaSchema } from "./legacy-schema.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -265,7 +266,7 @@ function refreshReview() {
         applicationId: lastDatabaseInspection.applicationId,
         userVersion: lastDatabaseInspection.userVersion,
         tableCount: lastDatabaseInspection.tables.length,
-        migrationEnabled: false
+        schemaAssessment: assessLegacyAlphaSchema(lastDatabaseInspection)
       }, null, 2)
     : "No database inspected. Fresh installation still requires encrypted SQLCipher.";
   document.querySelector("#review-security-summary").textContent =

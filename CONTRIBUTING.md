@@ -3,7 +3,7 @@
 Thanks for your interest. Minglefield is at the **concept and project-setup stage**. We welcome discussion, constructive critique, documentation improvements, game design ideas and technically grounded proposals.
 
 ## Before contributing code
-The repository does **not yet have a finalized open-source license**. Until a license is added and contributor terms are clarified, **please do not submit third-party code or assets**. You can still open issues with ideas, design notes, requirements, reproducible experiments and questions.
+The **GNU GPL framework + separate 5% marketplace-service terms** model is a [binding project decision](docs/LICENSING-AND-MARKETPLACE-DECISION.md). However, the actual root LICENSE file and copyright/contributor notices are not yet published. Until those artifacts are added and contributor terms are clarified, **please do not submit third-party code or assets**. You can still open issues with ideas, design notes, requirements, reproducible experiments and questions.
 
 ## Suggested contributions now
 - Help define MAP v0.1 interoperability requirements and conformance tests.

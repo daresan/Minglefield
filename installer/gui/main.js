@@ -179,6 +179,8 @@ async function inspectSelectedSqlite() {
   }
 }
 
+document.querySelector("#inspect-selected-database").addEventListener("click", inspectSelectedSqlite);
+
 async function inspectDefaultUserData() {
   const output = document.querySelector("#data-result");
   const selection = document.querySelector("#database-selection");

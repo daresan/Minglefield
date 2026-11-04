@@ -32,11 +32,11 @@ jobs:
       run:
         working-directory: installer/gui
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Install Linux Tauri system dependencies
@@ -79,7 +79,7 @@ jobs:
       - name: Build native preview package (no release publication)
         run: npm run tauri -- build --bundles ${{ matrix.bundle }} --config '{"bundle":{"active":true}}'
       - name: Upload preview bundle for inspection
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tauri-preview-${{ matrix.bundle }}
           path: installer/gui/src-tauri/target/release/bundle/

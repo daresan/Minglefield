@@ -153,6 +153,7 @@ document.querySelector("#browse-database").addEventListener("click", async () =>
     const path = await invoke("browse_sqlite_file");
     if (path) {
       selectedDatabase = path;
+      lastDatabaseInspection = null;
       document.querySelector("#data-result").textContent =
         "Selected database: " + path + ". Use inspection to validate it; migration remains disabled.";
     }
@@ -161,6 +162,7 @@ document.querySelector("#browse-database").addEventListener("click", async () =>
   }
 });
 let selectedDatabase = null;
+let lastDatabaseInspection = null;
 
 async function inspectSelectedSqlite() {
   const output = document.querySelector("#data-result");
@@ -173,6 +175,7 @@ async function inspectSelectedSqlite() {
     const request = invoke("inspect_sqlite_database", { path: selectedDatabase, password: existingDbPassword.value });
     existingDbPassword.value = "";
     const preview = await request;
+    lastDatabaseInspection = preview;
     output.textContent = JSON.stringify(preview, null, 2);
   } catch (error) {
     output.textContent = "SQLite inspection failed: " + String(error);
@@ -187,6 +190,7 @@ async function inspectDefaultUserData() {
   output.textContent = "Inspecting per-user Minglefield application data…";
   selection.replaceChildren();
   selectedDatabase = null;
+  lastDatabaseInspection = null;
   try {
     const items = await invoke("inspect_default_user_data");
     const databases = items.filter((item) => item.kind === "sqlite_database");
@@ -204,7 +208,7 @@ async function inspectDefaultUserData() {
         radio.name = "selected-database";
         radio.value = item.sourceDirectory + "/" + item.relativePath;
         radio.style.width = "auto";
-        radio.addEventListener("change", () => { selectedDatabase = radio.value; });
+        radio.addEventListener("change", () => { selectedDatabase = radio.value; lastDatabaseInspection = null; });
         label.append(radio, document.createTextNode(" " + item.sourceDirectory + "/" + item.relativePath + " — " + item.status));
         selection.append(label);
       }
@@ -227,11 +231,50 @@ loadApplicationReadme();
 // Wizard navigation preserves the existing form controls and their values.
 // No page transition authorizes a download, filesystem write, or installation.
 const wizardPages = [...document.querySelectorAll("[data-wizard-page]")];
-const wizardNames = ["Welcome", "Configuration", "Source inspection", "Review"];
+const wizardNames = ["Welcome", "Configuration", "Source inspection", "Data review", "Review"];
+const reviewFields = [
+  ["review-install-dir", "destination"],
+  ["review-data-dir", "data-directory"],
+  ["review-source-dir", "source-path"]
+];
+function refreshReview() {
+  for (const [reviewId, sourceId] of reviewFields) {
+    document.querySelector("#" + reviewId).value = document.querySelector("#" + sourceId).value;
+  }
+  document.querySelector("#review-database-path").value = selectedDatabase || "";
+  document.querySelector("#review-database-summary").textContent = lastDatabaseInspection
+    ? JSON.stringify({
+        status: lastDatabaseInspection.status,
+        integrityOk: lastDatabaseInspection.integrityOk,
+        foreignKeysOk: lastDatabaseInspection.foreignKeysOk,
+        applicationId: lastDatabaseInspection.applicationId,
+        userVersion: lastDatabaseInspection.userVersion,
+        tableCount: lastDatabaseInspection.tables.length,
+        migrationEnabled: false
+      }, null, 2)
+    : "No database inspected yet. Return to Source inspection to inspect a selected database.";
+  document.querySelector("#review-security-summary").textContent =
+    "Destination password policy: " + passwordStatus.textContent +
+    " No passwords or password hashes are displayed here.";
+}
+for (const [reviewId, sourceId] of reviewFields) {
+  document.querySelector("#" + reviewId).addEventListener("input", () => {
+    document.querySelector("#" + sourceId).value = document.querySelector("#" + reviewId).value;
+  });
+}
+for (const tab of ["paths", "database", "security"]) {
+  document.querySelector("#review-tab-" + tab).addEventListener("click", () => {
+    for (const name of ["paths", "database", "security"]) {
+      document.querySelector("#review-" + name).hidden = name !== tab;
+    }
+    refreshReview();
+  });
+}
 let wizardIndex = 0;
 function showWizardPage(index) {
   if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
   wizardIndex = index;
+  if (wizardPages[index].dataset.wizardPage === "data-review") refreshReview();
   wizardPages.forEach((page, position) => { page.hidden = position !== index; });
   document.querySelector("#wizard-back").disabled = index === 0;
   document.querySelector("#wizard-next").disabled = index === wizardPages.length - 1;

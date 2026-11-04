@@ -72,3 +72,7 @@ The shared Rust installer core now exposes `discovery::inspect_source_directory`
 ## Binding application versus community-game installation scope
 
 See [platform-versus-game installation boundary](../../docs/PLATFORM-VS-GAME-INSTALLATION-BOUNDARY.md). This Tauri/Rust setup manager installs **Minglefield itself** only. Game integration trust checks, game marketplace licensing and the 5% marketplace transaction share do not apply to installation of the Minglefield application. CI for game integration does not validate this setup manager. The current GUI is still a non-installing preview.
+
+## Portable setup manager and bundled application README
+
+[Binding portable manager requirements](../../docs/PORTABLE-PLATFORM-SETUP-MANAGER.md): this tool is to run without installing the manager itself, on Windows/Linux/macOS, and install the separate Minglefield app. Apple signing/notarization are out of scope unless the maintainer explicitly requests them. The root application README is now embedded in the Tauri binary using `include_str!`, exposed through `application_readme`, and displayed in a read-only panel alongside the full bundled GPL license. Both panels are independent of Standard/Advanced mode, work offline, and do not imply consent. A Rust test checks README presence. Existing NSIS/DEB preview artifacts do not meet portable packaging acceptance; actual installation execution is not implemented.

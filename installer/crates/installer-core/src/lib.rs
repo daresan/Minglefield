@@ -122,13 +122,9 @@ mod existing_data_search_tests {
 
     #[test]
     fn linux_searches_xdg_and_gateway_legacy_directory() {
-        let paths = existing_data_search_paths(
-            "linux",
-            None,
-            "/home/tester",
-            Some("/tmp/xdg-data"),
-        )
-        .unwrap();
+        let paths =
+            existing_data_search_paths("linux", None, "/home/tester", Some("/tmp/xdg-data"))
+                .unwrap();
         assert_eq!(
             paths,
             vec![
@@ -140,8 +136,7 @@ mod existing_data_search_tests {
 
     #[test]
     fn macos_searches_application_support_and_gateway_legacy_directory() {
-        let paths =
-            existing_data_search_paths("darwin", None, "/Users/tester", None).unwrap();
+        let paths = existing_data_search_paths("darwin", None, "/Users/tester", None).unwrap();
         assert_eq!(
             paths,
             vec![
@@ -160,7 +155,10 @@ mod existing_data_search_tests {
             None,
         )
         .unwrap();
-        assert_eq!(paths, vec!["C:\\Users\\Tester\\AppData\\Local\\Minglefield"]);
+        assert_eq!(
+            paths,
+            vec!["C:\\Users\\Tester\\AppData\\Local\\Minglefield"]
+        );
     }
 }
 

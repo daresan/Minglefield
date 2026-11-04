@@ -78,9 +78,7 @@ pub fn inspect_sqlite(path: &Path) -> Result<SqliteInspection, InspectionError> 
             .map_err(|_| InspectionError::DatabaseError)?
             .is_some()
         {
-            count = count
-                .checked_add(1)
-                .ok_or(InspectionError::DatabaseError)?;
+            count = count.checked_add(1).ok_or(InspectionError::DatabaseError)?;
         }
         count
     };

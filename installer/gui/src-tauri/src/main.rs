@@ -130,6 +130,12 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
 }
 
 #[tauri::command]
+fn inspect_default_user_data() -> Result<Vec<DataInventoryItem>, String> {
+    let paths = minglefield_installer_core::default_user_paths().map_err(str::to_string)?;
+    Ok(inspect_existing_data(paths.data))
+}
+
+#[tauri::command]
 fn default_configuration() -> Result<DefaultConfig, String> {
     let c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
     Ok(DefaultConfig {
@@ -209,6 +215,7 @@ fn main() {
             application_readme,
             inspect_source_path,
             inspect_existing_data,
+            inspect_default_user_data,
             preview_install_plan
         ])
         .run(tauri::generate_context!())

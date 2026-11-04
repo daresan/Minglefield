@@ -306,6 +306,31 @@ fn preview_install_plan(
     })
 }
 
+#[tauri::command]
+async fn browse_directory() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .pick_folder()
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+#[tauri::command]
+async fn browse_sqlite_file() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .add_filter("SQLite database", &["sqlite3", "sqlite", "db"])
+            .pick_file()
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -316,6 +341,8 @@ fn main() {
             inspect_existing_data,
             inspect_default_user_data,
             inspect_sqlite_database,
+            browse_directory,
+            browse_sqlite_file,
             preview_install_plan
         ])
         .run(tauri::generate_context!())

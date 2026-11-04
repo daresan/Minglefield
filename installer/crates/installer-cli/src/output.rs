@@ -88,6 +88,21 @@ mod tests {
     }
 
     #[test]
+    fn v2_json_preserves_plan_only_and_independent_gh_option() {
+        let source = "version=2\ninstall_optional_conda=false\ninstall_optional_comfyui=false\nexplicit_optional_consent=false\ninstall_optional_git=false\ninstall_optional_gh=true\noffer_gh_login=false\nconsent_git=false\nconsent_gh=true\nconsent_login=false\n";
+        let config = minglefield_installer_core::config_v2::InstallerConfigV2::parse(source)
+            .unwrap();
+        let plan = config
+            .preview(minglefield_installer_core::Mode::Silent)
+            .unwrap();
+        let text = success_v2(&config, &plan);
+        assert!(text.contains("\"config_version\":2"));
+        assert!(text.contains("\"install_optional_git\":false"));
+        assert!(text.contains("\"install_optional_gh\":true"));
+        assert!(text.contains("\"execution_enabled\":false"));
+    }
+
+    #[test]
     fn error_is_machine_readable_without_secrets_or_side_effects() {
         let text = failure(3, "invalid \"path\"");
         assert!(text.contains("\"exit_code\":3"));

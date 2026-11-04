@@ -10,6 +10,8 @@ on:
   pull_request:
     paths:
       - "installer/gui/**"
+      - "README.md"
+      - "LICENSE"
       - ".github/workflows/installer-tauri-packaging.yml"
   workflow_dispatch:
 
@@ -117,11 +119,23 @@ jobs:
           path: installer/gui/src-tauri/target/release/minglefield-installer-gui
           if-no-files-found: error
           retention-days: 7
+      - name: Archive macOS app preserving bundle permissions
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd src-tauri/target/release/bundle/macos
+          ditto -c -k --sequesterRsrc --keepParent 'Minglefield Installer.app' Minglefield-Setup-Manager-macOS.zip
+      - name: Verify archived macOS app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          test -s src-tauri/target/release/bundle/macos/Minglefield-Setup-Manager-macOS.zip
+          unzip -l src-tauri/target/release/bundle/macos/Minglefield-Setup-Manager-macOS.zip | grep -F 'Minglefield Installer.app/Contents/MacOS/'
       - name: Upload macOS app preview
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v7
         with:
           name: tauri-portable-macos-app
-          path: installer/gui/src-tauri/target/release/bundle/macos/*.app/
+          path: installer/gui/src-tauri/target/release/bundle/macos/Minglefield-Setup-Manager-macOS.zip
           if-no-files-found: error
           retention-days: 7

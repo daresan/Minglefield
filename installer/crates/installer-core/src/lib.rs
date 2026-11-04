@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod consent;
+pub mod git_tools_v2;
 pub mod integrity;
 pub mod manifest;
 pub mod publisher;

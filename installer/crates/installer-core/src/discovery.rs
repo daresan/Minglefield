@@ -23,14 +23,12 @@ pub fn inspect_source_directory(path: &Path) -> Candidate {
         && path.join("schemas").is_dir()
         && path.join("server").is_dir()
         && path.join("installer").is_dir()
-        && std::fs::read_to_string(path.join("README.md"))
-            .is_ok_and(|text| {
-                text.trim_start_matches('\u{feff}')
-                    .lines()
-                    .next()
-                    .is_some_and(|line| line.trim_end_matches('\r') == "# Minglefield")
-            })
-    {
+        && std::fs::read_to_string(path.join("README.md")).is_ok_and(|text| {
+            text.trim_start_matches('\u{feff}')
+                .lines()
+                .next()
+                .is_some_and(|line| line.trim_end_matches('\r') == "# Minglefield")
+        }) {
         CandidateKind::SourceCheckout
     } else {
         CandidateKind::Unrecognized
@@ -91,7 +89,10 @@ mod tests {
         for dir in ["schemas", "server", "installer"] {
             fs::create_dir(root.join(dir)).unwrap();
         }
-        for readme in ["# Minglefield\r\nWindows", "\u{feff}# Minglefield\r\nWindows"] {
+        for readme in [
+            "# Minglefield\r\nWindows",
+            "\u{feff}# Minglefield\r\nWindows",
+        ] {
             fs::write(root.join("README.md"), readme).unwrap();
             assert_eq!(
                 inspect_source_directory(&root).kind,
@@ -99,7 +100,10 @@ mod tests {
             );
         }
         fs::write(root.join("README.md"), "# Unrelated\r\n").unwrap();
-        assert_eq!(inspect_source_directory(&root).kind, CandidateKind::Unrecognized);
+        assert_eq!(
+            inspect_source_directory(&root).kind,
+            CandidateKind::Unrecognized
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

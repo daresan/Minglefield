@@ -1,7 +1,8 @@
 //! SQLite integrity and schema inspection on a consistent in-memory snapshot.
 //! This module never executes migrations or writes schema changes to the source.
 
-use rusqlite::{Connection, DatabaseName, OpenFlags};
+use rusqlite::{backup::Backup, Connection, OpenFlags};
+use std::time::Duration;
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,9 +39,13 @@ pub fn inspect_sqlite(path: &Path) -> Result<SqliteInspection, InspectionError> 
     let source = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| InspectionError::DatabaseError)?;
     let mut snapshot = Connection::open_in_memory().map_err(|_| InspectionError::DatabaseError)?;
-    source
-        .backup(DatabaseName::Main, &mut snapshot, None)
-        .map_err(|_| InspectionError::DatabaseError)?;
+    {
+        let backup = Backup::new(&source, &mut snapshot)
+            .map_err(|_| InspectionError::DatabaseError)?;
+        backup
+            .run_to_completion(128, Duration::from_millis(50), None)
+            .map_err(|_| InspectionError::DatabaseError)?;
+    }
     let check: String = snapshot
         .query_row("PRAGMA quick_check", [], |row| row.get(0))
         .map_err(|_| InspectionError::DatabaseError)?;

@@ -1,3 +1,6 @@
+// GUI-only entrypoint: suppress the Windows console subsystem window in release builds.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
 use minglefield_installer_core::Mode;
@@ -64,6 +67,9 @@ mod readme_tests {
         let readme = super::application_readme();
         assert!(readme.text.starts_with("# Minglefield"));
         assert!(readme.text.len() > 500);
+        assert!(readme.text.contains("GPL-3.0-or-later"));
+        assert!(!readme.text.contains("License selection is pending"));
+        assert!(!readme.text.contains("until licensing is finalized"));
     }
 }
 

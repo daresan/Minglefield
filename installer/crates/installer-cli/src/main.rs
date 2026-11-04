@@ -64,10 +64,16 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             .lines()
             .map(str::trim)
             .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .filter(|line| line.split_once('=').is_some_and(|(key, _)| key.trim() == "version"))
+            .filter(|line| {
+                line.split_once('=')
+                    .is_some_and(|(key, _)| key.trim() == "version")
+            })
             .collect();
         if version_lines.len() != 1 {
-            return Err((3, "invalid config: missing or duplicate version".to_string()));
+            return Err((
+                3,
+                "invalid config: missing or duplicate version".to_string(),
+            ));
         }
         let version = version_lines[0]
             .split_once('=')

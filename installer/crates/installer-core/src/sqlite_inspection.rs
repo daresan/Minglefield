@@ -27,6 +27,7 @@ pub struct SqliteInspection {
     pub tables: Vec<InspectedTable>,
     pub schema_objects: Vec<SchemaObject>,
     pub integrity_ok: bool,
+    pub foreign_key_violations: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +63,27 @@ pub fn inspect_sqlite(path: &Path) -> Result<SqliteInspection, InspectionError> 
     if check != "ok" {
         return Err(InspectionError::IntegrityFailed);
     }
+    // SQLite quick_check does not validate foreign-key relationships.
+    // Report violations without suppressing the schema inventory.
+    let foreign_key_violations = {
+        let mut statement = snapshot
+            .prepare("PRAGMA foreign_key_check")
+            .map_err(|_| InspectionError::DatabaseError)?;
+        let mut rows = statement
+            .query([])
+            .map_err(|_| InspectionError::DatabaseError)?;
+        let mut count = 0_u64;
+        while rows
+            .next()
+            .map_err(|_| InspectionError::DatabaseError)?
+            .is_some()
+        {
+            count = count
+                .checked_add(1)
+                .ok_or(InspectionError::DatabaseError)?;
+        }
+        count
+    };
     let application_id = snapshot
         .query_row("PRAGMA application_id", [], |row| row.get(0))
         .map_err(|_| InspectionError::DatabaseError)?;
@@ -127,6 +149,7 @@ pub fn inspect_sqlite(path: &Path) -> Result<SqliteInspection, InspectionError> 
         tables,
         schema_objects,
         integrity_ok: true,
+        foreign_key_violations,
     })
 }
 
@@ -155,6 +178,7 @@ mod tests {
         let before = std::fs::read(&path).unwrap();
         let result = inspect_sqlite(&path).unwrap();
         assert!(result.integrity_ok);
+        assert_eq!(result.foreign_key_violations, 0);
         assert_eq!(result.application_id, 123);
         assert_eq!(result.user_version, 7);
         assert_eq!(result.tables[0].name, "alpha_users");

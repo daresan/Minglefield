@@ -94,6 +94,44 @@ pub fn default_user_paths() -> Result<UserPaths, &'static str> {
     user_paths(platform, local.as_deref(), &home, xdg.as_deref())
 }
 
+/// Read-only discovery roots for existing installations. The first path is
+/// the current platform default; additional roots cover older gateway layouts.
+/// This does not change the destination for new installations.
+pub fn existing_data_search_paths(
+    platform: &str,
+    local_app_data: Option<&str>,
+    home: &str,
+    xdg_data_home: Option<&str>,
+) -> Result<Vec<String>, &'static str> {
+    let primary = user_paths(platform, local_app_data, home, xdg_data_home)?.data;
+    let mut paths = vec![primary];
+    if platform.starts_with("linux") || platform == "darwin" {
+        let home = home.trim_end_matches('/');
+        let legacy = format!("{home}/.local/share/Minglefield");
+        if !paths.contains(&legacy) {
+            paths.push(legacy);
+        }
+    }
+    Ok(paths)
+}
+
+pub fn default_existing_data_search_paths() -> Result<Vec<String>, &'static str> {
+    let platform = if cfg!(windows) {
+        "win32"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        return Err("unsupported operating system");
+    };
+    let home =
+        std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap_or_default();
+    let local = std::env::var("LOCALAPPDATA").ok();
+    let xdg = std::env::var("XDG_DATA_HOME").ok();
+    existing_data_search_paths(platform, local.as_deref(), &home, xdg.as_deref())
+}
+
 pub fn default_destination() -> Result<String, &'static str> {
     default_user_paths().map(|paths| paths.install)
 }

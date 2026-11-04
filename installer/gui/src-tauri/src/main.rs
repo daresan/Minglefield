@@ -29,6 +29,33 @@ struct DefaultConfig {
     data_dir: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LicenseInfo {
+    identifier: &'static str,
+    text: &'static str,
+}
+
+#[tauri::command]
+fn framework_license() -> LicenseInfo {
+    LicenseInfo {
+        identifier: "GPL-3.0-or-later",
+        text: include_str!("../../../../LICENSE"),
+    }
+}
+
+#[cfg(test)]
+mod license_tests {
+    #[test]
+    fn embedded_framework_license_is_complete() {
+        let license = super::framework_license();
+        assert_eq!(license.identifier, "GPL-3.0-or-later");
+        assert!(license.text.starts_with("GNU GENERAL PUBLIC LICENSE"));
+        assert!(license.text.contains("END OF TERMS AND CONDITIONS"));
+        assert!(license.text.len() > 30_000);
+    }
+}
+
 #[tauri::command]
 fn default_configuration() -> Result<DefaultConfig, String> {
     let c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
@@ -105,6 +132,7 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             default_configuration,
+            framework_license,
             preview_install_plan
         ])
         .run(tauri::generate_context!())

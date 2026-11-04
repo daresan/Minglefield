@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn rejects_each_missing_requirement() {
         assert_eq!(
-            validate_new_database_password("A1!short"),
+            validate_new_database_password("A1!sho"),
             Err(NewDatabasePasswordError::TooShort)
         );
         assert_eq!(

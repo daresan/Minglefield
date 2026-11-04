@@ -24,7 +24,12 @@ pub fn inspect_source_directory(path: &Path) -> Candidate {
         && path.join("server").is_dir()
         && path.join("installer").is_dir()
         && std::fs::read_to_string(path.join("README.md"))
-            .is_ok_and(|text| text.starts_with("# Minglefield\n"))
+            .is_ok_and(|text| {
+                text.trim_start_matches('\u{feff}')
+                    .lines()
+                    .next()
+                    .is_some_and(|line| line.trim_end_matches('\r') == "# Minglefield")
+            })
     {
         CandidateKind::SourceCheckout
     } else {
@@ -76,6 +81,25 @@ mod tests {
             inspect_source_directory(root).kind,
             CandidateKind::Unrecognized
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recognizes_windows_crlf_and_utf8_bom_readme() {
+        let root = test_root();
+        fs::write(root.join("AGENTS.md"), "rules").unwrap();
+        for dir in ["schemas", "server", "installer"] {
+            fs::create_dir(root.join(dir)).unwrap();
+        }
+        for readme in ["# Minglefield\r\nWindows", "\u{feff}# Minglefield\r\nWindows"] {
+            fs::write(root.join("README.md"), readme).unwrap();
+            assert_eq!(
+                inspect_source_directory(&root).kind,
+                CandidateKind::SourceCheckout
+            );
+        }
+        fs::write(root.join("README.md"), "# Unrelated\r\n").unwrap();
+        assert_eq!(inspect_source_directory(&root).kind, CandidateKind::Unrecognized);
         fs::remove_dir_all(root).unwrap();
     }
 

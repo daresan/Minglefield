@@ -45,11 +45,14 @@ fn preview_install_plan(
     data_dir: String,
     config_text: Option<String>,
 ) -> Result<PlanPreview, String> {
-    let (c, tools) = if let Some(text) = config_text {
+    let (c, tools, config_version) = if let Some(text) = config_text {
         let version_lines: Vec<&str> = text
             .lines()
             .map(str::trim)
-            .filter(|line| line.split_once('=').is_some_and(|(key, _)| key.trim() == "version"))
+            .filter(|line| {
+                line.split_once('=')
+                    .is_some_and(|(key, _)| key.trim() == "version")
+            })
             .collect();
         if version_lines.len() != 1 {
             return Err("missing or duplicate configuration version".to_owned());
@@ -61,24 +64,20 @@ fn preview_install_plan(
         if version == "2" {
             let config = InstallerConfigV2::parse(&text).map_err(str::to_string)?;
             config.git_tools.validate().map_err(str::to_string)?;
-            (config.base, config.git_tools)
+            (config.base, config.git_tools, 2)
         } else {
             let config = InstallerConfig::parse(&text).map_err(str::to_string)?;
-            (config, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled())
+            (config, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled(), 1)
         }
     } else {
         let mut c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
         c.install_dir = install_dir;
         c.data_dir = data_dir;
-        (c, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled())
+        (c, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled(), 1)
     };
     let p = c.preview(Mode::Gui).map_err(|err| format!("{err:?}"))?;
     Ok(PlanPreview {
-        version: if tools != minglefield_installer_core::git_tools_v2::GitToolOptions::disabled() {
-            2
-        } else {
-            c.version
-        },
+        version: config_version,
         install_dir: p.install_dir,
         data_dir: c.data_dir,
         provision_host: p.provision_host,

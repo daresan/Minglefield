@@ -21,7 +21,9 @@ impl InstallerConfigV2 {
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            let (key, value) = trimmed.split_once('=').ok_or("invalid configuration line")?;
+            let (key, value) = trimmed
+                .split_once('=')
+                .ok_or("invalid configuration line")?;
             match key.trim() {
                 "version" => {
                     if version_seen {
@@ -33,8 +35,12 @@ impl InstallerConfigV2 {
                     }
                     base_lines.push("version=1".to_owned());
                 }
-                "install_optional_git" | "install_optional_gh" | "offer_gh_login"
-                | "consent_git" | "consent_gh" | "consent_login" => {
+                "install_optional_git"
+                | "install_optional_gh"
+                | "offer_gh_login"
+                | "consent_git"
+                | "consent_gh"
+                | "consent_login" => {
                     tool_lines.push(trimmed.to_owned());
                 }
                 _ => base_lines.push(trimmed.to_owned()),
@@ -50,7 +56,9 @@ impl InstallerConfigV2 {
 
     pub fn preview(&self, mode: Mode) -> Result<InstallPlan, &'static str> {
         self.git_tools.validate()?;
-        self.base.preview(mode).map_err(|_| "invalid base installation plan")
+        self.base
+            .preview(mode)
+            .map_err(|_| "invalid base installation plan")
     }
 }
 
@@ -80,7 +88,8 @@ mod tests {
 
     #[test]
     fn v2_rejects_missing_consent_unknown_and_duplicate_keys() {
-        let missing_consent = BASE.replace("install_optional_git=false", "install_optional_git=true");
+        let missing_consent =
+            BASE.replace("install_optional_git=false", "install_optional_git=true");
         assert!(InstallerConfigV2::parse(&missing_consent).is_err());
         assert!(InstallerConfigV2::parse(&format!("{BASE}unknown=true\n")).is_err());
         assert!(InstallerConfigV2::parse(&format!("{BASE}consent_git=false\n")).is_err());

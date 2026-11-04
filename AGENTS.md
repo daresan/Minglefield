@@ -45,7 +45,11 @@ This workflow describes the intended contribution model. Until licensing is fina
 
 ## Contribution status
 
-**No finalized open-source license yet.** Public visibility is not a license. As [CONTRIBUTING.md](CONTRIBUTING.md) states, external code and asset contributions are not yet accepted. Propose ideas, issues, requirements, design notes, reproducible experiments, or test strategies instead. Coding agents working for an authorized maintainer must follow that maintainer's explicit instructions.
+**Framework license adopted:** GNU GPL-3.0-or-later, with the complete GPL v3 text in [LICENSE](LICENSE). The [separate 5% marketplace-service model](docs/LICENSING-AND-MARKETPLACE-DECISION.md) is not a GPL royalty. Contributor rights and third-party code/assets must still be checked as described in [CONTRIBUTING.md](CONTRIBUTING.md). Propose ideas, issues, requirements, design notes, reproducible experiments, or test strategies instead. Coding agents working for an authorized maintainer must follow that maintainer's explicit instructions.
+
+## Mandatory installer scope distinction
+
+Read the [binding platform-versus-game installation boundary](docs/PLATFORM-VS-GAME-INSTALLATION-BOUNDARY.md) before installer-related changes. The current priority is **installing Minglefield itself**, not installing community games. Do not carry game integration security gates, third-party game licensing or marketplace conditions into the platform installer. App installer CI and game installation CI prove different things; report them separately. Installing Minglefield is not a marketplace transaction.
 
 ## Local validation (Python reference)
 

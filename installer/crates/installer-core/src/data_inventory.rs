@@ -56,7 +56,7 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                         sqlite_user_version = Some(u32::from_be_bytes([header[60], header[61], header[62], header[63]]));
                         sqlite_application_id = Some(u32::from_be_bytes([header[68], header[69], header[70], header[71]]));
                         "sqlite_header_valid_unverified"
-                    },
+                    }
                     _ => "unrecognized_database",
                 }
             } else {
@@ -103,7 +103,10 @@ mod tests {
             b"{\"name\":\"test\"}",
         )
         .unwrap();
-        std::fs::write(root.join("minglefield.db"), { let mut header = [0u8; 100]; header[..16].copy_from_slice(b"SQLite format 3\0"); header[16..18].copy_from_slice(&4096u16.to_be_bytes()); header }).unwrap();
+        let mut header = [0u8; 100];
+        header[..16].copy_from_slice(b"SQLite format 3\0");
+        header[16..18].copy_from_slice(&4096u16.to_be_bytes());
+        std::fs::write(root.join("minglefield.db"), header).unwrap();
         std::fs::write(
             root.join("untrusted.py"),
             b"raise Exception('must not execute')",
@@ -113,6 +116,8 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].status, "json_candidate_unvalidated");
         assert_eq!(found[1].status, "sqlite_header_valid_unverified");
+        assert_eq!(found[1].sqlite_page_size, Some(4096));
+        assert_eq!(found[1].sqlite_user_version, Some(0));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

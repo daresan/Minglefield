@@ -134,6 +134,32 @@ window.addEventListener("pagehide", () => {
   newDbPassword.value = "";
   confirmDbPassword.value = "";
 });
+for (const [buttonId, fieldId] of [
+  ["browse-destination", "destination"],
+  ["browse-data-directory", "data-directory"],
+  ["browse-source-path", "source-path"]
+]) {
+  document.querySelector("#" + buttonId).addEventListener("click", async () => {
+    try {
+      const path = await invoke("browse_directory");
+      if (path) document.querySelector("#" + fieldId).value = path;
+    } catch (error) {
+      document.querySelector("#data-result").textContent = "Directory picker failed: " + String(error);
+    }
+  });
+}
+document.querySelector("#browse-database").addEventListener("click", async () => {
+  try {
+    const path = await invoke("browse_sqlite_file");
+    if (path) {
+      selectedDatabase = path;
+      document.querySelector("#data-result").textContent =
+        "Selected database: " + path + ". Use inspection to validate it; migration remains disabled.";
+    }
+  } catch (error) {
+    document.querySelector("#data-result").textContent = "Database picker failed: " + String(error);
+  }
+});
 let selectedDatabase = null;
 
 async function inspectSelectedSqlite() {

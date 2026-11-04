@@ -1,11 +1,12 @@
 // Pure UI-to-backend mapping; no filesystem writes or installation authorization.
-export function previewArguments({ setupMode, advancedSource, defaults, installDir, dataDir, configText }) {
+export function previewArguments({ setupMode, advancedSource, defaults, installDir, dataDir, configText, standardOverrides = null }) {
   if (!defaults || typeof defaults.installDir !== "string" || typeof defaults.dataDir !== "string" ||
       !defaults.installDir || !defaults.dataDir) {
     throw new Error("Default configuration unavailable");
   }
   if (setupMode === "standard") {
-    return { installDir: defaults.installDir, dataDir: defaults.dataDir, configText: null };
+    return { installDir: standardOverrides?.installDir ?? defaults.installDir,
+      dataDir: standardOverrides?.dataDir ?? defaults.dataDir, configText: null };
   }
   if (setupMode !== "advanced") throw new Error("Unknown setup mode");
   if (advancedSource === "config") {

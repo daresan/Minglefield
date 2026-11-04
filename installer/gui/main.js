@@ -144,7 +144,9 @@ async function inspectSelectedSqlite() {
   }
   output.textContent = "Inspecting a read-only SQLite snapshot…";
   try {
-    const preview = await invoke("inspect_sqlite_database", { path: selectedDatabase });
+    const request = invoke("inspect_sqlite_database", { path: selectedDatabase, password: existingDbPassword.value });
+    existingDbPassword.value = "";
+    const preview = await request;
     output.textContent = JSON.stringify(preview, null, 2);
   } catch (error) {
     output.textContent = "SQLite inspection failed: " + String(error);

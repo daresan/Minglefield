@@ -51,8 +51,12 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                 match std::fs::read(&path) {
                     Ok(bytes) if bytes.len() <= 4 * 1024 * 1024 => {
                         let text = std::str::from_utf8(&bytes).unwrap_or("");
-                        if text.trim_start_matches('\u{feff}').trim_start().starts_with('{')
-                            && text.trim_end().ends_with('}') {
+                        if text
+                            .trim_start_matches('\u{feff}')
+                            .trim_start()
+                            .starts_with('{')
+                            && text.trim_end().ends_with('}')
+                        {
                             "json_candidate_unvalidated"
                         } else {
                             "unrecognized_config"

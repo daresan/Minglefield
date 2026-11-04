@@ -32,7 +32,6 @@ pub fn success(config: &InstallerConfig, plan: &InstallPlan) -> String {
     )
 }
 
-
 /// Version 2 extends the v1 preview with explicit, independent Git/gh selections.
 /// The preview never runs installers or authentication.
 pub fn success_v2(
@@ -90,8 +89,8 @@ mod tests {
     #[test]
     fn v2_json_preserves_plan_only_and_independent_gh_option() {
         let source = "version=2\ninstall_optional_conda=false\ninstall_optional_comfyui=false\nexplicit_optional_consent=false\ninstall_optional_git=false\ninstall_optional_gh=true\noffer_gh_login=false\nconsent_git=false\nconsent_gh=true\nconsent_login=false\n";
-        let config = minglefield_installer_core::config_v2::InstallerConfigV2::parse(source)
-            .unwrap();
+        let config =
+            minglefield_installer_core::config_v2::InstallerConfigV2::parse(source).unwrap();
         let plan = config
             .preview(minglefield_installer_core::Mode::Silent)
             .unwrap();

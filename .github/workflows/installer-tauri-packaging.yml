@@ -1,0 +1,59 @@
+name: Tauri native package smoke builds
+
+on:
+  push:
+    paths:
+      - "installer/gui/**"
+      - ".github/workflows/installer-tauri-packaging.yml"
+  pull_request:
+    paths:
+      - "installer/gui/**"
+      - ".github/workflows/installer-tauri-packaging.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-package:
+    name: Native preview package / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            bundle: deb
+          - os: windows-latest
+            bundle: nsis
+          - os: macos-latest
+            bundle: dmg
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: installer/gui
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Linux Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund --ignore-scripts
+      - name: Generate native icon variants from tracked preview icon
+        run: npm run tauri -- icon src-tauri/icons/icon.png
+      - name: Build native preview package (no release publication)
+        run: npm run tauri -- build --bundles ${{ matrix.bundle }} --config '{"bundle":{"active":true}}'
+      - name: Upload preview bundle for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-preview-${{ matrix.bundle }}
+          path: installer/gui/src-tauri/target/release/bundle/
+          if-no-files-found: error
+          retention-days: 7

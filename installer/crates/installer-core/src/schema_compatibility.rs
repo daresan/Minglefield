@@ -29,9 +29,17 @@ pub enum Compatibility {
     IntegrityFailed,
     UnregisteredApplication,
     UnversionedLegacy,
-    VersionMismatch { expected: u32, actual: u32 },
-    MissingSchema { tables: Vec<String>, columns: Vec<String> },
-    Compatible { extra_tables: Vec<String> },
+    VersionMismatch {
+        expected: u32,
+        actual: u32,
+    },
+    MissingSchema {
+        tables: Vec<String>,
+        columns: Vec<String>,
+    },
+    Compatible {
+        extra_tables: Vec<String>,
+    },
 }
 
 /// Only positive results after a separate SQLite integrity check may be used
@@ -88,7 +96,10 @@ mod tests {
 
     fn fixture() -> (SchemaSnapshot, SchemaContract) {
         let mut tables = BTreeMap::new();
-        tables.insert("alpha_users".to_owned(), BTreeSet::from(["user_id".to_owned()]));
+        tables.insert(
+            "alpha_users".to_owned(),
+            BTreeSet::from(["user_id".to_owned()]),
+        );
         (
             SchemaSnapshot {
                 application_id: 123,
@@ -112,12 +123,18 @@ mod tests {
         let (mut snapshot, contract) = fixture();
         assert_eq!(
             evaluate_schema(&snapshot, &contract),
-            Compatibility::Compatible { extra_tables: vec![] }
+            Compatibility::Compatible {
+                extra_tables: vec![]
+            }
         );
-        snapshot.tables.insert("future_extension".to_owned(), BTreeSet::new());
+        snapshot
+            .tables
+            .insert("future_extension".to_owned(), BTreeSet::new());
         assert_eq!(
             evaluate_schema(&snapshot, &contract),
-            Compatibility::Compatible { extra_tables: vec!["future_extension".to_owned()] }
+            Compatibility::Compatible {
+                extra_tables: vec!["future_extension".to_owned()]
+            }
         );
     }
 
@@ -125,17 +142,29 @@ mod tests {
     fn rejects_bad_integrity_identity_and_version() {
         let (mut snapshot, contract) = fixture();
         snapshot.integrity_ok = false;
-        assert_eq!(evaluate_schema(&snapshot, &contract), Compatibility::IntegrityFailed);
+        assert_eq!(
+            evaluate_schema(&snapshot, &contract),
+            Compatibility::IntegrityFailed
+        );
         snapshot.integrity_ok = true;
         snapshot.application_id = 0;
-        assert_eq!(evaluate_schema(&snapshot, &contract), Compatibility::UnregisteredApplication);
+        assert_eq!(
+            evaluate_schema(&snapshot, &contract),
+            Compatibility::UnregisteredApplication
+        );
         snapshot.application_id = 123;
         snapshot.version = 0;
-        assert_eq!(evaluate_schema(&snapshot, &contract), Compatibility::UnversionedLegacy);
+        assert_eq!(
+            evaluate_schema(&snapshot, &contract),
+            Compatibility::UnversionedLegacy
+        );
         snapshot.version = 2;
         assert_eq!(
             evaluate_schema(&snapshot, &contract),
-            Compatibility::VersionMismatch { expected: 1, actual: 2 }
+            Compatibility::VersionMismatch {
+                expected: 1,
+                actual: 2
+            }
         );
     }
 
@@ -150,7 +179,9 @@ mod tests {
                 columns: vec![],
             }
         );
-        snapshot.tables.insert("alpha_users".to_owned(), BTreeSet::new());
+        snapshot
+            .tables
+            .insert("alpha_users".to_owned(), BTreeSet::new());
         assert_eq!(
             evaluate_schema(&snapshot, &contract),
             Compatibility::MissingSchema {

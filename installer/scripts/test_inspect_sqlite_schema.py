@@ -1,5 +1,6 @@
 """Tests for read-only SQLite schema inspection."""
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,10 +12,11 @@ class SQLiteSchemaInspectionTests(unittest.TestCase):
     def test_valid_database_schema_and_version_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "custom.data"
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db:
                 db.execute("CREATE TABLE alpha_users (user_id TEXT PRIMARY KEY, disabled INTEGER)")
                 db.execute("PRAGMA user_version=7")
                 db.execute("PRAGMA application_id=123")
+                db.commit()
             before = path.read_bytes()
             result = inspect_sqlite(path)
             self.assertEqual(result["status"], "sqlite_integrity_verified_schema_unclassified")

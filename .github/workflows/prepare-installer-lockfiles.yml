@@ -8,6 +8,7 @@ on:
       - .github/workflows/prepare-installer-lockfiles.yml
       - installer/crates/installer-core/Cargo.toml
       - installer/gui/src-tauri/Cargo.toml
+      - installer/gui/src-tauri/Cargo.lock
   workflow_dispatch:
 
 permissions:

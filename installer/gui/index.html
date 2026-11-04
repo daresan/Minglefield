@@ -8,7 +8,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <div class="mode"><label><input type="radio" name="mode" value="defaults" checked> Paths</label><label><input type="radio" name="mode" value="config"> Versioned configuration</label></div>
 <section id="paths"><label for="destination">Installation directory</label><input id="destination" aria-label="Installation directory" />
 <label for="data-directory">Persistent data directory</label><input id="data-directory" aria-label="Persistent data directory" /></section>
-<section id="config-section" hidden><label for="config">Configuration (key=value, version 1)</label><textarea id="config" spellcheck="false" aria-label="Versioned configuration"></textarea></section>
+<section id="config-section" hidden><label for="config">Configuration (key=value, version 1 or 2)</label><textarea id="config" spellcheck="false" aria-label="Versioned configuration"></textarea></section>
 <button id="preview">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
 <small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small>

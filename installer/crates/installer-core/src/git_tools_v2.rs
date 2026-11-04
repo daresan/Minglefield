@@ -88,17 +88,22 @@ mod tests {
 
     #[test]
     fn defaults_are_off_and_valid() {
-        assert_eq!(GitToolOptions::parse(BASE).unwrap(), GitToolOptions::disabled());
+        assert_eq!(
+            GitToolOptions::parse(BASE).unwrap(),
+            GitToolOptions::disabled()
+        );
     }
 
     #[test]
     fn git_and_gh_are_independent() {
-        let gh = BASE.replace("install_optional_gh=false", "install_optional_gh=true")
+        let gh = BASE
+            .replace("install_optional_gh=false", "install_optional_gh=true")
             .replace("consent_gh=false", "consent_gh=true");
         let parsed = GitToolOptions::parse(&gh).unwrap();
         assert!(!parsed.install_optional_git);
         assert!(parsed.install_optional_gh);
-        let git = BASE.replace("install_optional_git=false", "install_optional_git=true")
+        let git = BASE
+            .replace("install_optional_git=false", "install_optional_git=true")
             .replace("consent_git=false", "consent_git=true");
         let parsed = GitToolOptions::parse(&git).unwrap();
         assert!(parsed.install_optional_git);
@@ -107,11 +112,16 @@ mod tests {
 
     #[test]
     fn consent_is_independent_and_fail_closed() {
-        for key in ["install_optional_git", "install_optional_gh", "offer_gh_login"] {
+        for key in [
+            "install_optional_git",
+            "install_optional_gh",
+            "offer_gh_login",
+        ] {
             let candidate = BASE.replace(&format!("{key}=false"), &format!("{key}=true"));
             assert!(GitToolOptions::parse(&candidate).is_err());
         }
-        let login = BASE.replace("offer_gh_login=false", "offer_gh_login=true")
+        let login = BASE
+            .replace("offer_gh_login=false", "offer_gh_login=true")
             .replace("consent_login=false", "consent_login=true");
         assert!(GitToolOptions::parse(&login).unwrap().offer_gh_login);
     }
@@ -121,6 +131,8 @@ mod tests {
         assert!(GitToolOptions::parse(&format!("{BASE}consent_gh=false\n")).is_err());
         assert!(GitToolOptions::parse(&format!("{BASE}unknown=false\n")).is_err());
         assert!(GitToolOptions::parse(&BASE.replace("consent_git=false\n", "")).is_err());
-        assert!(GitToolOptions::parse(&BASE.replace("consent_git=false", "consent_git=TRUE")).is_err());
+        assert!(
+            GitToolOptions::parse(&BASE.replace("consent_git=false", "consent_git=TRUE")).is_err()
+        );
     }
 }

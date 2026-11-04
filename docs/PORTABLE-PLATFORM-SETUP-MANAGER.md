@@ -11,3 +11,14 @@ Decision 2026-11-04. Applies **only** to the Minglefield application installer, 
 7. No application install execution exists yet. Do not claim this requirement document or a preview build provides a functional Minglefield installation.
 
 Acceptance: launch portable manager without installing manager; view full bundled GPL and README offline in both modes; select/configure app installation; verify app persists and launches after manager removal. Test Windows, Linux, macOS separately. Keep application/game installer tests separate.
+
+## Linux delivery channels — additive, not exclusive
+
+**AppImage is one portable graphical distribution channel, not the sole supported Linux installation method.** Do not remove or forbid terminal-based operation or native package formats when adding AppImage CI. Maintain a common Rust installer core and separate distribution packaging from actual application installation.
+
+- Portable graphical Setup Manager: AppImage, launched without installing the manager.
+- Headless/terminal installation: a standalone CLI using the same installer core; an optional Bash bootstrapper may download/verify and invoke that CLI, but must not be the only terminal option.
+- Native package-manager installation of the **Minglefield application**: Debian/Ubuntu `.deb` and Fedora/RHEL `.rpm` as planned alternative delivery channels; packaging must not silently install the Setup Manager as the target application.
+- Manual/offline delivery: versioned `.tar.gz` containing the application and documented install/launch entrypoints, with the same configuration semantics.
+
+These are **target channels**, not implemented or tested deliverables. The current Linux AppImage CI only builds the portable GUI preview. Bash, CLI execution, application DEB/RPM and tarball installation remain separate future implementation tasks. For any channel, preserve optional-component consent and the framework license/README availability; for headless use, provide readable bundled documents and explicit commands rather than a GUI-only panel.

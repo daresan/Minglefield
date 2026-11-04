@@ -115,6 +115,9 @@ struct DataInventoryItem {
     relative_path: String,
     kind: &'static str,
     status: &'static str,
+    sqlite_page_size: Option<u32>,
+    sqlite_user_version: Option<u32>,
+    sqlite_application_id: Option<u32>,
 }
 
 #[tauri::command]
@@ -125,6 +128,9 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
             relative_path: candidate.relative_path,
             kind: candidate.kind,
             status: candidate.status,
+            sqlite_page_size: candidate.sqlite_page_size,
+            sqlite_user_version: candidate.sqlite_user_version,
+            sqlite_application_id: candidate.sqlite_application_id,
         })
         .collect()
 }

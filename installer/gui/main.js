@@ -260,6 +260,13 @@ function refreshReview() {
 for (const [reviewId, sourceId] of reviewFields) {
   document.querySelector("#" + reviewId).addEventListener("input", () => {
     document.querySelector("#" + sourceId).value = document.querySelector("#" + reviewId).value;
+    if (sourceId !== "source-path") {
+      document.querySelector('input[name="setup-mode"][value="advanced"]').checked = true;
+      document.querySelector('input[name="mode"][value="defaults"]').checked = true;
+      document.querySelector("#advanced-options").hidden = false;
+      pathsSection.hidden = false;
+      configSection.hidden = true;
+    }
   });
 }
 for (const tab of ["paths", "database", "security"]) {

@@ -103,7 +103,7 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
             let Ok(mut file) = std::fs::File::open(&path) else {
                 continue;
             };
-            if file.read_exact(&mut header).is_err() || &header[..16] != b"SQLite format 3\\0" {
+            if file.read_exact(&mut header).is_err() || &header[..16] != b"SQLite format 3\0" {
                 continue;
             }
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {

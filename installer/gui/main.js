@@ -212,11 +212,7 @@ async function inspectDefaultUserData() {
         label.append(radio, document.createTextNode(" " + item.sourceDirectory + "/" + item.relativePath + " — " + item.status));
         selection.append(label);
       }
-      const inspectButton = document.createElement("button");
-      inspectButton.type = "button";
-      inspectButton.textContent = "Inspect selected SQLite database (read-only)";
-      inspectButton.addEventListener("click", inspectSelectedSqlite);
-      selection.append(inspectButton);
+
     }
   } catch (error) {
     output.textContent = "Application data inspection failed: " + String(error);

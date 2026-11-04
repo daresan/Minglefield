@@ -7,6 +7,9 @@ pub struct DataCandidate {
     pub relative_path: String,
     pub kind: &'static str,
     pub status: &'static str,
+    pub sqlite_page_size: Option<u32>,
+    pub sqlite_user_version: Option<u32>,
+    pub sqlite_application_id: Option<u32>,
 }
 
 pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
@@ -40,11 +43,20 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
             {
                 return None;
             }
+            let mut sqlite_page_size = None;
+            let mut sqlite_user_version = None;
+            let mut sqlite_application_id = None;
             let status = if *kind == "sqlite_database" {
                 use std::io::Read;
-                let mut header = [0u8; 16];
+                let mut header = [0u8; 100];
                 match std::fs::File::open(&path).and_then(|mut f| f.read_exact(&mut header)) {
-                    Ok(()) if &header == b"SQLite format 3\0" => "sqlite_header_valid_unverified",
+                    Ok(()) if &header[..16] == b"SQLite format 3\0" => {
+                        let size = u16::from_be_bytes([header[16], header[17]]);
+                        sqlite_page_size = Some(if size == 1 { 65536 } else { u32::from(size) });
+                        sqlite_user_version = Some(u32::from_be_bytes([header[60], header[61], header[62], header[63]]));
+                        sqlite_application_id = Some(u32::from_be_bytes([header[68], header[69], header[70], header[71]]));
+                        "sqlite_header_valid_unverified"
+                    },
                     _ => "unrecognized_database",
                 }
             } else {
@@ -69,6 +81,9 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                 relative_path: (*relative).to_owned(),
                 kind,
                 status,
+                sqlite_page_size,
+                sqlite_user_version,
+                sqlite_application_id,
             })
         })
         .collect()
@@ -88,7 +103,7 @@ mod tests {
             b"{\"name\":\"test\"}",
         )
         .unwrap();
-        std::fs::write(root.join("minglefield.db"), b"SQLite format 3\0dummy").unwrap();
+        std::fs::write(root.join("minglefield.db"), { let mut header = [0u8; 100]; header[..16].copy_from_slice(b"SQLite format 3\0"); header[16..18].copy_from_slice(&4096u16.to_be_bytes()); header }).unwrap();
         std::fs::write(
             root.join("untrusted.py"),
             b"raise Exception('must not execute')",

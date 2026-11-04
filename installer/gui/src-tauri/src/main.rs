@@ -138,15 +138,17 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
                 use minglefield_installer_core::schema_versions::{
                     classify_header, HeaderVersionStatus,
                 };
-                Some(match classify_header(
-                    candidate.sqlite_application_id.unwrap_or(0),
-                    candidate.sqlite_user_version.unwrap_or(0),
-                    None,
-                ) {
-                    HeaderVersionStatus::LegacyUnversioned => "legacy_unversioned_unverified",
-                    HeaderVersionStatus::UnregisteredApplication => "unregistered_application",
-                    HeaderVersionStatus::VersionedUnverified(_) => "versioned_unverified",
-                })
+                Some(
+                    match classify_header(
+                        candidate.sqlite_application_id.unwrap_or(0),
+                        candidate.sqlite_user_version.unwrap_or(0),
+                        None,
+                    ) {
+                        HeaderVersionStatus::LegacyUnversioned => "legacy_unversioned_unverified",
+                        HeaderVersionStatus::UnregisteredApplication => "unregistered_application",
+                        HeaderVersionStatus::VersionedUnverified(_) => "versioned_unverified",
+                    },
+                )
             } else {
                 None
             },

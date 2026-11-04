@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/prepare-installer-lockfiles.yml
       - installer/crates/installer-core/Cargo.toml
+      - installer/gui/src-tauri/Cargo.toml
   workflow_dispatch:
 
 permissions:

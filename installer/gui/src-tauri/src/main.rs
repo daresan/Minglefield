@@ -67,13 +67,21 @@ fn preview_install_plan(
             (config.base, config.git_tools, 2)
         } else {
             let config = InstallerConfig::parse(&text).map_err(str::to_string)?;
-            (config, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled(), 1)
+            (
+                config,
+                minglefield_installer_core::git_tools_v2::GitToolOptions::disabled(),
+                1,
+            )
         }
     } else {
         let mut c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
         c.install_dir = install_dir;
         c.data_dir = data_dir;
-        (c, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled(), 1)
+        (
+            c,
+            minglefield_installer_core::git_tools_v2::GitToolOptions::disabled(),
+            1,
+        )
     };
     let p = c.preview(Mode::Gui).map_err(|err| format!("{err:?}"))?;
     Ok(PlanPreview {

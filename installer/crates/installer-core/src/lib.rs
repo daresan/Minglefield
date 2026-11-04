@@ -1,3 +1,4 @@
+pub mod database_password;
 //! Shared, side-effect-free installation planning for GUI and CLI.
 //! This crate does not install files, claim Hosts, or establish publisher trust.
 

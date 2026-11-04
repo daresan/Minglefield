@@ -118,7 +118,7 @@ function updateNewDatabasePasswordStatus() {
   if ([...password].length < 8) missing.push("at least 8 characters");
   if (!/\p{Lu}/u.test(password)) missing.push("an uppercase letter");
   if (!/[0-9]/.test(password)) missing.push("a digit");
-  if (![...password].some((c) => !/[\p{L}\p{N}\\s]/u.test(c))) missing.push("a special character");
+  if (![...password].some((c) => !/[\p{L}\p{N}\s]/u.test(c))) missing.push("a special character");
   if (missing.length) {
     passwordStatus.textContent = "New password requires " + missing.join(", ") + ". Migration remains disabled.";
   } else if (password !== confirmDbPassword.value) {

@@ -7,6 +7,20 @@ const pathsSection = document.querySelector("#paths");
 const configSection = document.querySelector("#config-section");
 let defaultConfig = null;
 
+async function loadFrameworkLicense() {
+  const licenseText = document.querySelector("#license-text");
+  try {
+    const license = await invoke("framework_license");
+    if (license.identifier !== "GPL-3.0-or-later" || !license.text.startsWith("GNU GENERAL PUBLIC LICENSE")) {
+      throw new Error("Unexpected framework license response");
+    }
+    licenseText.textContent = license.text;
+  } catch (error) {
+    licenseText.textContent = "Unable to load the bundled framework license: " + String(error);
+  }
+}
+
+
 for (const radio of document.querySelectorAll('input[name="mode"]')) {
   radio.addEventListener("change", () => {
     const useConfig = document.querySelector('input[name="mode"]:checked').value === "config";
@@ -48,3 +62,4 @@ document.querySelector("#preview").addEventListener("click", async () => {
   }
 });
 loadDefault();
+loadFrameworkLicense();

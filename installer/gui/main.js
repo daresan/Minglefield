@@ -107,16 +107,41 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
       : "No known data candidates found at the checked locations. This does not prove the directory contains no Minglefield data.";
   } catch (error) { output.textContent = "Data inspection failed: " + String(error); }
 });
-document.querySelector("#inspect-default-data").addEventListener("click", async () => {
+let selectedDatabase = null;
+async function inspectDefaultUserData() {
   const output = document.querySelector("#data-result");
+  const selection = document.querySelector("#database-selection");
   output.textContent = "Inspecting per-user Minglefield application data…";
+  selection.replaceChildren();
+  selectedDatabase = null;
   try {
     const items = await invoke("inspect_default_user_data");
+    const databases = items.filter((item) => item.kind === "sqlite_database");
     output.textContent = items.length
       ? JSON.stringify(items, null, 2)
-      : "No known candidates in the default application data directory. Other user-selected data locations may still contain migratable data.";
-  } catch (error) { output.textContent = "Application data inspection failed: " + String(error); }
-});
+      : "No database or known configuration found in the default application data directory.";
+    if (databases.length) {
+      const heading = document.createElement("p");
+      heading.textContent = "Database for future migration (selection only; nothing is imported):";
+      selection.append(heading);
+      for (const item of databases) {
+        const label = document.createElement("label");
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "selected-database";
+        radio.value = item.relativePath;
+        radio.style.width = "auto";
+        radio.addEventListener("change", () => { selectedDatabase = item.relativePath; });
+        label.append(radio, document.createTextNode(" " + item.relativePath + " — " + item.status));
+        selection.append(label);
+      }
+    }
+  } catch (error) {
+    output.textContent = "Application data inspection failed: " + String(error);
+  }
+}
+document.querySelector("#inspect-default-data").addEventListener("click", inspectDefaultUserData);
+inspectDefaultUserData();
 loadDefault();
 loadFrameworkLicense();
 loadApplicationReadme();

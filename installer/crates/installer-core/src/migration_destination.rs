@@ -35,8 +35,8 @@ pub fn preview_migration_destination(
     source: &Path,
     destination: &Path,
 ) -> Result<MigrationDestinationPreview, MigrationDestinationError> {
-    let source_metadata = fs::symlink_metadata(source)
-        .map_err(|_| MigrationDestinationError::SourceUnavailable)?;
+    let source_metadata =
+        fs::symlink_metadata(source).map_err(|_| MigrationDestinationError::SourceUnavailable)?;
     if source_metadata.file_type().is_symlink() || !source_metadata.is_file() {
         return Err(MigrationDestinationError::SourceNotRegularFile);
     }
@@ -92,7 +92,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("minglefield-migration-{}-{stamp}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "minglefield-migration-{}-{stamp}",
+            std::process::id()
+        ))
     }
 
     #[test]

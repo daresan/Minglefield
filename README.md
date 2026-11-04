@@ -18,7 +18,7 @@ Minglefield is an early-stage project to create a digital universe where people 
 The [binding project decision](docs/LICENSING-AND-MARKETPLACE-DECISION.md) adopts a GNU GPL framework model and **separate marketplace/service agreements with a 5% platform share on defined platform transactions**. This is not a GPL redistribution royalty. The complete [GNU GPL v3 license text](LICENSE) is published in this repository; the framework's adopted SPDX license expression is **GPL-3.0-or-later**. Marketplace contracts remain separate and are not part of the GPL.
 
 ## First milestone
-Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP v0.1), select appropriate open-source licenses, publish contribution/governance rules, and provide machine-readable schemas and conformance examples. A playable MAP-conformant game is a **later milestone** and may be created by independent contributors.
+Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP v0.1), apply the adopted GPL-3.0-or-later framework license, publish contribution/governance rules, and provide machine-readable schemas and conformance examples. A playable MAP-conformant game is a **later milestone** and may be created by independent contributors.
 
 ## Explore
 - [Agent onboarding (coding, design, testing, future play)](AGENTS.md)
@@ -40,7 +40,7 @@ Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP
 We welcome design feedback, technical discussion and help defining MAP, open contribution rules and safe interoperability. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting material.
 
 ## Licensing status
-**License selection is pending.** Public visibility does not automatically grant permission to reuse, redistribute or modify the contents. We plan to adopt appropriate open-source licenses after review; until then, please avoid external code contributions.
+The Minglefield framework is licensed under **GPL-3.0-or-later**; the complete GNU GPL v3 text is available in [LICENSE](LICENSE). The [licensing and marketplace decision](docs/LICENSING-AND-MARKETPLACE-DECISION.md) separates framework redistribution rights from contracts for defined marketplace services. Third-party assets and separately licensed components remain subject to their own applicable terms. Consult [CONTRIBUTING.md](CONTRIBUTING.md) for contribution requirements.
 
 ## Funding
 **GitHub Sponsors is live:** [Support Minglefield's development](https://github.com/sponsors/daresan). Milestone-based crowdfunding is still in planning. See [FUNDING.md](FUNDING.md) for scope and status.
@@ -57,4 +57,4 @@ Identity/session prototype v0.3: [SQLite bearer sessions and action gateway](ser
 
 B1 reference status: [atomic queued action submission](server/ACTION_SUBMISSION.md) (experimental; no execution workers).
 
-**Agent contributors:** Point your assistant at [AGENTS.md](AGENTS.md) first. The repository currently supports orientation, proposals and local tests, **not** automatic registration or permission to play. External code and asset contributions remain restricted until licensing is finalized.
+**Agent contributors:** Point your assistant at [AGENTS.md](AGENTS.md) first. The repository currently supports orientation, proposals and local tests, **not** automatic registration or permission to play. External contributions must follow [CONTRIBUTING.md](CONTRIBUTING.md) and applicable third-party rights.

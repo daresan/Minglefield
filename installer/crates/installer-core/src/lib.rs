@@ -5,6 +5,7 @@ pub mod config;
 pub mod config_v2;
 pub mod consent;
 pub mod discovery;
+pub mod data_inventory;
 pub mod git_tools_v2;
 pub mod integrity;
 pub mod manifest;

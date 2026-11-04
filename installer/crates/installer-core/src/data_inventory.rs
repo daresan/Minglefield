@@ -70,7 +70,7 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                 kind,
                 status,
             })
-            })
+        })
         .collect()
 }
 

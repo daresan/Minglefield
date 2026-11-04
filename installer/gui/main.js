@@ -67,5 +67,20 @@ document.querySelector("#preview").addEventListener("click", async () => {
     result.textContent = "Plan rejected: " + String(error);
   }
 });
+document.querySelector("#inspect-source").addEventListener("click", async () => {
+  const output = document.querySelector("#source-result");
+  const path = document.querySelector("#source-path").value.trim();
+  if (!path) {
+    output.textContent = "Select a source directory first.";
+    return;
+  }
+  output.textContent = "Inspecting selected directory…";
+  try {
+    const inspection = await invoke("inspect_source_path", { path });
+    output.textContent = JSON.stringify(inspection, null, 2);
+  } catch (error) {
+    output.textContent = "Inspection failed: " + String(error);
+  }
+});
 loadDefault();
 loadFrameworkLicense();

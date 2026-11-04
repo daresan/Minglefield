@@ -109,6 +109,26 @@ fn inspect_source_path(path: String) -> SourceInspection {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DataInventoryItem {
+    relative_path: String,
+    kind: &'static str,
+    status: &'static str,
+}
+
+#[tauri::command]
+fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
+    minglefield_installer_core::data_inventory::inspect_data_directory(std::path::Path::new(&path))
+        .into_iter()
+        .map(|candidate| DataInventoryItem {
+            relative_path: candidate.relative_path,
+            kind: candidate.kind,
+            status: candidate.status,
+        })
+        .collect()
+}
+
 #[tauri::command]
 fn default_configuration() -> Result<DefaultConfig, String> {
     let c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
@@ -188,6 +208,7 @@ fn main() {
             framework_license,
             application_readme,
             inspect_source_path,
+            inspect_existing_data,
             preview_install_plan
         ])
         .run(tauri::generate_context!())

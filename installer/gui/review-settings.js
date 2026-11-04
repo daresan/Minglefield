@@ -2,7 +2,7 @@
 // Preserve the selected setup mode and all non-path versioned configuration keys.
 export function versionedPath(text, key) {
   const values = text.split(/\r?\n/).map(line => line.trim())
-    .filter(line => line && line.split("=", 1)[0].trim() === key)
+    .filter(line => line.includes("=") && line.slice(0, line.indexOf("=")).trim() === key)
     .map(line => line.slice(line.indexOf("=") + 1).trim());
   if (values.length !== 1) throw new Error("Expected exactly one " + key + " in versioned configuration.");
   return values[0];

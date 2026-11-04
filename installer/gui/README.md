@@ -46,3 +46,9 @@ This section concerns **installing Minglefield itself**, not the independent, st
 - The `publisher::PublisherPolicy` placeholder currently rejects even checksum-valid artifacts with `RepositoryProvenanceUnavailable`, until repository/release provenance verification is implemented. This is **not** a demand for a paid signing certificate. No installation execution is enabled.
 
 Platform packaging and OS security prompts must be documented honestly; Minglefield's own policy must not misrepresent operating-system trust requirements.
+
+## Cross-platform GUI CI (initial smoke gate)
+
+The `tauri-gui` job in `.github/workflows/installer-rust.yml` now runs on Windows, Ubuntu and macOS. It checks Tauri Rust formatting, compiles and lints the separate `src-tauri` crate, runs its Rust tests and builds the Vite frontend. Linux runners install the WebKitGTK 4.1 and related development libraries.
+
+**Temporary bootstrap limitation:** The GUI currently has neither `package-lock.json` nor `src-tauri/Cargo.lock` checked in. Therefore the new GUI job uses `npm install` and unlocked Cargo commands rather than claiming reproducible dependency resolution. Before release, generate and commit both lockfiles, replace `npm install` with `npm ci`, and add `--locked` to GUI Cargo checks. The existing installer-core/CLI CI remains locked. This job checks compilation, **not** native bundles, installation or GUI interaction.

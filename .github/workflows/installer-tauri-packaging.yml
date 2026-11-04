@@ -49,8 +49,9 @@ jobs:
       - name: Generate native icons from SVG master (replaces invalid preview PNG)
         run: npm run tauri -- icon icon-source.svg
       - name: Validate generated PNG icon decoding
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           import pathlib
           import struct
           import zlib
@@ -74,6 +75,7 @@ jobs:
           assert chunks[0][0] == b'IHDR' and chunks[-1][0] == b'IEND'
           zlib.decompress(b''.join(payload for kind, payload in chunks if kind == b'IDAT'))
           print('Generated PNG: CRC and IDAT decompression OK')
+          PY
       - name: Build native preview package (no release publication)
         run: npm run tauri -- build --bundles ${{ matrix.bundle }} --config '{"bundle":{"active":true}}'
       - name: Upload preview bundle for inspection

@@ -45,8 +45,14 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_root() -> std::path::PathBuf {
-        let unique = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let root = std::env::temp_dir().join(format!("minglefield-discovery-{}-{unique}", std::process::id()));
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "minglefield-discovery-{}-{unique}",
+            std::process::id()
+        ));
         fs::create_dir(&root).unwrap();
         root
     }
@@ -66,14 +72,20 @@ mod tests {
         assert!(!candidate.launch_ready);
         assert!(!root.join(".git").exists());
         fs::remove_file(root.join("AGENTS.md")).unwrap();
-        assert_eq!(inspect_source_directory(root).kind, CandidateKind::Unrecognized);
+        assert_eq!(
+            inspect_source_directory(root).kind,
+            CandidateKind::Unrecognized
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn rejects_unrelated_and_missing_paths() {
         let root = test_root();
-        assert_eq!(inspect_source_directory(&root).kind, CandidateKind::Unrecognized);
+        assert_eq!(
+            inspect_source_directory(&root).kind,
+            CandidateKind::Unrecognized
+        );
         assert_eq!(
             inspect_source_directory(&root.join("missing")).kind,
             CandidateKind::Unrecognized

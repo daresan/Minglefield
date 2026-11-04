@@ -21,9 +21,11 @@ async function loadFrameworkLicense() {
 }
 
 
-for (const radio of document.querySelectorAll('input[name="mode"]')) {
+for (const radio of document.querySelectorAll('input[name="mode"], input[name="setup-mode"]')) {
   radio.addEventListener("change", () => {
+    const advanced = document.querySelector('input[name="setup-mode"]:checked').value === "advanced";
     const useConfig = document.querySelector('input[name="mode"]:checked').value === "config";
+    document.querySelector("#advanced-options").hidden = !advanced;
     pathsSection.hidden = useConfig;
     configSection.hidden = !useConfig;
   });
@@ -50,10 +52,12 @@ async function loadDefault() {
 document.querySelector("#preview").addEventListener("click", async () => {
   result.textContent = "Validating…";
   try {
-    const useConfig = document.querySelector('input[name="mode"]:checked').value === "config";
+    if (!defaultConfig) throw new Error("Default configuration unavailable");
+    const advanced = document.querySelector('input[name="setup-mode"]:checked').value === "advanced";
+    const useConfig = advanced && document.querySelector('input[name="mode"]:checked').value === "config";
     const plan = await invoke("preview_install_plan", {
-      installDir: destination.value,
-      dataDir: dataDirectory.value,
+      installDir: advanced ? destination.value : defaultConfig.installDir,
+      dataDir: advanced ? dataDirectory.value : defaultConfig.dataDir,
       configText: useConfig ? configText.value : null
     });
     result.textContent = JSON.stringify(plan, null, 2);

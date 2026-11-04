@@ -8,10 +8,10 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 **Approved 2026-11-03:** This is the **next binding development phase**. All unfinished feature plans below are **deferred in execution order**, not cancelled; blocking security fixes and required prerequisites remain permitted. This priority supersedes earlier roadmap ordering, including the prior P1.4f/P1.4g/P1.5 sequencing. Do not mistake third-party game/integration installation for the Minglefield platform installer.
 
-**Requirements and implementation gates:** [Platform Installer & First-Run Onboarding phase](docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md).
+**Requirements and implementation gates:** [Platform Installer & First-Run Onboarding phase](docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md). **Binding licensing/commercial model:** [GNU GPL framework + separate 5% marketplace share](docs/LICENSING-AND-MARKETPLACE-DECISION.md); do not reopen this choice as a generic prerequisite.
 
 - [ ] Complete branch-aware repository inventory of dependencies, packaging, gateway startup, Host claim/auth/persistence and platform-update surfaces.
-- [ ] Select a cross-platform graphical installer architecture for Windows, Linux and macOS that launches without preinstalled Python or Conda.
+- [x] Select and smoke-test Tauri 2 as the shared cross-platform graphical setup-manager architecture; Windows NSIS installation, GUI launch and uninstallation were manually tested, and Windows/Linux/macOS native preview packages built in CI without preinstalled Python/Conda. **Actual Minglefield installation is not implemented.**
 - [ ] Deliver standard and advanced setup flows: install location, verified Python acquisition/reuse, optional Conda and ComfyUI detection/manual selection/consented installation.
 - [ ] Automatically provision **this computer** as the authenticated local Host on first install, without manual claim-token entry; retain the secure manual claim flow for remote Hosts.
 - [ ] Reuse existing Hosts settings and persistence for all installer-configured Host controls; no parallel settings database.
@@ -22,7 +22,8 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 ## Stage 0 — Public foundation (in progress)
 - [x] Establish the public repository.
 - [x] Publish the initial project vision, roadmap and contribution guidelines.
-- [ ] Select and review open-source licenses before accepting external code contributions.
+- [x] Decide the GNU GPL framework and separate 5% marketplace-service model (see binding decision document).
+- [ ] Publish the canonical root GPL LICENSE text, rights notices and contributor terms before accepting external code contributions.
 - [ ] Establish public discussion and issue templates.
 - [x] Publish Real Jobs category and initial Austrian legal counsel expression-of-interest call.
 - [x] Publish MAP v0.1 non-normative working draft.

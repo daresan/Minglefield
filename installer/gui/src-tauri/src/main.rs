@@ -1,4 +1,5 @@
 use minglefield_installer_core::config::InstallerConfig;
+use minglefield_installer_core::config_v2::InstallerConfigV2;
 use minglefield_installer_core::Mode;
 use serde::Serialize;
 
@@ -12,6 +13,12 @@ struct PlanPreview {
     install_optional_conda: bool,
     install_optional_comfyui: bool,
     execution_enabled: bool,
+    install_optional_git: bool,
+    install_optional_gh: bool,
+    offer_gh_login: bool,
+    consent_git: bool,
+    consent_gh: bool,
+    consent_login: bool,
 }
 
 #[derive(Serialize)]
@@ -38,24 +45,52 @@ fn preview_install_plan(
     data_dir: String,
     config_text: Option<String>,
 ) -> Result<PlanPreview, String> {
-    let c = if let Some(text) = config_text {
-        // An explicitly supplied config is validated without silent overrides.
-        InstallerConfig::parse(&text).map_err(str::to_string)?
+    let (c, tools) = if let Some(text) = config_text {
+        let version_lines: Vec<&str> = text
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.split_once('=').is_some_and(|(key, _)| key.trim() == "version"))
+            .collect();
+        if version_lines.len() != 1 {
+            return Err("missing or duplicate configuration version".to_owned());
+        }
+        let version = version_lines[0]
+            .split_once('=')
+            .map(|(_, value)| value.trim())
+            .unwrap_or("");
+        if version == "2" {
+            let config = InstallerConfigV2::parse(&text).map_err(str::to_string)?;
+            config.git_tools.validate().map_err(str::to_string)?;
+            (config.base, config.git_tools)
+        } else {
+            let config = InstallerConfig::parse(&text).map_err(str::to_string)?;
+            (config, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled())
+        }
     } else {
         let mut c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
         c.install_dir = install_dir;
         c.data_dir = data_dir;
-        c
+        (c, minglefield_installer_core::git_tools_v2::GitToolOptions::disabled())
     };
     let p = c.preview(Mode::Gui).map_err(|err| format!("{err:?}"))?;
     Ok(PlanPreview {
-        version: c.version,
+        version: if tools != minglefield_installer_core::git_tools_v2::GitToolOptions::disabled() {
+            2
+        } else {
+            c.version
+        },
         install_dir: p.install_dir,
         data_dir: c.data_dir,
         provision_host: p.provision_host,
         install_optional_conda: p.install_optional_conda,
         install_optional_comfyui: p.install_optional_comfyui,
         execution_enabled: false,
+        install_optional_git: tools.install_optional_git,
+        install_optional_gh: tools.install_optional_gh,
+        offer_gh_login: tools.offer_gh_login,
+        consent_git: tools.consent_git,
+        consent_gh: tools.consent_gh,
+        consent_login: tools.consent_login,
     })
 }
 

@@ -226,6 +226,46 @@ mod tests {
     }
 
     #[test]
+    fn plaintext_database_accepts_optional_password() {
+        let path = std::env::temp_dir().join(format!(
+            "minglefield-plaintext-password-{}.sqlite3",
+            std::process::id()
+        ));
+        {
+            let db = Connection::open(&path).unwrap();
+            db.execute_batch("CREATE TABLE alpha_users (id TEXT PRIMARY KEY);")
+                .unwrap();
+        }
+        assert!(inspect_sqlite_with_password(&path, "ignored-existing-password").is_ok());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn encrypted_database_requires_correct_password() {
+        let path = std::env::temp_dir().join(format!(
+            "minglefield-encrypted-password-{}.sqlite3",
+            std::process::id()
+        ));
+        {
+            let db = Connection::open(&path).unwrap();
+            db.pragma_update(None, "key", "StrongPassword9!").unwrap();
+            db.execute_batch("CREATE TABLE alpha_users (id TEXT PRIMARY KEY);")
+                .unwrap();
+        }
+        assert_eq!(
+            inspect_sqlite_with_password(&path, ""),
+            Err(InspectionError::PasswordRequired)
+        );
+        assert_eq!(
+            inspect_sqlite_with_password(&path, "incorrect"),
+            Err(InspectionError::UnlockFailed)
+        );
+        let result = inspect_sqlite_with_password(&path, "StrongPassword9!").unwrap();
+        assert_eq!(result.tables[0].name, "alpha_users");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn rejects_missing_file() {
         assert_eq!(
             inspect_sqlite(Path::new("minglefield-nonexistent-database-file")),

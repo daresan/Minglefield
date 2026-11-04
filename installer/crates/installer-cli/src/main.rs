@@ -1,5 +1,6 @@
 //! Read-only bootstrap CLI. Never writes application files or claims a Host.
 use minglefield_installer_core::config::InstallerConfig;
+use minglefield_installer_core::config_v2::InstallerConfigV2;
 use minglefield_installer_core::Mode;
 use std::env;
 use std::process::ExitCode;
@@ -43,7 +44,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             }
             "--help" | "-h" => {
                 println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH] [--json]");
-                println!("Config: UTF-8 key=value, version=1, optional install_dir/data_dir.");
+                println!("Config: UTF-8 key=value, version=1 or 2, optional install_dir/data_dir.");
                 println!("This prototype validates and prints a plan; nothing is installed.");
                 return Ok(());
             }
@@ -56,24 +57,65 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             "require --silent and exactly one of --defaults or --config FILE".to_string(),
         ));
     }
-    let mut config = if let Some(file) = config_file {
+    if let Some(file) = config_file {
         let text = std::fs::read_to_string(&file)
             .map_err(|err| (3, format!("cannot read config: {err}")))?;
-        InstallerConfig::parse(&text).map_err(|err| (3, format!("invalid config: {err}")))?
+        let version_lines: Vec<&str> = text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .filter(|line| line.split_once('=').is_some_and(|(key, _)| key.trim() == "version"))
+            .collect();
+        if version_lines.len() != 1 {
+            return Err((3, "invalid config: missing or duplicate version".to_string()));
+        }
+        let version = version_lines[0]
+            .split_once('=')
+            .map(|(_, value)| value.trim())
+            .unwrap_or("");
+        if version == "2" {
+            let mut config = InstallerConfigV2::parse(&text)
+                .map_err(|err| (3, format!("invalid config: {err}")))?;
+            if let Some(path) = install_dir {
+                config.base.install_dir = path;
+            }
+            let plan = config
+                .preview(Mode::Silent)
+                .map_err(|err| (3, format!("invalid installation plan: {err}")))?;
+            if json {
+                println!("{}", output::success_v2(&config, &plan));
+            } else {
+                println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+            }
+        } else {
+            let mut config = InstallerConfig::parse(&text)
+                .map_err(|err| (3, format!("invalid config: {err}")))?;
+            if let Some(path) = install_dir {
+                config.install_dir = path;
+            }
+            let plan = config
+                .preview(Mode::Silent)
+                .map_err(|err| (3, format!("invalid installation plan: {err:?}")))?;
+            if json {
+                println!("{}", output::success(&config, &plan));
+            } else {
+                println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+            }
+        }
     } else {
-        InstallerConfig::defaults()
-            .map_err(|err| (3, format!("cannot determine defaults: {err:?}")))?
-    };
-    if let Some(path) = install_dir {
-        config.install_dir = path;
-    }
-    let plan = config
-        .preview(Mode::Silent)
-        .map_err(|err| (3, format!("invalid installation plan: {err:?}")))?;
-    if json {
-        println!("{}", output::success(&config, &plan));
-    } else {
-        println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+        let mut config = InstallerConfig::defaults()
+            .map_err(|err| (3, format!("cannot determine defaults: {err:?}")))?;
+        if let Some(path) = install_dir {
+            config.install_dir = path;
+        }
+        let plan = config
+            .preview(Mode::Silent)
+            .map_err(|err| (3, format!("invalid installation plan: {err:?}")))?;
+        if json {
+            println!("{}", output::success(&config, &plan));
+        } else {
+            println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+        }
     }
     Ok(())
 }

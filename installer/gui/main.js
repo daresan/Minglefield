@@ -95,6 +95,18 @@ document.querySelector("#inspect-source").addEventListener("click", async () => 
     output.textContent = "Inspection failed: " + String(error);
   }
 });
+document.querySelector("#inspect-data").addEventListener("click", async () => {
+  const output = document.querySelector("#data-result");
+  const path = document.querySelector("#source-path").value.trim();
+  if (!path) { output.textContent = "Select a directory first."; return; }
+  output.textContent = "Inspecting known user-data locations…";
+  try {
+    const items = await invoke("inspect_existing_data", { path });
+    output.textContent = items.length
+      ? JSON.stringify(items, null, 2)
+      : "No known data candidates found at the checked locations. This does not prove the directory contains no Minglefield data.";
+  } catch (error) { output.textContent = "Data inspection failed: " + String(error); }
+});
 loadDefault();
 loadFrameworkLicense();
 loadApplicationReadme();

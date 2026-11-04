@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { previewArguments } from "./preview-arguments.js";
 import { validateDestinationPassword } from "./database-password-policy.js";
+import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -8,6 +9,9 @@ const result = document.querySelector("#result");
 const pathsSection = document.querySelector("#paths");
 const configSection = document.querySelector("#config-section");
 let defaultConfig = null;
+// Only explicit corrections on the Standard review page override safe defaults.
+// Advanced Custom Paths and Versioned Configuration keep their own state.
+const standardOverrides = { installDir: null, dataDir: null };
 
 async function loadFrameworkLicense() {
   const licenseText = document.querySelector("#license-text");
@@ -78,7 +82,8 @@ document.querySelector("#preview").addEventListener("click", async () => {
       defaults: defaultConfig,
       installDir: destination.value,
       dataDir: dataDirectory.value,
-      configText: configText.value
+      configText: configText.value,
+      standardOverrides
     });
     const plan = await invoke("preview_install_plan", {
       ...args,
@@ -234,10 +239,28 @@ const reviewFields = [
   ["review-data-dir", "data-directory"],
   ["review-source-dir", "source-path"]
 ];
+function activeConfiguration() {
+  return {
+    setupMode: document.querySelector('input[name="setup-mode"]:checked').value,
+    advancedSource: document.querySelector('input[name="mode"]:checked').value,
+    defaults: defaultConfig,
+    installDir: destination.value,
+    dataDir: dataDirectory.value,
+    configText: configText.value,
+    standardOverrides
+  };
+}
 function refreshReview() {
-  for (const [reviewId, sourceId] of reviewFields) {
-    document.querySelector("#" + reviewId).value = document.querySelector("#" + sourceId).value;
+  const issue = document.querySelector("#review-paths-status");
+  try {
+    const paths = effectiveReviewPaths(activeConfiguration());
+    document.querySelector("#review-install-dir").value = paths.installDir;
+    document.querySelector("#review-data-dir").value = paths.dataDir;
+    issue.textContent = "These are the effective paths for the selected setup mode. Corrections are applied to the actual installation plan.";
+  } catch (error) {
+    issue.textContent = "Configuration cannot be reviewed: " + String(error);
   }
+  document.querySelector("#review-source-dir").value = document.querySelector("#source-path").value;
   document.querySelector("#review-database-path").value = selectedDatabase || "";
   document.querySelector("#review-database-summary").textContent = lastDatabaseInspection
     ? JSON.stringify({
@@ -249,18 +272,38 @@ function refreshReview() {
         tableCount: lastDatabaseInspection.tables.length,
         migrationEnabled: false
       }, null, 2)
-    : "No database inspected yet. Return to Source inspection to inspect a selected database.";
+    : "No database inspected. Fresh installation still requires encrypted SQLCipher.";
   document.querySelector("#review-security-summary").textContent =
-    "Destination password policy: " + passwordStatus.textContent +
-    " No passwords or password hashes are displayed here.";
+    "SQLCipher is mandatory for fresh installs and legacy imports. Destination password: " +
+    validateDestinationPassword(newDbPassword.value, confirmDbPassword.value).message +
+    " Execution is not enabled yet. No passwords are displayed.";
 }
-for (const [reviewId, sourceId] of reviewFields) {
-  document.querySelector("#" + reviewId).addEventListener("input", () => {
-    const source = document.querySelector("#" + sourceId);
-    source.value = document.querySelector("#" + reviewId).value;
-    source.dispatchEvent(new Event("input", { bubbles: true }));
+for (const [reviewId, sourceId, configKey, overrideKey] of [
+  ["review-install-dir", "destination", "install_dir", "installDir"],
+  ["review-data-dir", "data-directory", "data_dir", "dataDir"]
+]) {
+  document.querySelector("#" + reviewId).addEventListener("change", () => {
+    const value = document.querySelector("#" + reviewId).value;
+    const mode = activeConfiguration();
+    try {
+      if (!value.trim()) throw new Error("A directory cannot be empty.");
+      if (mode.setupMode === "standard") {
+        standardOverrides[overrideKey] = value;
+      } else if (mode.advancedSource === "defaults") {
+        document.querySelector("#" + sourceId).value = value;
+      } else {
+        configText.value = replaceVersionedPath(configText.value, configKey, value);
+      }
+      refreshReview();
+    } catch (error) {
+      document.querySelector("#review-paths-status").textContent = "Correction rejected: " + String(error);
+    }
   });
 }
+document.querySelector("#review-source-dir").addEventListener("input", () => {
+  document.querySelector("#source-path").value = document.querySelector("#review-source-dir").value;
+});
+
 for (const tab of ["paths", "database", "security"]) {
   document.querySelector("#review-tab-" + tab).addEventListener("click", () => {
     for (const name of ["paths", "database", "security"]) {
@@ -268,6 +311,28 @@ for (const tab of ["paths", "database", "security"]) {
     }
     refreshReview();
   });
+}
+function refreshFinalConfiguration() {
+  const summary = document.querySelector("#review-effective-summary");
+  try {
+    const mode = activeConfiguration();
+    const paths = effectiveReviewPaths(mode);
+    summary.textContent = JSON.stringify({
+      setupMode: mode.setupMode,
+      advancedSource: mode.setupMode === "advanced" ? mode.advancedSource : null,
+      effectiveInstallDir: paths.installDir,
+      effectiveDataDir: paths.dataDir,
+      existingSourceDir: document.querySelector("#source-path").value || null,
+      databaseOperation: selectedDatabase ? "Legacy database import and migration" : "Fresh SQLCipher database",
+      sourceDatabase: selectedDatabase,
+      databaseInspected: !!lastDatabaseInspection,
+      sqlcipherRequired: true,
+      destinationPasswordValid: validateDestinationPassword(newDbPassword.value, confirmDbPassword.value).valid,
+      executionEnabled: false
+    }, null, 2);
+  } catch (error) {
+    summary.textContent = "Cannot resolve effective configuration: " + String(error);
+  }
 }
 let wizardIndex = 0;
 function updateWizardNavigation() {
@@ -280,6 +345,7 @@ function showWizardPage(index) {
   if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
   wizardIndex = index;
   if (wizardPages[index].dataset.wizardPage === "data-review") refreshReview();
+  if (wizardPages[index].dataset.wizardPage === "review") refreshFinalConfiguration();
   wizardPages.forEach((page, position) => { page.hidden = position !== index; });
   document.querySelector("#wizard-back").disabled = index === 0;
   updateWizardNavigation();

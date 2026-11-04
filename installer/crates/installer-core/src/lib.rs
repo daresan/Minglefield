@@ -1,11 +1,11 @@
 //! Shared, side-effect-free installation planning for GUI and CLI.
 //! This crate does not install files, claim Hosts, or establish publisher trust.
 
-pub mod database_password;
 pub mod config;
 pub mod config_v2;
 pub mod consent;
 pub mod data_inventory;
+pub mod database_password;
 pub mod discovery;
 pub mod git_tools_v2;
 pub mod integrity;

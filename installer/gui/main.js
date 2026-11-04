@@ -129,10 +129,10 @@ async function inspectDefaultUserData() {
         const radio = document.createElement("input");
         radio.type = "radio";
         radio.name = "selected-database";
-        radio.value = item.relativePath;
+        radio.value = item.sourceDirectory + "/" + item.relativePath;
         radio.style.width = "auto";
-        radio.addEventListener("change", () => { selectedDatabase = item.relativePath; });
-        label.append(radio, document.createTextNode(" " + item.relativePath + " — " + item.status));
+        radio.addEventListener("change", () => { selectedDatabase = radio.value; });
+        label.append(radio, document.createTextNode(" " + item.sourceDirectory + "/" + item.relativePath + " — " + item.status));
         selection.append(label);
       }
     }

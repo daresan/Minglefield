@@ -23,7 +23,8 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 - [x] Establish the public repository.
 - [x] Publish the initial project vision, roadmap and contribution guidelines.
 - [x] Decide the GNU GPL framework and separate 5% marketplace-service model (see binding decision document).
-- [ ] Publish the canonical root GPL LICENSE text, rights notices and contributor terms before accepting external code contributions.
+- [x] Publish the canonical root GNU GPL v3 LICENSE text.
+- [ ] Complete project-owned copyright/SPDX notices, third-party rights inventory and contributor intake terms.
 - [ ] Establish public discussion and issue templates.
 - [x] Publish Real Jobs category and initial Austrian legal counsel expression-of-interest call.
 - [x] Publish MAP v0.1 non-normative working draft.

@@ -80,7 +80,11 @@ document.querySelector("#preview").addEventListener("click", async () => {
       dataDir: dataDirectory.value,
       configText: configText.value
     });
-    const plan = await invoke("preview_install_plan", args);
+    const plan = await invoke("preview_install_plan", {
+      ...args,
+      newDbPassword: newDbPassword.value,
+      confirmDbPassword: confirmDbPassword.value
+    });
     result.textContent = JSON.stringify(plan, null, 2);
   } catch (error) {
     result.textContent = "Plan rejected: " + String(error);

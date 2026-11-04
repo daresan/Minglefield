@@ -11,6 +11,7 @@ pub mod integrity;
 pub mod manifest;
 pub mod publisher;
 pub mod release_source;
+pub mod schema_versions;
 
 use std::path::{Component, Path};
 

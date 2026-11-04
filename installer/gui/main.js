@@ -107,6 +107,33 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
       : "No known data candidates found at the checked locations. This does not prove the directory contains no Minglefield data.";
   } catch (error) { output.textContent = "Data inspection failed: " + String(error); }
 });
+const existingDbPassword = document.querySelector("#existing-db-password");
+const newDbPassword = document.querySelector("#new-db-password");
+const confirmDbPassword = document.querySelector("#confirm-db-password");
+const passwordStatus = document.querySelector("#new-db-password-status");
+
+function updateNewDatabasePasswordStatus() {
+  const password = newDbPassword.value;
+  const missing = [];
+  if ([...password].length < 8) missing.push("at least 8 characters");
+  if (!/\\p{Lu}/u.test(password)) missing.push("an uppercase letter");
+  if (!/[0-9]/.test(password)) missing.push("a digit");
+  if (![...password].some((c) => !/[\\p{L}\\p{N}\\s]/u.test(c))) missing.push("a special character");
+  if (missing.length) {
+    passwordStatus.textContent = "New password requires " + missing.join(", ") + ". Migration remains disabled.";
+  } else if (password !== confirmDbPassword.value) {
+    passwordStatus.textContent = "New password meets the policy; confirmation does not match. Migration remains disabled.";
+  } else {
+    passwordStatus.textContent = "New password meets the policy and confirmation matches. Migration remains disabled until encryption is implemented.";
+  }
+}
+newDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
+confirmDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
+window.addEventListener("pagehide", () => {
+  existingDbPassword.value = "";
+  newDbPassword.value = "";
+  confirmDbPassword.value = "";
+});
 let selectedDatabase = null;
 
 async function inspectSelectedSqlite() {

@@ -194,7 +194,10 @@ struct SqliteSchemaObjectPreview {
 }
 
 #[tauri::command]
-async fn inspect_sqlite_database(path: String, password: String) -> Result<SqliteInspectionPreview, String> {
+async fn inspect_sqlite_database(
+    path: String,
+    password: String,
+) -> Result<SqliteInspectionPreview, String> {
     let inspection = tauri::async_runtime::spawn_blocking(move || {
         minglefield_installer_core::sqlite_inspection::inspect_sqlite_with_password(
             std::path::Path::new(&path),

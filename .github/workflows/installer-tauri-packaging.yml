@@ -46,8 +46,34 @@ jobs:
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
       - name: Install locked frontend dependencies
         run: npm ci --no-audit --no-fund --ignore-scripts
-      - name: Generate native icon variants from tracked preview icon
-        run: npm run tauri -- icon src-tauri/icons/icon.png
+      - name: Generate native icons from SVG master (replaces invalid preview PNG)
+        run: npm run tauri -- icon icon-source.svg
+      - name: Validate generated PNG icon decoding
+        shell: python
+        run: |
+          import pathlib
+          import struct
+          import zlib
+
+          path = pathlib.Path('src-tauri/icons/icon.png')
+          data = path.read_bytes()
+          assert data[:8] == b'\x89PNG\r\n\x1a\n', 'invalid PNG signature'
+          pos = 8
+          chunks = []
+          while pos < len(data):
+              size = struct.unpack_from('>I', data, pos)[0]
+              kind = data[pos + 4:pos + 8]
+              payload = data[pos + 8:pos + 8 + size]
+              crc = struct.unpack_from('>I', data, pos + 8 + size)[0]
+              assert zlib.crc32(kind + payload) == crc, f'CRC mismatch in {kind!r}'
+              chunks.append((kind, payload))
+              pos += size + 12
+              if kind == b'IEND':
+                  break
+          assert pos == len(data), 'trailing PNG data'
+          assert chunks[0][0] == b'IHDR' and chunks[-1][0] == b'IEND'
+          zlib.decompress(b''.join(payload for kind, payload in chunks if kind == b'IDAT'))
+          print('Generated PNG: CRC and IDAT decompression OK')
       - name: Build native preview package (no release publication)
         run: npm run tauri -- build --bundles ${{ matrix.bundle }} --config '{"bundle":{"active":true}}'
       - name: Upload preview bundle for inspection

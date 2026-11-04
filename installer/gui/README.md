@@ -60,3 +60,7 @@ The setup-manager GUI now exposes the complete root `LICENSE` text as a read-onl
 ## Standard and Advanced setup preview
 
 The **Standard** view is selected by default and submits the Rust backend's per-user OS defaults to the shared `preview_install_plan` command. The **Advanced** view exposes custom install/data directories or the existing versioned `key=value` configuration editor (v1/v2). Switching back to Standard ignores hidden advanced values; it does not authorize optional components. Both routes remain strictly plan-only (`executionEnabled: false`). GUI acceptance of a preview does not constitute an installation or license/marketplace consent. Native packaged GUI smoke tests and a manual switch-mode test remain necessary after this change.
+
+## Setup-mode isolation regression tests
+
+`preview-arguments.js` is a pure, side-effect-free adapter for Standard/Advanced UI inputs. Run `node --test preview-arguments.test.js` to verify that Standard ignores hidden advanced values, Advanced custom paths and versioned configuration are mutually exclusive, and missing defaults/unknown modes fail closed. The `Installer Rust checks` workflow executes these Node tests in its Tauri GUI job on Windows, Ubuntu and macOS before the Vite build. These are parameter-mapping tests, **not** automated end-to-end GUI interaction or installation execution tests.

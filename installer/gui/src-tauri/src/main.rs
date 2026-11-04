@@ -163,6 +163,48 @@ fn inspect_default_user_data() -> Result<Vec<DataInventoryItem>, String> {
     Ok(paths.into_iter().flat_map(inspect_existing_data).collect())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SqliteInspectionPreview {
+    status: &'static str,
+    integrity_ok: bool,
+    application_id: i64,
+    user_version: i64,
+    tables: Vec<SqliteTablePreview>,
+    migration_enabled: bool,
+}
+
+#[derive(Serialize)]
+struct SqliteTablePreview {
+    name: String,
+    columns: Vec<String>,
+}
+
+#[tauri::command]
+async fn inspect_sqlite_database(path: String) -> Result<SqliteInspectionPreview, String> {
+    let inspection = tauri::async_runtime::spawn_blocking(move || {
+        minglefield_installer_core::sqlite_inspection::inspect_sqlite(std::path::Path::new(&path))
+    })
+    .await
+    .map_err(|_| "SQLite inspection task failed".to_owned())?
+    .map_err(|error| format!("SQLite inspection rejected: {error:?}"))?;
+    Ok(SqliteInspectionPreview {
+        status: "sqlite_integrity_verified_schema_unclassified",
+        integrity_ok: inspection.integrity_ok,
+        application_id: inspection.application_id,
+        user_version: inspection.user_version,
+        tables: inspection
+            .tables
+            .into_iter()
+            .map(|table| SqliteTablePreview {
+                name: table.name,
+                columns: table.columns,
+            })
+            .collect(),
+        migration_enabled: false,
+    })
+}
+
 #[tauri::command]
 fn default_configuration() -> Result<DefaultConfig, String> {
     let c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
@@ -244,6 +286,7 @@ fn main() {
             inspect_source_path,
             inspect_existing_data,
             inspect_default_user_data,
+            inspect_sqlite_database,
             preview_install_plan
         ])
         .run(tauri::generate_context!())

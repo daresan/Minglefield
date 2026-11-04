@@ -26,7 +26,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact: linux-executable
+            artifact: linux-appimage
           - os: windows-latest
             artifact: windows-exe
           - os: macos-latest
@@ -81,11 +81,14 @@ jobs:
           print('Generated PNG: CRC and IDAT decompression OK')
           PY
       # No NSIS or DEB: the manager must not install itself.
-      # Linux executable is a first portability smoke artifact, not yet a
-      # self-contained AppImage; WebKitGTK and system libraries remain required.
-      - name: Build directly runnable executable (Windows/Linux)
-        if: runner.os != 'macOS'
+      - name: Build directly runnable Windows executable
+        if: runner.os == 'Windows'
         run: npm run tauri -- build --no-bundle
+      - name: Build Linux AppImage without installing setup manager
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: npm run tauri -- build --bundles appimage --config '{"bundle":{"active":true}}'
       - name: Build runnable macOS application bundle (not an installer)
         if: runner.os == 'macOS'
         run: npm run tauri -- build --bundles app --config '{"bundle":{"active":true}}'
@@ -95,10 +98,11 @@ jobs:
         run: |
           $exe = 'src-tauri/target/release/minglefield-installer-gui.exe'
           if (!(Test-Path $exe -PathType Leaf)) { throw "Portable setup manager missing: $exe" }
-      - name: Verify Linux executable exists
+      - name: Verify Linux AppImage exists
         if: runner.os == 'Linux'
         shell: bash
-        run: test -x src-tauri/target/release/minglefield-installer-gui
+        run: |
+          find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -type f -size +0c | grep -q .
       - name: Verify macOS app bundle exists
         if: runner.os == 'macOS'
         shell: bash
@@ -111,12 +115,12 @@ jobs:
           path: installer/gui/src-tauri/target/release/minglefield-installer-gui.exe
           if-no-files-found: error
           retention-days: 7
-      - name: Upload Linux executable preview
+      - name: Upload Linux AppImage preview
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: tauri-portable-linux-executable
-          path: installer/gui/src-tauri/target/release/minglefield-installer-gui
+          name: tauri-portable-linux-appimage
+          path: installer/gui/src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
           retention-days: 7
       - name: Archive macOS app preserving bundle permissions

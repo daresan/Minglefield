@@ -9,6 +9,15 @@ use std::time::Duration;
 pub struct InspectedTable {
     pub name: String,
     pub columns: Vec<String>,
+    pub create_sql: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaObject {
+    pub object_type: String,
+    pub name: String,
+    pub table_name: String,
+    pub create_sql: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +25,7 @@ pub struct SqliteInspection {
     pub application_id: i64,
     pub user_version: i64,
     pub tables: Vec<InspectedTable>,
+    pub schema_objects: Vec<SchemaObject>,
     pub integrity_ok: bool,
 }
 
@@ -82,12 +92,40 @@ pub fn inspect_sqlite(path: &Path) -> Result<SqliteInspection, InspectionError> 
             .map_err(|_| InspectionError::DatabaseError)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|_| InspectionError::DatabaseError)?;
-        tables.push(InspectedTable { name, columns });
+        let create_sql = snapshot
+            .query_row(
+                "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?1",
+                [&name],
+                |row| row.get(0),
+            )
+            .map_err(|_| InspectionError::DatabaseError)?;
+        tables.push(InspectedTable {
+            name,
+            columns,
+            create_sql,
+        });
     }
+    drop(columns_stmt);
+    let mut objects_stmt = snapshot
+        .prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE type IN ('index', 'trigger', 'view') ORDER BY type, name")
+        .map_err(|_| InspectionError::DatabaseError)?;
+    let schema_objects = objects_stmt
+        .query_map([], |row| {
+            Ok(SchemaObject {
+                object_type: row.get(0)?,
+                name: row.get(1)?,
+                table_name: row.get(2)?,
+                create_sql: row.get(3)?,
+            })
+        })
+        .map_err(|_| InspectionError::DatabaseError)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|_| InspectionError::DatabaseError)?;
     Ok(SqliteInspection {
         application_id,
         user_version,
         tables,
+        schema_objects,
         integrity_ok: true,
     })
 }
@@ -121,6 +159,8 @@ mod tests {
         assert_eq!(result.user_version, 7);
         assert_eq!(result.tables[0].name, "alpha_users");
         assert_eq!(result.tables[0].columns, vec!["id"]);
+        assert!(result.tables[0].create_sql.as_deref().unwrap().contains("PRIMARY KEY"));
+        assert!(result.schema_objects.iter().any(|item| item.object_type == "index"));
         assert_eq!(std::fs::read(&path).unwrap(), before);
         std::fs::remove_file(path).unwrap();
     }

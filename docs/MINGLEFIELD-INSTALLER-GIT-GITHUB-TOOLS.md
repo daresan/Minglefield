@@ -39,3 +39,17 @@ Current installer configuration schema is version 1. It does **not** accept Git/
 - End-user consent UI and the actual installer execution path.
 
 **No Git, gh, login, package manager, Host claim or installation is executed by this document.**
+
+## Implemented read-only capability probe
+
+Run manually on a selected machine (not during CI and not automatically on every Host):
+
+```powershell
+python -B installer/scripts/probe_git_tools.py --json
+```
+
+The probe independently locates `git` and `gh` via PATH and invokes only their `--version` commands with a five-second timeout and no shell. Its results distinguish `missing`, `available` and `unverified`; it does not claim trusted binary provenance or that a particular Git operation is supported. No GitHub authentication check, token inspection, installation, network request or Host modification occurs. The result describes **only the machine running the probe**, not remote Hosts.
+
+Source audit finding: `sec01_host_commit_policy_sim.py` invokes Git via a **configured executable path** (`profile[0]`) for project initialization. Literal-only command scanners cannot prove the full executable dependency graph. The earlier Python import audit's `__import__("os")` at line 758 is a standard-library import, not another third-party package. This does not eliminate the need for broader invocation analysis and host-specific authorization checks.
+
+The probe is a diagnostic foundation, not a shipped installer or a substitute for provenance validation.

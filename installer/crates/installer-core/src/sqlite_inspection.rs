@@ -83,6 +83,11 @@ pub fn inspect_sqlite_with_password(
             .map_err(|_| InspectionError::UnlockFailed)?;
     }
     let mut snapshot = Connection::open_in_memory().map_err(|_| InspectionError::DatabaseError)?;
+    if !plaintext {
+        snapshot
+            .pragma_update(None, "key", password)
+            .map_err(|_| InspectionError::DatabaseError)?;
+    }
     {
         let backup =
             Backup::new(&source, &mut snapshot).map_err(|_| InspectionError::DatabaseError)?;

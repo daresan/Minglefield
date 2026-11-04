@@ -6,6 +6,7 @@ The SQLite backup API creates a consistent in-memory snapshot, including WAL.
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -28,8 +29,8 @@ def inspect_sqlite(path: str | Path) -> dict:
             return result
         # Reject URI injection by using an absolute Path and URI encoding.
         uri = source.resolve(strict=True).as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=3) as db:
-            with sqlite3.connect(":memory:") as snapshot:
+        with closing(sqlite3.connect(uri, uri=True, timeout=3)) as db:
+            with closing(sqlite3.connect(":memory:")) as snapshot:
                 db.backup(snapshot, pages=128, sleep=0.05)
                 check = snapshot.execute("PRAGMA quick_check").fetchall()
                 if check != [("ok",)]:

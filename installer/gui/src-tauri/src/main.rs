@@ -324,18 +324,34 @@ mod mandatory_database_password_tests {
 
     #[test]
     fn rejects_missing_password_even_for_fresh_install_preview() {
-        let result = preview_install_plan(String::new(), String::new(),
-            String::new(), String::new(), None);
+        let result = preview_install_plan(
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            None,
+        );
         assert!(result.is_err());
-        assert!(result.err().unwrap().contains("Invalid destination database password"));
+        assert!(result
+            .err()
+            .unwrap()
+            .contains("Invalid destination database password"));
     }
 
     #[test]
     fn rejects_mismatched_confirmation_at_backend_boundary() {
-        let result = preview_install_plan("ValidPass9!".into(), "OtherPass9!".into(),
-            String::new(), String::new(), None);
+        let result = preview_install_plan(
+            "ValidPass9!".into(),
+            "OtherPass9!".into(),
+            String::new(),
+            String::new(),
+            None,
+        );
         assert!(result.is_err());
-        assert!(result.err().unwrap().contains("confirmation does not match"));
+        assert!(result
+            .err()
+            .unwrap()
+            .contains("confirmation does not match"));
     }
 }
 

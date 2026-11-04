@@ -69,26 +69,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
       - name: Check Tauri Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
-      - name: Install GUI dependencies (bootstrap until lockfile is committed)
-        run: npm install --no-audit --no-fund --ignore-scripts
-      - name: Generate GUI Rust lockfile (bootstrap only)
-        if: runner.os == 'Linux'
-        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
-      - name: Upload GUI dependency lockfiles for review
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tauri-gui-lockfiles
-          path: |
-            installer/gui/package-lock.json
-            installer/gui/src-tauri/Cargo.lock
-          if-no-files-found: error
-          retention-days: 14
+      - name: Install locked GUI dependencies
+        run: npm ci --no-audit --no-fund --ignore-scripts
       - name: Build GUI frontend
         run: npm run web:build
-      - name: Compile Tauri GUI Rust backend (bootstrap until lockfile is committed)
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Compile locked Tauri GUI Rust backend
+        run: cargo check --manifest-path src-tauri/Cargo.toml --locked
       - name: Lint Tauri GUI Rust backend
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - name: Test Tauri GUI Rust backend
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked

@@ -4,12 +4,14 @@ on:
   push:
     paths:
       - "installer/gui/**"
+      - "installer/crates/**"
       - "README.md"
       - "LICENSE"
       - ".github/workflows/installer-tauri-packaging.yml"
   pull_request:
     paths:
       - "installer/gui/**"
+      - "installer/crates/**"
       - "README.md"
       - "LICENSE"
       - ".github/workflows/installer-tauri-packaging.yml"

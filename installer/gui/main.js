@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { previewArguments } from "./preview-arguments.js";
+import { validateDestinationPassword } from "./database-password-policy.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -64,6 +65,11 @@ async function loadDefault() {
   }
 }
 document.querySelector("#preview").addEventListener("click", async () => {
+  const passwordCheck = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
+  if (!passwordCheck.valid) {
+    result.textContent = "Plan validation blocked: " + passwordCheck.message;
+    return;
+  }
   result.textContent = "Validating…";
   try {
     const args = previewArguments({
@@ -113,20 +119,11 @@ const confirmDbPassword = document.querySelector("#confirm-db-password");
 const passwordStatus = document.querySelector("#new-db-password-status");
 
 function updateNewDatabasePasswordStatus() {
-  const password = newDbPassword.value;
-  const missing = [];
-  if ([...password].length < 8) missing.push("at least 8 characters");
-  if (!/\p{Lu}/u.test(password)) missing.push("an uppercase letter");
-  if (!/[0-9]/.test(password)) missing.push("a digit");
-  if (![...password].some((c) => !/[\p{L}\p{N}\s]/u.test(c))) missing.push("a special character");
-  if (missing.length) {
-    passwordStatus.textContent = "New password requires " + missing.join(", ") + ". Migration remains disabled.";
-  } else if (password !== confirmDbPassword.value) {
-    passwordStatus.textContent = "New password meets the policy; confirmation does not match. Migration remains disabled.";
-  } else {
-    passwordStatus.textContent = "New password meets the policy and confirmation matches. Migration remains disabled until encryption is implemented.";
-  }
+  const check = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
+  passwordStatus.textContent = check.message + " Database migration and installation execution are not yet enabled.";
+  if (typeof wizardIndex !== "undefined" && wizardIndex === 2) updateWizardNavigation();
 }
+
 newDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
 confirmDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
 window.addEventListener("pagehide", () => {
@@ -269,17 +266,29 @@ for (const tab of ["paths", "database", "security"]) {
   });
 }
 let wizardIndex = 0;
+function updateWizardNavigation() {
+  const passwordCheck = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
+  const next = document.querySelector("#wizard-next");
+  next.disabled = wizardIndex === wizardPages.length - 1 || (wizardIndex === 2 && !passwordCheck.valid);
+  next.title = wizardIndex === 2 && !passwordCheck.valid ? passwordCheck.message : "";
+}
 function showWizardPage(index) {
   if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
   wizardIndex = index;
   if (wizardPages[index].dataset.wizardPage === "data-review") refreshReview();
   wizardPages.forEach((page, position) => { page.hidden = position !== index; });
   document.querySelector("#wizard-back").disabled = index === 0;
-  document.querySelector("#wizard-next").disabled = index === wizardPages.length - 1;
+  updateWizardNavigation();
   document.querySelector("#wizard-progress").textContent =
     `Step ${index + 1} of ${wizardPages.length} — ${wizardNames[index]}`;
   document.querySelector("#wizard-step-label").textContent = wizardNames[index];
 }
 document.querySelector("#wizard-back").addEventListener("click", () => showWizardPage(wizardIndex - 1));
-document.querySelector("#wizard-next").addEventListener("click", () => showWizardPage(wizardIndex + 1));
+document.querySelector("#wizard-next").addEventListener("click", () => {
+  if (wizardIndex === 2) {
+    const check = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
+    if (!check.valid) { passwordStatus.textContent = check.message; return; }
+  }
+  showWizardPage(wizardIndex + 1);
+});
 showWizardPage(0);

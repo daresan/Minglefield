@@ -81,9 +81,7 @@ pub fn classify_header(
                 HeaderVersionStatus::VersionedUnverified(user_version)
             }
         }
-        _ if application_id == 0 && user_version == 0 => {
-            HeaderVersionStatus::LegacyUnversioned
-        }
+        _ if application_id == 0 && user_version == 0 => HeaderVersionStatus::LegacyUnversioned,
         _ => HeaderVersionStatus::UnregisteredApplication,
     }
 }
@@ -94,13 +92,27 @@ mod tests {
 
     #[test]
     fn header_version_is_advisory_and_requires_registered_identity() {
-        assert_eq!(classify_header(0, 0, None), HeaderVersionStatus::LegacyUnversioned);
-        assert_eq!(classify_header(123, 4, None), HeaderVersionStatus::UnregisteredApplication);
-        assert_eq!(classify_header(123, 4, Some(123)), HeaderVersionStatus::VersionedUnverified(4));
-        assert_eq!(classify_header(123, 0, Some(123)), HeaderVersionStatus::LegacyUnversioned);
-        assert_eq!(classify_header(999, 4, Some(123)), HeaderVersionStatus::UnregisteredApplication);
+        assert_eq!(
+            classify_header(0, 0, None),
+            HeaderVersionStatus::LegacyUnversioned
+        );
+        assert_eq!(
+            classify_header(123, 4, None),
+            HeaderVersionStatus::UnregisteredApplication
+        );
+        assert_eq!(
+            classify_header(123, 4, Some(123)),
+            HeaderVersionStatus::VersionedUnverified(4)
+        );
+        assert_eq!(
+            classify_header(123, 0, Some(123)),
+            HeaderVersionStatus::LegacyUnversioned
+        );
+        assert_eq!(
+            classify_header(999, 4, Some(123)),
+            HeaderVersionStatus::UnregisteredApplication
+        );
     }
-
 
     const APP: u32 = 0x4d_47_46_44;
 

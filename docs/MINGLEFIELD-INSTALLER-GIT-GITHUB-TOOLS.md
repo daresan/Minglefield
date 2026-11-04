@@ -53,3 +53,7 @@ The probe independently locates `git` and `gh` via PATH and invokes only their `
 Source audit finding: `sec01_host_commit_policy_sim.py` invokes Git via a **configured executable path** (`profile[0]`) for project initialization. Literal-only command scanners cannot prove the full executable dependency graph. The earlier Python import audit's `__import__("os")` at line 758 is a standard-library import, not another third-party package. This does not eliminate the need for broader invocation analysis and host-specific authorization checks.
 
 The probe is a diagnostic foundation, not a shipped installer or a substitute for provenance validation.
+
+## v2 parser implementation
+
+`installer/crates/installer-core/src/config_v2.rs` now parses the complete version-2 key/value configuration using the unchanged version-1 parser for common settings and `git_tools_v2` for the six new opt-in fields. Unknown, duplicate, missing or malformed settings fail closed. Version-1 input continues to use `InstallerConfig` and is not silently upgraded. The version-2 parser currently provides a read-only preview; **the CLI and GUI do not yet accept v2 input**. No Git/gh installation, authentication, Host claim or release execution is enabled.

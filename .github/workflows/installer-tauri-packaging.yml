@@ -56,10 +56,15 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import json
           import pathlib
           import struct
           import zlib
 
+          config = json.loads(pathlib.Path('src-tauri/tauri.conf.json').read_text(encoding='utf-8'))
+          for relative in config['bundle']['icon']:
+              icon = pathlib.Path('src-tauri') / relative
+              assert icon.is_file(), f'Configured icon does not exist: {icon}'
           path = pathlib.Path('src-tauri/icons/icon.png')
           data = path.read_bytes()
           assert data[:8] == b'\x89PNG\r\n\x1a\n', 'invalid PNG signature'
@@ -77,6 +82,8 @@ jobs:
                   break
           assert pos == len(data), 'trailing PNG data'
           assert chunks[0][0] == b'IHDR' and chunks[-1][0] == b'IEND'
+          width, height = struct.unpack_from('>II', chunks[0][1])
+          assert width == height and width > 0, f'AppImage icon must be square: {width}x{height}'
           zlib.decompress(b''.join(payload for kind, payload in chunks if kind == b'IDAT'))
           print('Generated PNG: CRC and IDAT decompression OK')
           PY

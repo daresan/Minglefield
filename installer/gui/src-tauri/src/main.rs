@@ -56,6 +56,30 @@ mod license_tests {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SourceInspection {
+    kind: &'static str,
+    location: String,
+    provenance_verified: bool,
+    launch_ready: bool,
+}
+
+#[tauri::command]
+fn inspect_source_path(path: String) -> SourceInspection {
+    use minglefield_installer_core::discovery::{inspect_source_directory, CandidateKind};
+    let candidate = inspect_source_directory(std::path::Path::new(&path));
+    SourceInspection {
+        kind: match candidate.kind {
+            CandidateKind::SourceCheckout => "source_checkout",
+            CandidateKind::Unrecognized => "unrecognized",
+        },
+        location: candidate.location,
+        provenance_verified: candidate.provenance_verified,
+        launch_ready: candidate.launch_ready,
+    }
+}
+
 #[tauri::command]
 fn default_configuration() -> Result<DefaultConfig, String> {
     let c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
@@ -133,6 +157,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             default_configuration,
             framework_license,
+            inspect_source_path,
             preview_install_plan
         ])
         .run(tauri::generate_context!())

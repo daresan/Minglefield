@@ -59,9 +59,48 @@ pub fn plan_migrations(
     Ok(result)
 }
 
+/// Header-only classification. This is advisory, not a schema or integrity check.
+/// No official Minglefield application ID has been assigned yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderVersionStatus {
+    LegacyUnversioned,
+    UnregisteredApplication,
+    VersionedUnverified(u32),
+}
+
+pub fn classify_header(
+    application_id: u32,
+    user_version: u32,
+    registered_application_id: Option<u32>,
+) -> HeaderVersionStatus {
+    match registered_application_id {
+        Some(expected) if expected != 0 && application_id == expected => {
+            if user_version == 0 {
+                HeaderVersionStatus::LegacyUnversioned
+            } else {
+                HeaderVersionStatus::VersionedUnverified(user_version)
+            }
+        }
+        _ if application_id == 0 && user_version == 0 => {
+            HeaderVersionStatus::LegacyUnversioned
+        }
+        _ => HeaderVersionStatus::UnregisteredApplication,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn header_version_is_advisory_and_requires_registered_identity() {
+        assert_eq!(classify_header(0, 0, None), HeaderVersionStatus::LegacyUnversioned);
+        assert_eq!(classify_header(123, 4, None), HeaderVersionStatus::UnregisteredApplication);
+        assert_eq!(classify_header(123, 4, Some(123)), HeaderVersionStatus::VersionedUnverified(4));
+        assert_eq!(classify_header(123, 0, Some(123)), HeaderVersionStatus::LegacyUnversioned);
+        assert_eq!(classify_header(999, 4, Some(123)), HeaderVersionStatus::UnregisteredApplication);
+    }
+
 
     const APP: u32 = 0x4d_47_46_44;
 

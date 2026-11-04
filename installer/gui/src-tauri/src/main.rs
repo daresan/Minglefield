@@ -156,8 +156,8 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
 
 #[tauri::command]
 fn inspect_default_user_data() -> Result<Vec<DataInventoryItem>, String> {
-    let paths = minglefield_installer_core::default_existing_data_search_paths()
-        .map_err(str::to_string)?;
+    let paths =
+        minglefield_installer_core::default_existing_data_search_paths().map_err(str::to_string)?;
     Ok(paths.into_iter().flat_map(inspect_existing_data).collect())
 }
 

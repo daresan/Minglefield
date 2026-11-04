@@ -1,9 +1,11 @@
-name: Tauri native package smoke builds
+name: Tauri portable manager smoke builds
 
 on:
   push:
     paths:
       - "installer/gui/**"
+      - "README.md"
+      - "LICENSE"
       - ".github/workflows/installer-tauri-packaging.yml"
   pull_request:
     paths:
@@ -15,18 +17,18 @@ permissions:
   contents: read
 
 jobs:
-  native-package:
-    name: Native preview package / ${{ matrix.os }}
+  portable-manager:
+    name: Portable setup manager preview / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            bundle: deb
+            artifact: linux-executable
           - os: windows-latest
-            bundle: nsis
+            artifact: windows-exe
           - os: macos-latest
-            bundle: dmg
+            artifact: macos-app
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -76,12 +78,50 @@ jobs:
           zlib.decompress(b''.join(payload for kind, payload in chunks if kind == b'IDAT'))
           print('Generated PNG: CRC and IDAT decompression OK')
           PY
-      - name: Build native preview package (no release publication)
-        run: npm run tauri -- build --bundles ${{ matrix.bundle }} --config '{"bundle":{"active":true}}'
-      - name: Upload preview bundle for inspection
+      # No NSIS or DEB: the manager must not install itself.
+      # Linux executable is a first portability smoke artifact, not yet a
+      # self-contained AppImage; WebKitGTK and system libraries remain required.
+      - name: Build directly runnable executable (Windows/Linux)
+        if: runner.os != 'macOS'
+        run: npm run tauri -- build --no-bundle
+      - name: Build runnable macOS application bundle (not an installer)
+        if: runner.os == 'macOS'
+        run: npm run tauri -- build --bundles app --config '{"bundle":{"active":true}}'
+      - name: Verify Windows portable executable exists
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = 'src-tauri/target/release/minglefield-installer-gui.exe'
+          if (!(Test-Path $exe -PathType Leaf)) { throw "Portable setup manager missing: $exe" }
+      - name: Verify Linux executable exists
+        if: runner.os == 'Linux'
+        shell: bash
+        run: test -x src-tauri/target/release/minglefield-installer-gui
+      - name: Verify macOS app bundle exists
+        if: runner.os == 'macOS'
+        shell: bash
+        run: test -d 'src-tauri/target/release/bundle/macos/Minglefield Installer.app'
+      - name: Upload Windows executable preview
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
-          name: tauri-preview-${{ matrix.bundle }}
-          path: installer/gui/src-tauri/target/release/bundle/
+          name: tauri-portable-windows-exe
+          path: installer/gui/src-tauri/target/release/minglefield-installer-gui.exe
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload Linux executable preview
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-portable-linux-executable
+          path: installer/gui/src-tauri/target/release/minglefield-installer-gui
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload macOS app preview
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-portable-macos-app
+          path: installer/gui/src-tauri/target/release/bundle/macos/*.app/
           if-no-files-found: error
           retention-days: 7

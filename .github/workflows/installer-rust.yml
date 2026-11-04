@@ -71,8 +71,8 @@ jobs:
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: Install locked GUI dependencies
         run: npm ci --no-audit --no-fund --ignore-scripts
-      - name: Test setup mode isolation (Node.js, all three OS)
-        run: node --test preview-arguments.test.js
+      - name: Test installer GUI validation and review (Node.js, all three OS)
+        run: node --test
       - name: Build GUI frontend
         run: npm run web:build
       - name: Compile locked Tauri GUI Rust backend

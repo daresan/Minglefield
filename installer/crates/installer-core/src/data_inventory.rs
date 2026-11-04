@@ -53,8 +53,12 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                     Ok(()) if &header[..16] == b"SQLite format 3\0" => {
                         let size = u16::from_be_bytes([header[16], header[17]]);
                         sqlite_page_size = Some(if size == 1 { 65536 } else { u32::from(size) });
-                        sqlite_user_version = Some(u32::from_be_bytes([header[60], header[61], header[62], header[63]]));
-                        sqlite_application_id = Some(u32::from_be_bytes([header[68], header[69], header[70], header[71]]));
+                        sqlite_user_version = Some(u32::from_be_bytes([
+                            header[60], header[61], header[62], header[63],
+                        ]));
+                        sqlite_application_id = Some(u32::from_be_bytes([
+                            header[68], header[69], header[70], header[71],
+                        ]));
                         "sqlite_header_valid_unverified"
                     }
                     _ => "unrecognized_database",

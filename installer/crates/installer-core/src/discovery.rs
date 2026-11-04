@@ -42,11 +42,19 @@ pub fn inspect_source_directory(path: &Path) -> Candidate {
 mod tests {
     use super::*;
     use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_root() -> std::path::PathBuf {
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("minglefield-discovery-{}-{unique}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        root
+    }
 
     #[test]
     fn recognizes_source_without_git_or_executable() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
+        let owned_root = test_root();
+        let root = owned_root.as_path();
         fs::write(root.join("README.md"), "# Minglefield\nTest").unwrap();
         fs::write(root.join("AGENTS.md"), "rules").unwrap();
         for dir in ["schemas", "server", "installer"] {
@@ -59,15 +67,17 @@ mod tests {
         assert!(!root.join(".git").exists());
         fs::remove_file(root.join("AGENTS.md")).unwrap();
         assert_eq!(inspect_source_directory(root).kind, CandidateKind::Unrecognized);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn rejects_unrelated_and_missing_paths() {
-        let tmp = tempfile::tempdir().unwrap();
-        assert_eq!(inspect_source_directory(tmp.path()).kind, CandidateKind::Unrecognized);
+        let root = test_root();
+        assert_eq!(inspect_source_directory(&root).kind, CandidateKind::Unrecognized);
         assert_eq!(
-            inspect_source_directory(&tmp.path().join("missing")).kind,
+            inspect_source_directory(&root.join("missing")).kind,
             CandidateKind::Unrecognized
         );
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -8,6 +8,8 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 **Approved 2026-11-03:** This is the **next binding development phase**. All unfinished feature plans below are **deferred in execution order**, not cancelled; blocking security fixes and required prerequisites remain permitted. This priority supersedes earlier roadmap ordering, including the prior P1.4f/P1.4g/P1.5 sequencing. Do not mistake third-party game/integration installation for the Minglefield platform installer.
 
+**Strict workstream boundary:** [Minglefield app installer versus community-game installation](docs/PLATFORM-VS-GAME-INSTALLATION-BOUNDARY.md). Game installation tests and policies are not platform installer acceptance gates.
+
 **Requirements and implementation gates:** [Platform Installer & First-Run Onboarding phase](docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md). **Binding licensing/commercial model:** [GNU GPL framework + separate 5% marketplace share](docs/LICENSING-AND-MARKETPLACE-DECISION.md); do not reopen this choice as a generic prerequisite.
 
 - [ ] Complete branch-aware repository inventory of dependencies, packaging, gateway startup, Host claim/auth/persistence and platform-update surfaces.

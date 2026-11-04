@@ -3,6 +3,7 @@ import { previewArguments } from "./preview-arguments.js";
 import { validateDestinationPassword } from "./database-password-policy.js";
 import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js";
 import { assessLegacyAlphaSchema } from "./legacy-schema.js";
+import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -69,6 +70,42 @@ async function loadDefault() {
     result.textContent = "Could not determine default configuration: " + String(error);
   }
 }
+const optionalIds = {
+  install_optional_git: "optional-git", consent_git: "consent-git",
+  install_optional_gh: "optional-gh", consent_gh: "consent-gh",
+  offer_gh_login: "optional-gh-login", consent_login: "consent-gh-login",
+  install_optional_conda: "optional-conda", install_optional_comfyui: "optional-comfyui",
+  explicit_optional_consent: "consent-runtime"
+};
+function currentOptionalSelection() {
+  return Object.fromEntries(Object.entries(optionalIds).map(([key, id]) =>
+    [key, document.querySelector("#" + id).checked]));
+}
+function optionalValidation() {
+  try {
+    const options = optionalSelection(currentOptionalSelection());
+    const setupMode = document.querySelector('input[name="setup-mode"]:checked').value;
+    const advancedSource = document.querySelector('input[name="mode"]:checked').value;
+    if (Object.values(options).some(Boolean) && setupMode === "advanced" && advancedSource === "config") {
+      throw new Error("Edit optional choices in the versioned configuration or deselect them here.");
+    }
+    return { valid: true, message: Object.values(options).some(Boolean)
+      ? "Optional selections validated for the installation plan."
+      : "No optional components selected." };
+  } catch (error) { return { valid: false, message: String(error) }; }
+}
+for (const id of Object.values(optionalIds)) {
+  document.querySelector("#" + id).addEventListener("change", () => {
+    document.querySelector("#optional-status").textContent = optionalValidation().message;
+    updateWizardNavigation();
+  });
+}
+for (const radio of document.querySelectorAll('input[name="setup-mode"], input[name="mode"]')) {
+  radio.addEventListener("change", () => {
+    document.querySelector("#optional-status").textContent = optionalValidation().message;
+    updateWizardNavigation();
+  });
+}
 document.querySelector("#preview").addEventListener("click", async () => {
   const passwordCheck = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
   if (!passwordCheck.valid) {
@@ -86,8 +123,11 @@ document.querySelector("#preview").addEventListener("click", async () => {
       configText: configText.value,
       standardOverrides
     });
+    const finalArgs = optionalPlanArguments(args, currentOptionalSelection(),
+      document.querySelector('input[name="setup-mode"]:checked').value,
+      document.querySelector('input[name="mode"]:checked').value);
     const plan = await invoke("preview_install_plan", {
-      ...args,
+      ...finalArgs,
       newDbPassword: newDbPassword.value,
       confirmDbPassword: confirmDbPassword.value
     });
@@ -142,7 +182,7 @@ const passwordStatus = document.querySelector("#new-db-password-status");
 function updateNewDatabasePasswordStatus() {
   const check = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
   passwordStatus.textContent = check.message + " Database migration and installation execution are not yet enabled.";
-  if (typeof wizardIndex !== "undefined" && wizardIndex === 2) updateWizardNavigation();
+  if (typeof wizardIndex !== "undefined" && wizardIndex === 3) updateWizardNavigation();
 }
 
 newDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
@@ -247,7 +287,7 @@ loadApplicationReadme();
 // Wizard navigation preserves the existing form controls and their values.
 // No page transition authorizes a download, filesystem write, or installation.
 const wizardPages = [...document.querySelectorAll("[data-wizard-page]")];
-const wizardNames = ["Welcome", "Configuration", "Source inspection", "Data review", "Review"];
+const wizardNames = ["Welcome", "Configuration", "Optional installations", "Source inspection", "Data review", "Review"];
 function activeConfiguration() {
   return {
     setupMode: document.querySelector('input[name="setup-mode"]:checked').value,
@@ -337,8 +377,11 @@ let wizardIndex = 0;
 function updateWizardNavigation() {
   const passwordCheck = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
   const next = document.querySelector("#wizard-next");
-  next.disabled = wizardIndex === wizardPages.length - 1 || (wizardIndex === 2 && !passwordCheck.valid);
-  next.title = wizardIndex === 2 && !passwordCheck.valid ? passwordCheck.message : "";
+  next.disabled = wizardIndex === wizardPages.length - 1 ||
+    (wizardIndex === 2 && !optionalValidation().valid) ||
+    (wizardIndex === 3 && !passwordCheck.valid);
+  next.title = wizardIndex === 2 && !optionalValidation().valid ? optionalValidation().message :
+    wizardIndex === 3 && !passwordCheck.valid ? passwordCheck.message : "";
 }
 function showWizardPage(index) {
   if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
@@ -358,7 +401,8 @@ function showWizardPage(index) {
 }
 document.querySelector("#wizard-back").addEventListener("click", () => showWizardPage(wizardIndex - 1));
 document.querySelector("#wizard-next").addEventListener("click", () => {
-  if (wizardIndex === 2) {
+  if (wizardIndex === 2 && !optionalValidation().valid) return;
+  if (wizardIndex === 3) {
     const check = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
     if (!check.valid) { passwordStatus.textContent = check.message; return; }
   }

@@ -56,3 +56,7 @@ Both `package-lock.json` and `src-tauri/Cargo.lock` are tracked. CI installs fro
 ## Bundled framework license preview
 
 The setup-manager GUI now exposes the complete root `LICENSE` text as a read-only, accessible panel. The Tauri Rust backend embeds that file at compile time and returns it via `framework_license`; a Rust regression test checks its identity and completeness. The preview does not require a network request or assert acceptance, and it does not grant consent for marketplace services or installation writes. The GUI is still plan-only. When building the GUI outside the repository layout, the root `LICENSE` file must be available at the expected relative path; packaged binaries embed the text and do not need that source file at runtime.
+
+## Standard and Advanced setup preview
+
+The **Standard** view is selected by default and submits the Rust backend's per-user OS defaults to the shared `preview_install_plan` command. The **Advanced** view exposes custom install/data directories or the existing versioned `key=value` configuration editor (v1/v2). Switching back to Standard ignores hidden advanced values; it does not authorize optional components. Both routes remain strictly plan-only (`executionEnabled: false`). GUI acceptance of a preview does not constitute an installation or license/marketplace consent. Native packaged GUI smoke tests and a manual switch-mode test remain necessary after this change.

@@ -6,6 +6,7 @@ on:
       - feat/game-integration-updates
     paths:
       - .github/workflows/prepare-installer-lockfiles.yml
+      - installer/crates/installer-core/Cargo.toml
   workflow_dispatch:
 
 permissions:

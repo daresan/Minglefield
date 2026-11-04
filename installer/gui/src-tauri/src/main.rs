@@ -168,6 +168,8 @@ fn inspect_default_user_data() -> Result<Vec<DataInventoryItem>, String> {
 struct SqliteInspectionPreview {
     status: &'static str,
     integrity_ok: bool,
+    foreign_key_violations: u64,
+    foreign_keys_ok: bool,
     application_id: i64,
     user_version: i64,
     tables: Vec<SqliteTablePreview>,
@@ -202,6 +204,8 @@ async fn inspect_sqlite_database(path: String) -> Result<SqliteInspectionPreview
     Ok(SqliteInspectionPreview {
         status: "sqlite_integrity_verified_schema_unclassified",
         integrity_ok: inspection.integrity_ok,
+        foreign_key_violations: inspection.foreign_key_violations,
+        foreign_keys_ok: inspection.foreign_key_violations == 0,
         application_id: inspection.application_id,
         user_version: inspection.user_version,
         tables: inspection

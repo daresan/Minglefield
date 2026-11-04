@@ -113,6 +113,7 @@ fn inspect_source_path(path: String) -> SourceInspection {
 #[serde(rename_all = "camelCase")]
 struct DataInventoryItem {
     relative_path: String,
+    source_directory: String,
     kind: &'static str,
     status: &'static str,
     sqlite_page_size: Option<u32>,
@@ -126,6 +127,7 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
         .into_iter()
         .map(|candidate| DataInventoryItem {
             relative_path: candidate.relative_path,
+            source_directory: path.clone(),
             kind: candidate.kind,
             status: candidate.status,
             sqlite_page_size: candidate.sqlite_page_size,
@@ -137,8 +139,9 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
 
 #[tauri::command]
 fn inspect_default_user_data() -> Result<Vec<DataInventoryItem>, String> {
-    let paths = minglefield_installer_core::default_user_paths().map_err(str::to_string)?;
-    Ok(inspect_existing_data(paths.data))
+    let paths = minglefield_installer_core::default_existing_data_search_paths()
+        .map_err(str::to_string)?;
+    Ok(paths.into_iter().flat_map(inspect_existing_data).collect())
 }
 
 #[tauri::command]

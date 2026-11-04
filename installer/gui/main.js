@@ -91,7 +91,18 @@ document.querySelector("#preview").addEventListener("click", async () => {
       newDbPassword: newDbPassword.value,
       confirmDbPassword: confirmDbPassword.value
     });
-    result.textContent = JSON.stringify(plan, null, 2);
+    result.textContent = JSON.stringify({
+      ...plan,
+      database: {
+        operation: selectedDatabase ? "legacy_sqlite_to_sqlcipher" : "create_sqlcipher",
+        source: selectedDatabase,
+        sourceInspected: Boolean(lastDatabaseInspection),
+        schemaAssessment: lastDatabaseInspection ? assessLegacyAlphaSchema(lastDatabaseInspection) : null,
+        destinationEncryptionRequired: true,
+        migrationEnabled: false,
+        executionEnabled: false
+      }
+    }, null, 2);
   } catch (error) {
     result.textContent = "Plan rejected: " + String(error);
   }
@@ -119,7 +130,7 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
   try {
     const items = await invoke("inspect_existing_data", { path });
     output.textContent = items.length
-      ? JSON.stringify(items, null, 2)
+      ? "Found " + items.length + " known data candidate(s). Select and inspect the database to continue."
       : "No known data candidates found at the checked locations. This does not prove the directory contains no Minglefield data.";
   } catch (error) { output.textContent = "Data inspection failed: " + String(error); }
 });
@@ -183,9 +194,11 @@ async function inspectSelectedSqlite() {
     existingDbPassword.value = "";
     const preview = await request;
     lastDatabaseInspection = preview;
-    output.textContent = JSON.stringify(preview, null, 2);
+    output.textContent = preview.integrityOk && preview.foreignKeysOk
+      ? "Database integrity verified. Continue after confirming the new encrypted database password. Application data mapping and migration execution are still pending."
+      : "Database integrity or foreign-key verification failed. Migration cannot proceed.";
   } catch (error) {
-    output.textContent = "SQLite inspection failed: " + String(error);
+    output.textContent = "Database inspection could not be completed. Check the selected file and existing database unlock password. " + String(error);
   }
 }
 
@@ -202,7 +215,7 @@ async function inspectDefaultUserData() {
     const items = await invoke("inspect_default_user_data");
     const databases = items.filter((item) => item.kind === "sqlite_database");
     output.textContent = items.length
-      ? JSON.stringify(items, null, 2)
+      ? "Found " + databases.length + " database candidate(s) and " + (items.length - databases.length) + " other data candidate(s). Select a database to inspect."
       : "No database or known configuration found in the default application data directory.";
     if (databases.length) {
       const heading = document.createElement("p");
@@ -308,27 +321,17 @@ for (const tab of ["paths", "database", "security"]) {
     refreshReview();
   });
 }
+// Application records must be loaded from the verified backend before editing.
+// Never fabricate fields or write credentials into an unverified destination.
+for (const tab of ["login", "hosts", "effects", "jobs", "games"]) {
+  document.querySelector("#data-tab-" + tab).addEventListener("click", () => {
+    for (const category of ["login", "hosts", "effects", "jobs", "games"]) {
+      document.querySelector("#data-editor-" + category).hidden = category !== tab;
+    }
+  });
+}
 function refreshFinalConfiguration() {
-  const summary = document.querySelector("#review-effective-summary");
-  try {
-    const mode = activeConfiguration();
-    const paths = effectiveReviewPaths(mode);
-    summary.textContent = JSON.stringify({
-      setupMode: mode.setupMode,
-      advancedSource: mode.setupMode === "advanced" ? mode.advancedSource : null,
-      effectiveInstallDir: paths.installDir,
-      effectiveDataDir: paths.dataDir,
-      existingSourceDir: document.querySelector("#source-path").value || null,
-      databaseOperation: selectedDatabase ? "Legacy database import and migration" : "Fresh SQLCipher database",
-      sourceDatabase: selectedDatabase,
-      databaseInspected: !!lastDatabaseInspection,
-      sqlcipherRequired: true,
-      destinationPasswordValid: validateDestinationPassword(newDbPassword.value, confirmDbPassword.value).valid,
-      executionEnabled: false
-    }, null, 2);
-  } catch (error) {
-    summary.textContent = "Cannot resolve effective configuration: " + String(error);
-  }
+  refreshReview();
 }
 let wizardIndex = 0;
 function updateWizardNavigation() {
@@ -340,7 +343,11 @@ function updateWizardNavigation() {
 function showWizardPage(index) {
   if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
   wizardIndex = index;
-  if (wizardPages[index].dataset.wizardPage === "data-review") refreshReview();
+  if (wizardPages[index].dataset.wizardPage === "data-review") {
+    document.querySelector("#data-editor-status").textContent = selectedDatabase
+      ? "Selected legacy database: application records are not yet mapped for editing. Migration is blocked until the backend supports verified record transfer."
+      : "Fresh installation: editable application defaults are not yet available. Database creation is not enabled.";
+  }
   if (wizardPages[index].dataset.wizardPage === "review") refreshFinalConfiguration();
   wizardPages.forEach((page, position) => { page.hidden = position !== index; });
   document.querySelector("#wizard-back").disabled = index === 0;

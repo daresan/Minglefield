@@ -15,7 +15,7 @@ Minglefield is an early-stage project to create a digital universe where people 
 
 ## Licensing and marketplace model
 
-The [binding project decision](docs/LICENSING-AND-MARKETPLACE-DECISION.md) adopts a GNU GPL framework model and **separate marketplace/service agreements with a 5% platform share on defined platform transactions**. This is not a GPL redistribution royalty. The canonical license file and marketplace contracts are not yet published; do not treat this decision document as a license grant.
+The [binding project decision](docs/LICENSING-AND-MARKETPLACE-DECISION.md) adopts a GNU GPL framework model and **separate marketplace/service agreements with a 5% platform share on defined platform transactions**. This is not a GPL redistribution royalty. The complete [GNU GPL v3 license text](LICENSE) is published in this repository; the framework's adopted SPDX license expression is **GPL-3.0-or-later**. Marketplace contracts remain separate and are not part of the GPL.
 
 ## First milestone
 Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP v0.1), select appropriate open-source licenses, publish contribution/governance rules, and provide machine-readable schemas and conformance examples. A playable MAP-conformant game is a **later milestone** and may be created by independent contributors.

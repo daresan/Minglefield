@@ -115,6 +115,54 @@ pub fn existing_data_search_paths(
     Ok(paths)
 }
 
+#[cfg(test)]
+mod existing_data_search_tests {
+    use super::existing_data_search_paths;
+
+    #[test]
+    fn linux_searches_xdg_and_gateway_legacy_directory() {
+        let paths = existing_data_search_paths(
+            "linux",
+            None,
+            "/home/tester",
+            Some("/tmp/xdg-data"),
+        )
+        .unwrap();
+        assert_eq!(
+            paths,
+            vec![
+                "/tmp/xdg-data/minglefield",
+                "/home/tester/.local/share/Minglefield",
+            ]
+        );
+    }
+
+    #[test]
+    fn macos_searches_application_support_and_gateway_legacy_directory() {
+        let paths =
+            existing_data_search_paths("darwin", None, "/Users/tester", None).unwrap();
+        assert_eq!(
+            paths,
+            vec![
+                "/Users/tester/Library/Application Support/Minglefield",
+                "/Users/tester/.local/share/Minglefield",
+            ]
+        );
+    }
+
+    #[test]
+    fn windows_keeps_single_default_data_directory() {
+        let paths = existing_data_search_paths(
+            "win32",
+            Some("C:\\Users\\Tester\\AppData\\Local"),
+            "C:\\Users\\Tester",
+            None,
+        )
+        .unwrap();
+        assert_eq!(paths, vec!["C:\\Users\\Tester\\AppData\\Local\\Minglefield"]);
+    }
+}
+
 pub fn default_existing_data_search_paths() -> Result<Vec<String>, &'static str> {
     let platform = if cfg!(windows) {
         "win32"

@@ -13,6 +13,10 @@ Minglefield is an early-stage project to create a digital universe where people 
 - **Games made together:** People and AI agents may propose, test and improve game projects, with security controls and human review.
 - **Open interoperability:** We plan documented protocols and SDKs to connect different games and models.
 
+## Licensing and marketplace model
+
+The [binding project decision](docs/LICENSING-AND-MARKETPLACE-DECISION.md) adopts a GNU GPL framework model and **separate marketplace/service agreements with a 5% platform share on defined platform transactions**. This is not a GPL redistribution royalty. The canonical license file and marketplace contracts are not yet published; do not treat this decision document as a license grant.
+
 ## First milestone
 Establish **Minglefield Foundation**: define the Minglefield Agent Protocol (MAP v0.1), select appropriate open-source licenses, publish contribution/governance rules, and provide machine-readable schemas and conformance examples. A playable MAP-conformant game is a **later milestone** and may be created by independent contributors.
 

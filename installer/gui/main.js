@@ -108,6 +108,22 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
   } catch (error) { output.textContent = "Data inspection failed: " + String(error); }
 });
 let selectedDatabase = null;
+
+async function inspectSelectedSqlite() {
+  const output = document.querySelector("#data-result");
+  if (!selectedDatabase) {
+    output.textContent = "Select a database first.";
+    return;
+  }
+  output.textContent = "Inspecting a read-only SQLite snapshot…";
+  try {
+    const preview = await invoke("inspect_sqlite_database", { path: selectedDatabase });
+    output.textContent = JSON.stringify(preview, null, 2);
+  } catch (error) {
+    output.textContent = "SQLite inspection failed: " + String(error);
+  }
+}
+
 async function inspectDefaultUserData() {
   const output = document.querySelector("#data-result");
   const selection = document.querySelector("#database-selection");
@@ -135,6 +151,11 @@ async function inspectDefaultUserData() {
         label.append(radio, document.createTextNode(" " + item.sourceDirectory + "/" + item.relativePath + " — " + item.status));
         selection.append(label);
       }
+      const inspectButton = document.createElement("button");
+      inspectButton.type = "button";
+      inspectButton.textContent = "Inspect selected SQLite database (read-only)";
+      inspectButton.addEventListener("click", inspectSelectedSqlite);
+      selection.append(inspectButton);
     }
   } catch (error) {
     output.textContent = "Application data inspection failed: " + String(error);

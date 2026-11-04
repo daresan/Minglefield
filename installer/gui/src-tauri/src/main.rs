@@ -249,10 +249,19 @@ fn default_configuration() -> Result<DefaultConfig, String> {
 
 #[tauri::command]
 fn preview_install_plan(
+    new_db_password: String,
+    confirm_db_password: String,
     install_dir: String,
     data_dir: String,
     config_text: Option<String>,
 ) -> Result<PlanPreview, String> {
+    // Enforce SQLCipher destination credentials at the Rust boundary even for
+    // preview. The frontend alone is not a security boundary.
+    minglefield_installer_core::database_password::validate_new_database_password(&new_db_password)
+        .map_err(|error| format!("Invalid destination database password: {error:?}"))?;
+    if new_db_password != confirm_db_password {
+        return Err("Destination database password confirmation does not match".to_owned());
+    }
     let (c, tools, config_version) = if let Some(text) = config_text {
         let version_lines: Vec<&str> = text
             .lines()

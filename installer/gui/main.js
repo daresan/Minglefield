@@ -98,3 +98,22 @@ document.querySelector("#inspect-source").addEventListener("click", async () => 
 loadDefault();
 loadFrameworkLicense();
 loadApplicationReadme();
+
+// Wizard navigation preserves the existing form controls and their values.
+// No page transition authorizes a download, filesystem write, or installation.
+const wizardPages = [...document.querySelectorAll("[data-wizard-page]")];
+const wizardNames = ["Welcome", "Configuration", "Source inspection", "Review"];
+let wizardIndex = 0;
+function showWizardPage(index) {
+  if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
+  wizardIndex = index;
+  wizardPages.forEach((page, position) => { page.hidden = position !== index; });
+  document.querySelector("#wizard-back").disabled = index === 0;
+  document.querySelector("#wizard-next").disabled = index === wizardPages.length - 1;
+  document.querySelector("#wizard-progress").textContent =
+    `Step ${index + 1} of ${wizardPages.length} — ${wizardNames[index]}`;
+  document.querySelector("#wizard-step-label").textContent = wizardNames[index];
+}
+document.querySelector("#wizard-back").addEventListener("click", () => showWizardPage(wizardIndex - 1));
+document.querySelector("#wizard-next").addEventListener("click", () => showWizardPage(wizardIndex + 1));
+showWizardPage(0);

@@ -22,6 +22,7 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
         ("minglefield.db", "sqlite_database"),
         ("data/minglefield.db", "sqlite_database"),
         ("data/alpha.db", "sqlite_database"),
+        ("alpha.sqlite3", "sqlite_database"),
     ];
     known.iter().filter_map(|(relative, kind)| {
         let path = root.join(relative);

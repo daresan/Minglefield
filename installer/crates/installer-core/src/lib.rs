@@ -2,9 +2,9 @@
 //! This crate does not install files, claim Hosts, or establish publisher trust.
 
 pub mod config;
-pub mod discovery;
 pub mod config_v2;
 pub mod consent;
+pub mod discovery;
 pub mod git_tools_v2;
 pub mod integrity;
 pub mod manifest;

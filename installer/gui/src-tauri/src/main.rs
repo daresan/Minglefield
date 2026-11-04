@@ -171,6 +171,7 @@ struct SqliteInspectionPreview {
     application_id: i64,
     user_version: i64,
     tables: Vec<SqliteTablePreview>,
+    schema_objects: Vec<SqliteSchemaObjectPreview>,
     migration_enabled: bool,
 }
 
@@ -178,6 +179,16 @@ struct SqliteInspectionPreview {
 struct SqliteTablePreview {
     name: String,
     columns: Vec<String>,
+    create_sql: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SqliteSchemaObjectPreview {
+    object_type: String,
+    name: String,
+    table_name: String,
+    create_sql: Option<String>,
 }
 
 #[tauri::command]
@@ -199,6 +210,17 @@ async fn inspect_sqlite_database(path: String) -> Result<SqliteInspectionPreview
             .map(|table| SqliteTablePreview {
                 name: table.name,
                 columns: table.columns,
+                create_sql: table.create_sql,
+            })
+            .collect(),
+        schema_objects: inspection
+            .schema_objects
+            .into_iter()
+            .map(|item| SqliteSchemaObjectPreview {
+                object_type: item.object_type,
+                name: item.name,
+                table_name: item.table_name,
+                create_sql: item.create_sql,
             })
             .collect(),
         migration_enabled: false,

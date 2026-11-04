@@ -68,3 +68,7 @@ The **Standard** view is selected by default and submits the Rust backend's per-
 ## Existing source checkout detection (read-only)
 
 The shared Rust installer core now exposes `discovery::inspect_source_directory` for an **explicitly selected** directory. The Tauri GUI provides a manual path input and `inspect_source_path` command. Recognition checks the Minglefield README identity and structural markers (`AGENTS.md`, `schemas/`, `server/`, `installer/`), without requiring `.git`, a preinstalled runtime, or an executable. It returns `source_checkout` or `unrecognized`, and always reports `provenanceVerified=false`, `launchReady=false`. This is **not** a signature check, proof of authenticity, exhaustive discovery of standard OS installation locations, or packaged application recognition. It performs no installation, Host claim, or data migration. Focused Rust tests cover positive and negative structural cases; cross-platform CI results must be verified before treating this increment as passing.
+
+## Binding application versus community-game installation scope
+
+See [platform-versus-game installation boundary](../../docs/PLATFORM-VS-GAME-INSTALLATION-BOUNDARY.md). This Tauri/Rust setup manager installs **Minglefield itself** only. Game integration trust checks, game marketplace licensing and the 5% marketplace transaction share do not apply to installation of the Minglefield application. CI for game integration does not validate this setup manager. The current GUI is still a non-installing preview.

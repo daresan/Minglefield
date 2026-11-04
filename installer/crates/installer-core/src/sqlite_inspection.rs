@@ -159,8 +159,15 @@ mod tests {
         assert_eq!(result.user_version, 7);
         assert_eq!(result.tables[0].name, "alpha_users");
         assert_eq!(result.tables[0].columns, vec!["id"]);
-        assert!(result.tables[0].create_sql.as_deref().unwrap().contains("PRIMARY KEY"));
-        assert!(result.schema_objects.iter().any(|item| item.object_type == "index"));
+        assert!(result.tables[0]
+            .create_sql
+            .as_deref()
+            .unwrap()
+            .contains("PRIMARY KEY"));
+        assert!(result
+            .schema_objects
+            .iter()
+            .any(|item| item.object_type == "index"));
         assert_eq!(std::fs::read(&path).unwrap(), before);
         std::fs::remove_file(path).unwrap();
     }

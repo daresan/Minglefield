@@ -1,0 +1,42 @@
+name: Commit Tauri GUI dependency lockfiles
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lockfiles:
+    if: github.ref == 'refs/heads/feat/game-integration-updates'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: tauri-gui-lockfiles
+          run-id: 41749627046
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: installer/gui
+      - name: Verify lockfiles before committing
+        shell: bash
+        run: |
+          test -s installer/gui/package-lock.json
+          test -s installer/gui/src-tauri/Cargo.lock
+          python -m json.tool installer/gui/package-lock.json >/dev/null
+          grep -q '^version = 4$' installer/gui/src-tauri/Cargo.lock
+          git status --short
+      - name: Commit generated lockfiles
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add installer/gui/package-lock.json installer/gui/src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Lockfiles already committed"
+          else
+            git commit -m "Lock Tauri GUI npm and Rust dependencies"
+            git push origin HEAD:feat/game-integration-updates
+          fi

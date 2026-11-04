@@ -32,6 +32,27 @@ pub fn success(config: &InstallerConfig, plan: &InstallPlan) -> String {
     )
 }
 
+
+/// Version 2 extends the v1 preview with explicit, independent Git/gh selections.
+/// The preview never runs installers or authentication.
+pub fn success_v2(
+    config: &minglefield_installer_core::config_v2::InstallerConfigV2,
+    plan: &InstallPlan,
+) -> String {
+    let legacy = success(&config.base, plan);
+    let prefix = legacy.strip_suffix('}').expect("v1 JSON object");
+    let tools = &config.git_tools;
+    format!(
+        "{prefix},\"config_version\":2,\"install_optional_git\":{},\"install_optional_gh\":{},\"offer_gh_login\":{},\"consent_git\":{},\"consent_gh\":{},\"consent_login\":{}}}",
+        tools.install_optional_git,
+        tools.install_optional_gh,
+        tools.offer_gh_login,
+        tools.consent_git,
+        tools.consent_gh,
+        tools.consent_login
+    )
+}
+
 pub fn failure(code: u8, message: &str) -> String {
     format!(
         "{{\"schema_version\":1,\"status\":\"error\",\"exit_code\":{code},\"execution_enabled\":false,\"error\":{}}}",

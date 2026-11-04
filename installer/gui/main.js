@@ -234,11 +234,6 @@ loadApplicationReadme();
 // No page transition authorizes a download, filesystem write, or installation.
 const wizardPages = [...document.querySelectorAll("[data-wizard-page]")];
 const wizardNames = ["Welcome", "Configuration", "Source inspection", "Data review", "Review"];
-const reviewFields = [
-  ["review-install-dir", "destination"],
-  ["review-data-dir", "data-directory"],
-  ["review-source-dir", "source-path"]
-];
 function activeConfiguration() {
   return {
     setupMode: document.querySelector('input[name="setup-mode"]:checked').value,

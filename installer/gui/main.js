@@ -22,6 +22,19 @@ async function loadFrameworkLicense() {
 }
 
 
+async function loadApplicationReadme() {
+  const output = document.querySelector("#readme-text");
+  try {
+    const readme = await invoke("application_readme");
+    if (typeof readme.text !== "string" || !readme.text.startsWith("# Minglefield")) {
+      throw new Error("Unexpected bundled README");
+    }
+    output.textContent = readme.text;
+  } catch (error) {
+    output.textContent = "Unable to load bundled README: " + String(error);
+  }
+}
+
 for (const radio of document.querySelectorAll('input[name="mode"], input[name="setup-mode"]')) {
   radio.addEventListener("change", () => {
     const advanced = document.querySelector('input[name="setup-mode"]:checked').value === "advanced";
@@ -84,3 +97,4 @@ document.querySelector("#inspect-source").addEventListener("click", async () => 
 });
 loadDefault();
 loadFrameworkLicense();
+loadApplicationReadme();

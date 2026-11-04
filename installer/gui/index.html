@@ -13,6 +13,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <label for="data-directory">Persistent data directory</label><input id="data-directory" aria-label="Persistent data directory" /></section>
 <section id="config-section" hidden><label for="config">Configuration (key=value, version 1 or 2)</label><textarea id="config" spellcheck="false" aria-label="Versioned configuration"></textarea><p class="help">Optional runtime choices require explicit consent and are validated by the shared Rust core. No runtime will be installed in preview mode.</p></section>
 </section>
+<section id="source-discovery"><h2>Existing Minglefield source (read-only)</h2><p class="help">Inspect a directory you select. Recognition does not verify the publisher or enable installation.</p><label for="source-path">Source checkout directory</label><input id="source-path" aria-label="Existing Minglefield source directory" placeholder="Absolute directory path" /><button type="button" id="inspect-source">Inspect directory</button><pre id="source-result" role="status" aria-live="polite">No directory inspected.</pre></section>
 <button id="preview">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
 <small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small>

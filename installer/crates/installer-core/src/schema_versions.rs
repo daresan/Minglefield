@@ -34,14 +34,19 @@ pub fn plan_migrations(
     if target_version == 0 || source_version > target_version {
         return Err(MigrationPlanError::UnsupportedVersion);
     }
-    if steps.iter().any(|step| step.from == 0 || step.to <= step.from) {
+    if steps
+        .iter()
+        .any(|step| step.from == 0 || step.to <= step.from)
+    {
         return Err(MigrationPlanError::InvalidRegistry);
     }
     let mut result = Vec::new();
     let mut current = source_version;
     while current < target_version {
         let mut matches = steps.iter().filter(|step| step.from == current);
-        let step = matches.next().ok_or(MigrationPlanError::MissingStep(current))?;
+        let step = matches
+            .next()
+            .ok_or(MigrationPlanError::MissingStep(current))?;
         if matches.next().is_some() {
             return Err(MigrationPlanError::AmbiguousStep(current));
         }
@@ -73,16 +78,34 @@ mod tests {
 
     #[test]
     fn rejects_unrecognized_and_unversioned_sources() {
-        assert_eq!(plan_migrations(0, APP, 0, 2, &[]), Err(MigrationPlanError::UnknownApplication));
-        assert_eq!(plan_migrations(APP, APP, 0, 2, &[]), Err(MigrationPlanError::UnversionedLegacy));
-        assert_eq!(plan_migrations(42, APP, 1, 2, &[]), Err(MigrationPlanError::UnknownApplication));
+        assert_eq!(
+            plan_migrations(0, APP, 0, 2, &[]),
+            Err(MigrationPlanError::UnknownApplication)
+        );
+        assert_eq!(
+            plan_migrations(APP, APP, 0, 2, &[]),
+            Err(MigrationPlanError::UnversionedLegacy)
+        );
+        assert_eq!(
+            plan_migrations(42, APP, 1, 2, &[]),
+            Err(MigrationPlanError::UnknownApplication)
+        );
     }
 
     #[test]
     fn rejects_missing_ambiguous_and_downgrade_paths() {
         let step = MigrationStep { from: 1, to: 2 };
-        assert_eq!(plan_migrations(APP, APP, 1, 3, &[step]), Err(MigrationPlanError::MissingStep(2)));
-        assert_eq!(plan_migrations(APP, APP, 1, 2, &[step, step]), Err(MigrationPlanError::AmbiguousStep(1)));
-        assert_eq!(plan_migrations(APP, APP, 3, 2, &[]), Err(MigrationPlanError::UnsupportedVersion));
+        assert_eq!(
+            plan_migrations(APP, APP, 1, 3, &[step]),
+            Err(MigrationPlanError::MissingStep(2))
+        );
+        assert_eq!(
+            plan_migrations(APP, APP, 1, 2, &[step, step]),
+            Err(MigrationPlanError::AmbiguousStep(1))
+        );
+        assert_eq!(
+            plan_migrations(APP, APP, 3, 2, &[]),
+            Err(MigrationPlanError::UnsupportedVersion)
+        );
     }
 }

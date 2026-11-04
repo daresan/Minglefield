@@ -1,0 +1,36 @@
+name: Prepare installer SQLite lockfiles
+
+on:
+  push:
+    branches:
+      - feat/game-integration-updates
+    paths:
+      - .github/workflows/prepare-installer-lockfiles.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lockfiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve both Cargo dependency graphs
+        run: |
+          cargo generate-lockfile --manifest-path installer/Cargo.toml
+          cargo generate-lockfile --manifest-path installer/gui/src-tauri/Cargo.toml
+          cargo check --manifest-path installer/Cargo.toml --workspace --locked
+          cargo check --manifest-path installer/gui/src-tauri/Cargo.toml --locked
+      - name: Commit generated lockfiles
+        run: |
+          git add installer/Cargo.lock installer/gui/src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Lockfiles already current."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Resolve installer and Tauri SQLite dependency lockfiles'
+          git push origin HEAD:feat/game-integration-updates

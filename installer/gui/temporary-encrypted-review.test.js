@@ -11,6 +11,7 @@ const valid = () => ({
   sourceIntegrityVerified: true, fullSourceCopyVerified: true,
   temporaryEncryptedCopyVerified: true, ciphertextHeaderVerified: true,
   wrongKeyRejected: true, fullDiskCopyVerified: true,
+  verifiedStagedChanges: 0, stagedValuesMatchCiphertext: true,
   checkedRows: 143, checkedTables: 27, checkedSchemaEntries: 58,
   temporaryFilesRemoved: true, destinationCreated: false,
   encryptedDestinationVerified: false, executionEnabled: false
@@ -23,10 +24,14 @@ test("rejects unfinished cleanup, partial checks, stale source or a persistent d
   for (const [name, value] of [
     ["temporaryFilesRemoved", false], ["destinationCreated", true],
     ["encryptedDestinationVerified", true], ["executionEnabled", true],
-    ["wrongKeyRejected", false], ["checkedRows", 142],
+    ["wrongKeyRejected", false], ["stagedValuesMatchCiphertext", false],
+    ["verifiedStagedChanges", 1], ["checkedRows", 142],
     ["checkedTables", 26], ["checkedSchemaEntries", 57]
   ]) {
     assert.throws(() => assessTemporaryDiskCopy({...valid(), [name]: value}, rehearsal()));
   }
   assert.throws(() => assessTemporaryDiskCopy(valid(), {...rehearsal(), verifiedChanges: 1}));
+  const edited = {...valid(), verifiedStagedChanges: 2};
+  const reviewed = {...rehearsal(), verifiedChanges: 2};
+  assert.equal(assessTemporaryDiskCopy(edited, reviewed).verifiedStagedChanges, 2);
 });

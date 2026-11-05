@@ -835,14 +835,14 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
   }
 });
 
-const tempDiskKey = document.querySelector("#temporary-sqlcipher-password");
-const tempDiskConfirm = document.querySelector("#temporary-sqlcipher-confirm");
 const tempDiskResult = document.querySelector("#temporary-sqlcipher-result");
-for (const entry of [tempDiskKey, tempDiskConfirm]) {
+// The two page-3 fields are the single source of the NEW destination password.
+// Changing either invalidates a previously verified temporary disk proof.
+for (const entry of [newDbPassword, confirmDbPassword, existingDbPassword, migrationPasswordInput]) {
   entry.addEventListener("input", () => {
     temporaryEncryptedRequestSequence += 1;
     lastTemporaryEncryptedProof = null;
-    tempDiskResult.textContent = "Temporary encryption test password changed; reverify the encrypted disk copy.";
+    tempDiskResult.textContent = "Database credentials changed; reverify the encrypted temporary copy.";
   });
 }
 document.querySelector("#verify-temporary-sqlcipher").addEventListener("click", async () => {
@@ -850,25 +850,28 @@ document.querySelector("#verify-temporary-sqlcipher").addEventListener("click", 
   const destinationPath = migrationDestinationInput.value.trim();
   const requestSequence = ++temporaryEncryptedRequestSequence;
   lastTemporaryEncryptedProof = null;
-  tempDiskResult.textContent = "Creating a temporary encrypted SQLCipher file for independent read-back verification…";
+  tempDiskResult.textContent = "Rechecking staged corrections in the temporary encrypted SQLCipher copy…";
   try {
     if (!lastMigrationRehearsal || lastMigrationRehearsal.sourcePath !== source ||
         lastMigrationRehearsal.destinationPath !== destinationPath ||
-        lastMigrationRehearsal.verifiedChanges !== 0 ||
         !lastMigrationRehearsal.fullDataCopyVerified) {
-      throw new Error("First complete a successful zero-change in-memory migration rehearsal.");
+      throw new Error("First complete a successful in-memory migration rehearsal of all current edits.");
     }
-    const policy = validateDestinationPassword(tempDiskKey.value, tempDiskConfirm.value);
-    if (!policy.valid) throw new Error(policy.message);
-    const sourcePassword = migrationPasswordInput.value;
-    const testPassword = tempDiskKey.value;
+    const corrections = stagedMigrationChanges(
+      originalAlphaUsers, editedAlphaUsers, originalLegacyRecords, editedLegacyRecords, reviewLoadIssues
+    );
+    if (corrections.length !== lastMigrationRehearsal.verifiedChanges) {
+      throw new Error("Staged corrections changed since the last memory rehearsal.");
+    }
+    const policy = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
+    if (!policy.valid) throw new Error("Step 3: " + policy.message);
+    const sourcePassword = migrationPasswordInput.value || existingDbPassword.value;
     const request = invoke("verify_temporary_encrypted_copy", {
       sourcePath: source, destinationPath,
       existingPassword: sourcePassword,
-      newPassword: testPassword
+      newPassword: newDbPassword.value,
+      corrections
     });
-    tempDiskKey.value = "";
-    tempDiskConfirm.value = "";
     migrationPasswordInput.value = "";
     const raw = await request;
     if (requestSequence !== temporaryEncryptedRequestSequence || selectedDatabase !== source) return;
@@ -878,8 +881,6 @@ document.querySelector("#verify-temporary-sqlcipher").addEventListener("click", 
     if (requestSequence !== temporaryEncryptedRequestSequence) return;
     tempDiskResult.textContent = "Temporary encrypted disk-copy test rejected: " + String(error);
   } finally {
-    tempDiskKey.value = "";
-    tempDiskConfirm.value = "";
     migrationPasswordInput.value = "";
   }
 });

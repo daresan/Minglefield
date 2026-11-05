@@ -1,6 +1,6 @@
 // Host UI must never promote a temporary encrypted file to the permanent destination.
 export function assessTemporaryDiskCopy(preview, rehearsal) {
-  if (!rehearsal || rehearsal.verifiedChanges !== 0 ||
+  if (!rehearsal || !Number.isSafeInteger(rehearsal.verifiedChanges) ||
       preview?.status !== "temporary_encrypted_copy_verified" ||
       preview.sourceIntegrityVerified !== true ||
       preview.fullSourceCopyVerified !== true ||
@@ -8,6 +8,9 @@ export function assessTemporaryDiskCopy(preview, rehearsal) {
       preview.ciphertextHeaderVerified !== true ||
       preview.wrongKeyRejected !== true ||
       preview.fullDiskCopyVerified !== true ||
+      preview.stagedValuesMatchCiphertext !== true ||
+      !Number.isSafeInteger(preview.verifiedStagedChanges) ||
+      preview.verifiedStagedChanges !== rehearsal.verifiedChanges ||
       preview.temporaryFilesRemoved !== true ||
       preview.destinationCreated !== false ||
       preview.encryptedDestinationVerified !== false ||
@@ -26,6 +29,8 @@ export function assessTemporaryDiskCopy(preview, rehearsal) {
     ciphertextHeaderVerified: true,
     wrongKeyRejected: true,
     fullDiskCopyVerified: true,
+    verifiedStagedChanges: preview.verifiedStagedChanges,
+    stagedValuesMatchCiphertext: true,
     checkedRows: preview.checkedRows,
     checkedTables: preview.checkedTables,
     checkedSchemaEntries: preview.checkedSchemaEntries,

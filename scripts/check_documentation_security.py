@@ -16,7 +16,7 @@ RULES = (
     ('slack-token', rb'\bxox[baprs]-[A-Za-z0-9-]{16,}\b'),
     ('openai-key', rb'\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b'),
     ('bearer-token', rb'\bauthorization\s*:\s*bearer\s+\S+'),
-    ('credential-assignment', rb'(?m)^\s*(?:export\s+|\$env:)?(?:password|passwd|api[_-]?key|secret|access[_-]?token|private[_-]?key)\s*[:=]\s*[^\s'"<>][^\r\n]{5,}$'),
+    ('credential-assignment', rb"(?m)^\s*(?:export\s+|\$env:)?(?:password|passwd|api[_-]?key|secret|access[_-]?token|private[_-]?key)\s*[:=]\s*[^\s\x60'\"<>][^\r\n]{5,}$"),
     ('dangerous-policy-override', rb'\b(?:disable|bypass|skip|turn off)\s+(?:all\s+)?(?:security checks|secret scanning|audit logging|authorization|authentication|pre-commit hooks)\b'),
     ('privilege-escalation-instruction', rb'\b(?:ignore|override)\s+(?:all\s+)?(?:system|developer|security)\s+(?:instructions|policies|rules)\b'),
     ('private-path', rb'(?:[A-Z]:\\Users\\[^\\\r\n]+\\(?:\.ssh|AppData\\Roaming\\[^\\]+\\secrets)|/home/[^/\s]+/\.ssh/)'),

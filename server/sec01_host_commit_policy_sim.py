@@ -7,6 +7,8 @@ The online proof precheck happens BEFORE the commit transaction, so remote
 revocation atomicity is NOT solved by this demonstration.
 """
 import json
+import hmac
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -1329,6 +1331,85 @@ class HostCommitPolicy:
                                (host_id, runtime_id)).rowcount
             return HostDecision("deleted" if count else "denied",
                                 "runtime_deleted" if count else "runtime_missing")
+
+    def provision_first_run_local_host_admin_trusted(
+            self, local_host_id, login_password, *, login_user_id="mingleadmin"):
+        """Trusted offline *database transaction*, NOT an authorization API.
+
+        The future native installer/first-run handshake must establish explicit
+        single-use local permission, verify the intended destination database
+        and the actual local Host identity BEFORE invoking this method. Do not
+        expose it via the gateway, an action, a remote token, or a CLI shortcut.
+
+        Account creation bypasses invitation *only* on an existing SQLCipher
+        target. It never overwrites imported users, password verifiers, Host
+        ownership, delegated roles, or unrelated jobs. The Host owner already
+        has admin authority: no global role or redundant admin grant is made.
+        """
+        store = self.authority.store
+        if not callable(getattr(store, "_sqlcipher_key_provider", None)):
+            return HostDecision("denied", "encrypted_destination_required")
+        if not ident(local_host_id) or not ident(login_user_id) or not store._password_ok(login_password):
+            return HostDecision("denied", "invalid_first_run_identity_or_password")
+        try:
+            database_password = store._sqlcipher_key_provider()
+        except BaseException:
+            return HostDecision("denied", "database_key_unavailable")
+        if type(database_password) is not str or not database_password:
+            return HostDecision("denied", "database_key_unavailable")
+        if hmac.compare_digest(login_password.encode("utf-8"), database_password.encode("utf-8")):
+            return HostDecision("denied", "independent_login_password_required")
+
+        def references_existing_identity(db, candidate, columns):
+            # Detect orphan or already-delegated identity and Host references,
+            # not merely account and host primary-key collisions. Otherwise
+            # an imported orphan grant could accidentally elevate the newcomer.
+            names = db.execute("""SELECT name FROM sqlite_schema
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'""").fetchall()
+            for (table,) in names:
+                quoted_table = '"' + table.replace('"', '""') + '"'
+                present = {row[1] for row in db.execute("PRAGMA table_info(" + quoted_table + ")")}
+                checked = sorted(present.intersection(columns))
+                if not checked:
+                    continue
+                predicates = " OR ".join(
+                    '"' + column.replace('"', '""') + '"=?' for column in checked
+                )
+                if db.execute(
+                    "SELECT 1 FROM " + quoted_table + " WHERE " + predicates + " LIMIT 1",
+                    [candidate] * len(checked),
+                ).fetchone() is not None:
+                    return True
+            return False
+
+        identity_columns = {
+            "user_id", "owner_id", "operator_id", "admin_id",
+            "grantee_user_id", "requested_by", "approved_by",
+        }
+        with store._tx() as db:
+            # The entire operation is serialized by BEGIN IMMEDIATE and
+            # committed only after all four inserts succeed. Exceptions cause
+            # transaction rollback, not partially installed owner identities.
+            if references_existing_identity(db, login_user_id, identity_columns):
+                return HostDecision("denied", "first_run_identity_conflict")
+            if references_existing_identity(db, local_host_id, {"host_id"}):
+                return HostDecision("denied", "first_run_host_conflict")
+            salt = os.urandom(16)
+            password_verifier = store._derive(login_password, salt)
+            db.execute("INSERT INTO alpha_users(user_id) VALUES(?)", (login_user_id,))
+            db.execute(
+                "INSERT INTO alpha_passwords(user_id,salt,password_hash) VALUES(?,?,?)",
+                (login_user_id, salt, password_verifier),
+            )
+            db.execute(
+                "INSERT INTO alpha_executor_hosts(host_id,operator_id,active) VALUES(?,?,1)",
+                (local_host_id, login_user_id),
+            )
+            db.execute(
+                "INSERT INTO sec01_host_owners(host_id,owner_id) VALUES(?,?)",
+                (local_host_id, login_user_id),
+            )
+            return HostDecision("created", "first_run_local_host_admin_created")
 
     def claim_local_host(self, host_id, owner_id):
         """Only invoke after gateway-local bootstrap proof AND live Alpha session."""

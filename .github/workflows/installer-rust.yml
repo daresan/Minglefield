@@ -31,6 +31,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Cache shared installer Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "installer -> target"
+          shared-key: installer-core
       - run: cargo fmt --all -- --check
       - run: cargo check --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -59,6 +64,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Cache Tauri Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "installer/gui/src-tauri -> target"
+          shared-key: installer-gui
       - uses: actions/setup-node@v7
         with:
           node-version: "22"

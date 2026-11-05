@@ -414,8 +414,7 @@ fn plaintext_alpha_with_optional_password_keeps_second_copy_unencrypted() {
     let file = fixture();
     let original_bytes = std::fs::read(&file).unwrap();
     let normal = rehearse_migration(&file, "", &[]).unwrap();
-    let password_supplied =
-        rehearse_migration(&file, "IgnoredExistingDbPassword9!", &[]).unwrap();
+    let password_supplied = rehearse_migration(&file, "IgnoredExistingDbPassword9!", &[]).unwrap();
     assert!(normal.fidelity.values_verified);
     assert_eq!(password_supplied.fidelity, normal.fidelity);
     assert_eq!(password_supplied.verified_changes, 0);

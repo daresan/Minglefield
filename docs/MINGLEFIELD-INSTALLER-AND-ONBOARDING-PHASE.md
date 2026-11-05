@@ -54,6 +54,70 @@ The installer knows which computer it is running on; this is **not by itself pro
 
 The installer/first-run flow may register the local Host and configure only the minimal installation-related Host connection and optional runtime settings through existing authorized APIs. Host job-approval rules, scheduling, resource limits, rule priority and enablement belong to the Hosts/job-policy UI, not the installer; the installer must neither create nor modify them. The existing alpha gateway's local bootstrap code and current Host-claim route require security and persistence review **before** reuse or extension.
 
+### Binding decision: first local Host administrator (approved 2026-11-06)
+
+A new Minglefield installation must **automatically prepare the first local Host
+administrator during the explicitly authorized first-run setup**, without
+requiring a manual invitation or the current console-bootstrap-token entry.
+This is not automatic ownership merely because a process runs on a computer:
+
+- **Identity:** propose the editable login name `mingleadmin`. Create an
+  ordinary local Minglefield user in the **operational encrypted database**,
+  with its independently salted password verifier in the existing
+  `alpha_users` / `alpha_passwords` model. A user account is not a
+  Minglefield-wide superuser. Do not invent a global admin role.
+- **Two independent secrets:** the SQLCipher passphrase unlocks the
+  *database locally*; the separately chosen Minglefield sign-in password
+  authenticates `mingleadmin`. Neither password is copied to the other;
+  their values must not be identical. The sign-in password can change
+  without database rekeying. The SQLCipher key must never be a remote
+  login credential or a host-claim authorization token. Do not persist
+  either plaintext secret in the database, plan, logs, command line, or
+  installer configuration.
+- **Per-Host authority:** register the new user as owner/administrator
+  **only of the positively identified local Host**, using existing
+  `alpha_executor_hosts`, `sec01_host_owners`, and, where warranted,
+  `sec01_host_admins` associations. Being a Host owner already confers
+  host-admin rights under current policy; avoid redundant global grants.
+  Neither Minglefield-wide administration nor OS-level administrator
+  privileges follow from the user name.
+- **Existing database import:** preserve *all* existing users, password
+  verifiers, sessions, delegated agents, Hosts and Host ownership.
+  Do not reset a password, seize an existing Host, silently reuse an
+  existing `mingleadmin` identity, or modify existing credentials.
+  Identity/Host conflicts require explicit authenticated resolution,
+  rather than an automatic INSERT/UPDATE/overwrite.
+- **Remote Hosts:** `mingleadmin` can administer a remote Host **only**
+  after an authenticated, owner-authorized, host-scoped remote claim or
+  delegated Host-admin grant. Proof must bind the intended Host and
+  identity, enforce expiry/single-use/revocation as applicable, and
+  prevent cross-Host replay. No possession of a local database key or
+  an arbitrary remote token implies global or remote ownership.
+- **Provisioning trust:** installer and first-run application must use
+  one authenticated **local-only, single-use** provisioning handshake
+  with verified process/installation identity and explicit owner consent.
+  Never expose the trusted database-creation primitive as an unguarded
+  HTTP endpoint or reuse the current console secret as a permanent token.
+  Setup may create the account directly in an isolated, verified encrypted
+  target without an invite, but Host claim/activation must be completed
+  only under that verified local authorization. On partial failure,
+  roll back all first-run identity/Host writes together.
+- **Unattended installation:** `--silent --defaults` must not fabricate
+  an account password, consent or ownership proof. If required
+  authorization is unavailable, defer the account/Host claim to
+  authenticated first run, never silently elevate privileges.
+- **Lifecycle:** fresh install has a clear creation path; upgrades and
+  repairs are non-destructive and do not recreate accounts. A failed
+  migration never alters the source or publishes a partially provisioned
+  target. All first-run inserts are included in final post-migration
+  verification, with no user secrets in the report.
+
+The already verified portable setup-manager GUI and dry-run migration
+remain read-only until the separate operational-runtime packaging,
+exclusive atomic encrypted publication, one-time local handshake and
+recovery gates are finished. **No implementation-only helper counts as
+proof that first-run authorization is complete.**
+
 ## Existing repository boundaries and evidence to inspect
 
 - `server/private_alpha_gateway.py`: current local gateway and web UI, local Host claim flow, Host settings/runtimes, and placeholder platform-update dialog; its current local bootstrap is not an installer provisioning API.

@@ -71,3 +71,23 @@ review areas remain intact.
 The runtime test file is `tests/conformance/test_game_integration_install_alpha_sqlcipher_runtime.py`.
 The existing conformance test matcher runs it without adding another workflow.
 The package in `requirements-ci.txt` is CI-only, not yet a packaged Minglefield runtime dependency.
+
+## First-run identity/password isolation (accepted 2026-11-06)
+
+The SQLCipher key provider is strictly a **local database unlock**
+mechanism, not Minglefield user authentication. The default editable
+first login name `mingleadmin` uses its *own* password and scrypt
+verifier in `alpha_passwords`. A trusted local first-run flow may
+create it without a manual invite, but must obtain distinct user
+credentials and explicit, single-use owner/Host authorization before
+writing the verified encrypted destination. No user receives universal
+Host privileges. Imported user/Host conflicts and remote Host grants
+must never be silently rewritten. See the approved phase contract
+`docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md`.
+
+A storage-layer account/Host transaction, if developed independently
+for tests, must remain inaccessible from the existing HTTP gateway
+until the authorized local-only bootstrap/identity proof is complete.
+This operational-runtime milestone does **not** enable durable
+migration publication or automatic Host claims.
+

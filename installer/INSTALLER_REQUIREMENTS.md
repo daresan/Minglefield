@@ -11,6 +11,45 @@ Status: product decisions recorded 2026-11-04. **This is a requirements contract
 - The legacy source must remain unchanged. Do not overwrite existing destination files. Require schema recognition, verified mapping, integrity and foreign-key checks, transactional/atomic destination handling and failure recovery. Compare expected record counts and relevant data/relationships, not merely SQLite headers. Fail closed on unknown or incompatible schema. Never silently discard data.
 - Migration execution stays disabled until these guarantees exist and are tested. Lockfile updates and successful read-only inspection do not constitute migration execution.
 
+## Accepted first-run account and Host-bound administrator decision (2026-11-06)
+
+- The installer proposes editable username **`mingleadmin`**, not a
+  global administrator account. The first-run transaction creates an
+  ordinary login identity and a salted password hash in the existing
+  `alpha_users` and `alpha_passwords` tables, **without the manual
+  invite flow**. It does not silently rename or overwrite existing
+  users, hashes, sessions or identity relationships.
+- The **new user login password is independent of the SQLCipher
+  database-unlock password**; neither may reuse the other's secret.
+  The login password must comply with the existing Alpha identity
+  password policy (currently 12–256 characters). User login requires
+  no database-key disclosure over HTTP or to remote clients.
+- The account is authorized to manage only the **locally proven Host**,
+  through the existing Host-owner/Admin database tables and policy.
+  The username confers no global Minglefield, marketplace, other-Host,
+  other-server, or operating-system privileges.
+- Existing/migrated `mingleadmin` and Host conflicts are **hard stops**
+  requiring authenticated resolution. No implicit Host takeover on
+  reinstall, migration, repair or update; no trusted fixture bypass.
+- Remote Host administration requires a separately authorized,
+  Host-specific and replay-protected remote claim/delegation token;
+  local Host ownership does not propagate. The installer is never
+  permitted to create remote-Host grants from ownership of the local
+  SQLCipher key.
+- Actual account creation, local Host claiming and activation happen
+  in the **verified encrypted destination/first-run transaction**
+  after explicit owner consent and a **single-use authenticated local
+  provisioning proof**. They must be atomic with respect to each
+  other, preserving source and rollback semantics. Do not add a new
+  HTTP backdoor or persist a bootstrap token. The trust handshake is
+  a separate implementation gate, not yet implemented.
+- GUI and unattended mode use the **same** secure provisioning engine.
+  No password/consent/proof supplied to silent mode means first-run
+  provisioning is deferred, not automatically authorized.
+- Until final SQLCipher destination publication, runtime unlock,
+  signed/verified app packaging and local handshake are all proven,
+  existing `executionEnabled` and `migrationEnabled` remain false.
+
 ## Existing installer pages — retain all six and their navigation
 
 ### 1. Welcome / project information

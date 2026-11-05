@@ -172,8 +172,29 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
   output.textContent = "Inspecting known user-data locations…";
   try {
     const items = await invoke("inspect_existing_data", { path });
+    const databases = items.filter(item => item.kind === "sqlite_database");
+    const selection = document.querySelector("#database-selection");
+    selection.replaceChildren();
+    selectedDatabase = null;
+    lastDatabaseInspection = null;
+    resetAlphaUserReview();
+    for (const item of databases) {
+      const label = document.createElement("label");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "selected-database";
+      radio.value = item.sourceDirectory + "/" + item.relativePath;
+      radio.style.width = "auto";
+      radio.addEventListener("change", () => {
+        selectedDatabase = radio.value;
+        lastDatabaseInspection = null;
+        resetAlphaUserReview();
+      });
+      label.append(radio, document.createTextNode(" " + radio.value + " — " + item.status));
+      selection.append(label);
+    }
     output.textContent = items.length
-      ? "Found " + items.length + " known data candidate(s). Select and inspect the database to continue."
+      ? "Found " + databases.length + " database(s) and " + (items.length - databases.length) + " other data candidate(s). Select a database to inspect."
       : "No known data candidates found at the checked locations. This does not prove the directory contains no Minglefield data.";
   } catch (error) { output.textContent = "Data inspection failed: " + String(error); }
 });

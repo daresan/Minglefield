@@ -57,10 +57,23 @@ must remain false until the separate execution gates are implemented.
 
 ## Remaining mandatory gates before durable migration
 
-1. Validate complete table-level constraints, indexes, foreign keys,
-   schema objects and any registered historical source variants.
-   Maintain independent source-integrity and full-row/schema equality
-   proofs for all extensions; no silent schema transformations.
+1. **Structural schema-object audit implemented; Shadow acceptance pending.**
+   The installer reconstructs the authoritative Alpha reference DDL in a
+   separate in-memory SQLite database and compares every resulting
+   `sqlite_schema` entry (tables, generated/explicit indexes, SQL text)
+   against the inspected read-only source snapshot. This covers the
+   actual `UNIQUE`, `CHECK`, `FOREIGN KEY`, `DEFAULT`, and partial
+   index declarations; unknown indexes, triggers, views and extensions
+   cause an explicit failure of the new proof. A changed SQL statement,
+   not merely a changed row count, is detected.
+   The new `database.schemaObjectAssessment` is a distinct, read-only
+   proof with `verified`, `reason`, object counts and *only* affected
+   object names for diagnostics, never row values or credentials.
+   It does not promote the older column-only `schemaAssessment` or enable
+   execution. The first real Alpha source must be checked on Shadow,
+   including any historical DDL variants that deserve explicit review.
+   Retain independent source-integrity and full-row/schema equality
+   proofs for any reviewed extensions; never silently transform schema.
 2. Establish the actual SQLCipher-compatible **operational application
    database runtime**. Merely creating a SQLCipher copy is not sufficient:
    the installed Minglefield application must be able to open and use it.
@@ -90,3 +103,39 @@ database, creating an operational destination or claiming a local Host.
 The five domain tabs are unchanged; imported Comfy workflow JSON remains
 in `sec01_host_comfy_workflows.workflow` within SQLite, not on a
 separate file-system path.
+
+## Independently registered full-schema-object preflight (2026-11-05)
+
+Implementation: `installer/crates/installer-core/src/legacy_alpha_constraints.rs`
+and `installer/gui/schema-object-assessment.js`.
+
+- A private `Connection::open_in_memory()` constructs the expected 27-table
+  schema, plus the named partial unique index
+  `uq_game_install_one_active_project`, using the actual, reviewed
+  `CREATE TABLE` and `CREATE UNIQUE INDEX` declarations from the
+  local Alpha server sources.
+- The inspector opens **one** read-only verified source snapshot and audits
+  the reference and source `sqlite_schema` entries independently.
+  SQL comparisons ignore formatting and ordinary identifier quoting but
+  preserve the case of SQL string literals: this matters for the
+  partial index filtering committed/cancelled installation operations.
+- Every entry (including automatically generated unique/primary-key
+  indexes) must match by object name, type, owning table and normalized
+  CREATE statement. Unregistered objects are reported by name and block
+  full object verification. No source paths, row values or credentials are
+  copied into the diagnostic.
+- The preflight does not write a destination or change installation flags.
+  It is **not** a compatibility promise for arbitrary historical Alpha
+  variants: semantically equivalent, but unregistered DDL may be rejected
+  pending individual review. Such mismatch is safer than silently dropping
+  an index or constraint during migration.
+- Focused test cases deliberately omit or change the unique partial index,
+  `UNIQUE` constraint, `CHECK` constraint, foreign key and default, and
+  introduce unregistered triggers, indexes and views. They also exercise
+  SQLite's harmless identifier quoting after an accepted legacy rename.
+
+The final SQLCipher runtime, exclusive/atomic publication,
+installation consent, durable execution and rollback/recovery remain
+blocked separate gates. Any eventual execution command **must re-inspect**
+the actual source in its own transaction/snapshot immediately before
+publication; it must not trust an earlier UI preview.

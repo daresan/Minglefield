@@ -179,6 +179,7 @@ struct SqliteInspectionPreview {
     tables: Vec<SqliteTablePreview>,
     schema_objects: Vec<SqliteSchemaObjectPreview>,
     registered_mapping: RegisteredAlphaMappingPreview,
+    registered_schema_objects: RegisteredAlphaSchemaObjectsPreview,
     migration_enabled: bool,
 }
 
@@ -213,6 +214,38 @@ impl From<minglefield_installer_core::legacy_alpha_mapping::LegacyAlphaMapping>
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RegisteredAlphaSchemaObjectsPreview {
+    verified: bool,
+    reason: &'static str,
+    expected_schema_entry_count: usize,
+    matched_schema_entry_count: usize,
+    expected_index_count: usize,
+    missing_objects: Vec<String>,
+    extra_objects: Vec<String>,
+    incompatible_objects: Vec<String>,
+    migration_enabled: bool,
+}
+
+impl From<minglefield_installer_core::legacy_alpha_constraints::AlphaSchemaObjectAudit>
+    for RegisteredAlphaSchemaObjectsPreview
+{
+    fn from(value: minglefield_installer_core::legacy_alpha_constraints::AlphaSchemaObjectAudit) -> Self {
+        Self {
+            verified: value.verified,
+            reason: value.reason,
+            expected_schema_entry_count: value.expected_schema_entry_count,
+            matched_schema_entry_count: value.matched_schema_entry_count,
+            expected_index_count: value.expected_index_count,
+            missing_objects: value.missing_objects,
+            extra_objects: value.extra_objects,
+            incompatible_objects: value.incompatible_objects,
+            migration_enabled: false,
+        }
+    }
+}
+
+#[derive(Serialize)]
 struct SqliteTablePreview {
     name: String,
     columns: Vec<String>,
@@ -233,14 +266,17 @@ async fn inspect_sqlite_database(
     path: String,
     password: String,
 ) -> Result<SqliteInspectionPreview, String> {
-    let (inspection, registered_mapping) = tauri::async_runtime::spawn_blocking(move || {
-        use minglefield_installer_core::legacy_alpha_mapping::assess_registered_alpha_mapping;
-        use minglefield_installer_core::sqlite_inspection::open_inspected_snapshot;
-        let (snapshot, inspected) = open_inspected_snapshot(std::path::Path::new(&path), &password)
-            .map_err(|error| format!("SQLite inspection rejected: {error:?}"))?;
-        let mapping = assess_registered_alpha_mapping(&snapshot, &inspected)?;
-        Ok::<_, String>((inspected, mapping))
-    })
+    let (inspection, registered_mapping, schema_objects_audit) =
+        tauri::async_runtime::spawn_blocking(move || {
+            use minglefield_installer_core::legacy_alpha_constraints::audit_registered_alpha_schema_objects;
+            use minglefield_installer_core::legacy_alpha_mapping::assess_registered_alpha_mapping;
+            use minglefield_installer_core::sqlite_inspection::open_inspected_snapshot;
+            let (snapshot, inspected) = open_inspected_snapshot(std::path::Path::new(&path), &password)
+                .map_err(|error| format!("SQLite inspection rejected: {error:?}"))?;
+            let mapping = assess_registered_alpha_mapping(&snapshot, &inspected)?;
+            let objects = audit_registered_alpha_schema_objects(&snapshot, &inspected)?;
+            Ok::<_, String>((inspected, mapping, objects))
+        })
     .await
     .map_err(|_| "SQLite inspection task failed".to_owned())??;
     Ok(SqliteInspectionPreview {
@@ -270,6 +306,7 @@ async fn inspect_sqlite_database(
             })
             .collect(),
         registered_mapping: registered_mapping.into(),
+        registered_schema_objects: schema_objects_audit.into(),
         migration_enabled: false,
     })
 }

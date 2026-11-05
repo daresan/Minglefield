@@ -3,6 +3,7 @@ import { previewArguments } from "./preview-arguments.js";
 import { validateDestinationPassword } from "./database-password-policy.js";
 import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js";
 import { assessLegacyAlphaSchema } from "./legacy-schema.js";
+import { assessRegisteredSchemaObjects } from "./schema-object-assessment.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
 import { assessFieldCoverage } from "./schema-coverage.js";
 import { createFullReview, stageFullCell, fullRowCorrections, fullReviewSummary } from "./full-database-review.js";
@@ -143,6 +144,7 @@ document.querySelector("#preview").addEventListener("click", async () => {
         source: selectedDatabase,
         sourceInspected: Boolean(lastDatabaseInspection),
         schemaAssessment: lastDatabaseInspection ? assessLegacyAlphaSchema(lastDatabaseInspection) : null,
+        schemaObjectAssessment: lastDatabaseInspection ? assessRegisteredSchemaObjects(lastDatabaseInspection) : null,
         destinationEncryptionRequired: true,
         // The five domain tabs now share the same full-row editor. Legacy
         // correction arrays remain in the plan shape for older consumers.
@@ -663,7 +665,8 @@ function refreshReview() {
         applicationId: lastDatabaseInspection.applicationId,
         userVersion: lastDatabaseInspection.userVersion,
         tableCount: lastDatabaseInspection.tables.length,
-        schemaAssessment: assessLegacyAlphaSchema(lastDatabaseInspection)
+        schemaAssessment: assessLegacyAlphaSchema(lastDatabaseInspection),
+        schemaObjectAssessment: assessRegisteredSchemaObjects(lastDatabaseInspection)
       }, null, 2)
     : "No database inspected. Fresh installation still requires encrypted SQLCipher.";
   updateReviewSummary();

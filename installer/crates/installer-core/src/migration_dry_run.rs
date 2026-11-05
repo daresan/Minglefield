@@ -187,7 +187,7 @@ const REQUIRED: &[(&str, &[&str])] = &[
     ),
 ];
 
-fn validate_alpha_schema(snapshot: &SqliteInspection) -> Result<(), String> {
+pub(crate) fn validate_alpha_schema(snapshot: &SqliteInspection) -> Result<(), String> {
     for &(name, columns) in REQUIRED {
         let Some(table) = snapshot.tables.iter().find(|t| t.name == name) else {
             return Err(format!("Required Alpha table missing: {name}"));
@@ -204,7 +204,7 @@ fn validate_alpha_schema(snapshot: &SqliteInspection) -> Result<(), String> {
     Ok(())
 }
 
-fn table_counts(
+pub(crate) fn table_counts(
     db: &Connection,
     snapshot: &SqliteInspection,
 ) -> Result<Vec<TableRowCount>, String> {
@@ -542,6 +542,70 @@ fn apply_verified_change(db: &Connection, correction: &ReviewCorrection) -> Resu
     Ok(())
 }
 
+/// The only allowlisted mutation path for temporary migration copies.
+/// Both memory rollback tests and encrypted-disk-copy tests reuse this exact
+/// stale-value, owner-binding, duplicate, trigger, integrity and count policy.
+/// `commit_to_isolated_copy` must NEVER be used with the original source:
+/// the caller is responsible for an independently verified RAM snapshot.
+pub(crate) fn apply_staged_to_isolated_copy(
+    rehearsal_db: &mut Connection,
+    inspection: &SqliteInspection,
+    original_counts: &[TableRowCount],
+    corrections: &[ReviewCorrection],
+    commit_to_isolated_copy: bool,
+) -> Result<(), String> {
+    if corrections.len() > 1500 {
+        return Err("Too many staged corrections".to_owned());
+    }
+    let mut identities = BTreeSet::new();
+    for correction in corrections {
+        let identity = verify_correction(correction)?;
+        if !identities.insert(identity) {
+            return Err("Duplicate staged correction".to_owned());
+        }
+    }
+    if !corrections.is_empty()
+        && inspection
+            .schema_objects
+            .iter()
+            .any(|item| item.object_type == "trigger")
+    {
+        return Err("Database triggers require individual migration review".to_owned());
+    }
+
+    if corrections.is_empty() {
+        return Ok(());
+    }
+    let transaction = rehearsal_db
+        .transaction()
+        .map_err(|_| "Cannot begin isolated migration rehearsal")?;
+    for correction in corrections {
+        apply_verified_change(&transaction, correction)?;
+    }
+    let after_counts = table_counts(&transaction, inspection)?;
+    if after_counts != original_counts {
+        return Err("Record counts changed during rehearsal".to_owned());
+    }
+    let check: String = transaction
+        .query_row("PRAGMA quick_check", [], |row| row.get(0))
+        .map_err(|_| "Rehearsed database integrity check failed")?;
+    if check != "ok" {
+        return Err("Rehearsed database is not integral".to_owned());
+    }
+    let violations: i64 = transaction
+        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| row.get(0))
+        .map_err(|_| "Rehearsed foreign-key check failed")?;
+    if violations != 0 {
+        return Err("Rehearsed database has foreign-key violations".to_owned());
+    }
+    if commit_to_isolated_copy {
+        transaction.commit().map_err(|_| "Cannot retain edits in isolated memory copy".to_owned())?;
+    } else {
+        transaction.rollback().map_err(|_| "Rehearsal rollback failed".to_owned())?;
+    }
+    Ok(())
+}
+
 /// Re-read the real source through a verified in-memory snapshot, assert the
 /// expected original values, simulate only approved corrections and roll back
 /// that temporary transaction. Unknown tables are accounted for, not omitted.
@@ -550,9 +614,6 @@ pub fn rehearse_migration(
     existing_password: &str,
     corrections: &[ReviewCorrection],
 ) -> Result<MigrationDryRun, String> {
-    if corrections.len() > 1500 {
-        return Err("Too many staged corrections".to_owned());
-    }
     let (snapshot_db, inspection) = open_inspected_snapshot(source, existing_password)
         .map_err(|_| "Selected database could not be verified")?;
     if !inspection.integrity_ok || inspection.foreign_key_violations != 0 {
@@ -570,50 +631,9 @@ pub fn rehearse_migration(
     };
     let (mut rehearsal_db, before_fidelity) =
         create_verified_memory_copy(&snapshot_db, snapshot_key)?;
-    let mut identities = BTreeSet::new();
-    for correction in corrections {
-        let identity = verify_correction(correction)?;
-        if !identities.insert(identity) {
-            return Err("Duplicate staged correction".to_owned());
-        }
-    }
-    if !corrections.is_empty()
-        && inspection
-            .schema_objects
-            .iter()
-            .any(|item| item.object_type == "trigger")
-    {
-        return Err("Database triggers require individual migration review".to_owned());
-    }
-    if !corrections.is_empty() {
-        let transaction = rehearsal_db
-            .transaction()
-            .map_err(|_| "Cannot begin isolated migration rehearsal")?;
-        for correction in corrections {
-            apply_verified_change(&transaction, correction)?;
-        }
-        let after_counts = table_counts(&transaction, &inspection)?;
-        if after_counts != original_counts {
-            return Err("Record counts changed during rehearsal".to_owned());
-        }
-        let check: String = transaction
-            .query_row("PRAGMA quick_check", [], |row| row.get(0))
-            .map_err(|_| "Rehearsed database integrity check failed")?;
-        if check != "ok" {
-            return Err("Rehearsed database is not integral".to_owned());
-        }
-        let violations: i64 = transaction
-            .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
-                row.get(0)
-            })
-            .map_err(|_| "Rehearsed foreign-key check failed")?;
-        if violations != 0 {
-            return Err("Rehearsed database has foreign-key violations".to_owned());
-        }
-        transaction
-            .rollback()
-            .map_err(|_| "Rehearsal rollback failed")?;
-    }
+    apply_staged_to_isolated_copy(
+        &mut rehearsal_db, &inspection, &original_counts, corrections, false,
+    )?;
     let fidelity = verify_snapshot_equality(&snapshot_db, &rehearsal_db)?;
     if fidelity != before_fidelity {
         return Err("Temporary migration rehearsal failed to restore all original data".to_owned());

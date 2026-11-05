@@ -132,3 +132,35 @@ The portable GUI build is reserved for **significant manual acceptance milestone
 The verified migration rehearsal now returns `fieldCoverage` for **every** application table in the inspected, consistent source snapshot, not just tables rendered in the editor. Each entry lists column **names only**, the explicitly allowlisted staged-editable columns and all remaining protected columns. No stored values, credential hashes, session tokens, arbitrary host JSON, or raw BLOBs are returned in this inventory. The final review includes total column and protected-column counts. An unknown table is never silently dropped from the inventory and all of its columns are protected by default.
 
 This is a **coverage and readiness report**, not proof that every column is understood or mapped to a future destination schema. No schema transformation, persistent export, SQLCipher destination creation, installation or Host claim is authorized. A subsequent migration implementation must account for all original tables and objects and prove that no data was discarded before execution is enabled.
+
+## Git profiles and visible field-coverage review (2026-11-05)
+
+The existing **Hosts** tab now also reads the real `alpha_git_profiles`
+records from the same integrity-checked, bounded source snapshot as other
+legacy records. It displays the host/profile/owner IDs, authentication
+method and Git executable **read-only**. Only the non-secret profile `label`,
+`author_name` and `author_email` fields can be staged. The existing
+`save_git_profile` API is the source of their 120/256-character constraints.
+No executable command is evaluated, no Git profile is activated, and no Git
+credential or private key is loaded.
+
+Each staged Git text change is verified in the independent Rust rehearsal
+against the exact original value **and** original host/profile/owner identity.
+The change is applied only to a temporary in-memory transaction that is
+rolled back, with no source mutation or destination creation. Incorrect
+owners, duplicated fields, oversized values and stale values are denied.
+
+After a successful rehearsal, the **Data Review** page displays an expandable
+table-by-table summary. Each table shows its verified row count plus all
+`stagedEditableColumns` and `protectedColumns`, checked for missing or
+double-classified fields before display. This report includes unknown tables
+as protected by default, but never reads or displays stored credential,
+session, job, or runtime JSON contents. These source field names are an
+inventory of the current Alpha database, **not** a versioned migration
+mapping. Unknown schema revisions and destination encryption remain future
+execution blockers. The installer continues to report `executionEnabled=false`.
+
+Regression suite: `cargo test --workspace --locked`,
+`cargo test --manifest-path gui/src-tauri/Cargo.toml --locked`,
+and `cd gui && node --test`. CI must pass on all three operating systems
+before triggering the milestone-only portable packaging workflow.

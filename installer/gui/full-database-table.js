@@ -1,12 +1,12 @@
 import {stageFullCell, fullRowCorrections, fullReviewSummary} from "./full-database-review.js";
-const TYPES = ["null","integer","real","text","blob"];
 
 export function renderFullDatabaseTable(root, table, onEdit, onError, doc = document) {
   root.replaceChildren();
   if (!table) return;
   const info = doc.createElement("p");
   info.textContent = table.name + ": " + table.rows.length + " loaded rows, " +
-    table.columns.length + " columns. Changes are staged only on a disposable copy.";
+    table.columns.length + " columns. Only stored values can be edited; " +
+    "SQLite types are fixed. Changes are staged only on a disposable copy.";
   root.append(info);
   const scroll = doc.createElement("div");
   scroll.className = "data-table-scroll";
@@ -28,39 +28,32 @@ export function renderFullDatabaseTable(root, table, onEdit, onError, doc = docu
     row.cells.forEach((cell, colIndex) => {
       const name = table.columns[colIndex];
       const td = doc.createElement("td");
-      const type = doc.createElement("select");
-      type.setAttribute("aria-label", table.name + " " + name + " SQLite type");
-      for (const kind of TYPES) {
-        const option=doc.createElement("option");
-        option.value=kind;option.textContent=kind;type.append(option);
-      }
-      type.value = cell.kind;
+      // Display the original SQLite storage class as read-only metadata.
+      // The review edits values, not column definitions or storage types.
+      const fixedType = doc.createElement("span");
+      fixedType.className = "sqlite-fixed-type";
+      fixedType.textContent = cell.kind.toUpperCase();
+      fixedType.setAttribute("aria-label", table.name + " " + name + " original SQLite type (read only)");
       const input = doc.createElement(
         cell.kind === "text" || cell.kind === "blob" ? "textarea" : "input");
-      input.value = cell.value ?? "";
+      input.value = cell.kind === "null" ? "(NULL)" : (cell.value ?? "");
       input.spellcheck = false;
       if (cell.kind === "null") input.disabled = true;
       if (input.tagName === "TEXTAREA") input.rows = 2;
       input.setAttribute("aria-label", table.name + " " + name + " value");
-      const original = { ...cell };
-      type.addEventListener("change", () => {
-        const kind = type.value;
-        const value = kind === "null" ? null :
-          kind === "integer" || kind === "real" ? "0" : "";
-        try {
-          onEdit(rowIndex, name, kind, value);
-          original.kind = kind; original.value = value;
-          input.disabled = kind === "null";
-          input.value = value ?? "";
-        } catch(error) { type.value = original.kind; onError(error); }
-      });
-      input.addEventListener("change", () => {
-        try {
-          onEdit(rowIndex, name, type.value, input.value);
-          original.value=input.value;
-        } catch(error) { input.value = original.value ?? ""; onError(error); }
-      });
-      td.append(type,input);
+      let acceptedValue = cell.value;
+      if (cell.kind !== "null") {
+        input.addEventListener("change", () => {
+          try {
+            onEdit(rowIndex, name, cell.kind, input.value);
+            acceptedValue = input.value;
+          } catch(error) {
+            input.value = acceptedValue ?? "";
+            onError(error);
+          }
+        });
+      }
+      td.append(fixedType, input);
       tr.append(td);
     });
     body.append(tr);

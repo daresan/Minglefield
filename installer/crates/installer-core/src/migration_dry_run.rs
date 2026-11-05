@@ -303,6 +303,13 @@ fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, Strin
             for cell in before.iter().chain(after) {
                 cell.to_sql()?;
             }
+            if before
+                .iter()
+                .zip(after.iter())
+                .any(|(original, next)| original.kind != next.kind)
+            {
+                return Err("SQLite storage type changes are not permitted in data review".to_owned());
+            }
             // Row identity uses a native rowid when available. WITHOUT ROWID
             // tables are matched by their complete original typed values.
             let identity = row_id.clone().unwrap_or_else(|| format!("{before:?}"));

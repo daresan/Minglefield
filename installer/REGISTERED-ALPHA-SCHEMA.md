@@ -139,3 +139,40 @@ installation consent, durable execution and rollback/recovery remain
 blocked separate gates. Any eventual execution command **must re-inspect**
 the actual source in its own transaction/snapshot immediately before
 publication; it must not trust an earlier UI preview.
+
+## Owner feedback: values-only review and unmistakable schema-object evidence
+
+The Shadow review on 2026-11-05 confirmed 27 tables, 111 columns,
+143 source rows, 31 preserved non-table schema objects and 58 total
+schema entries. The dry-run and temporary SQLCipher copy passed,
+but the submitted validated plan did **not** include the new
+`database.schemaObjectAssessment`. The counts alone therefore do
+**not** constitute an accepted full registered-object audit.
+
+To disambiguate executable builds and avoid a silent omission:
+
+- Both the Step-6 database summary and validated plan use the same
+  `databaseReviewEvidence()` helper to include **both**
+  `schemaAssessment` and `schemaObjectAssessment`.
+- Every new validated plan includes
+  `database.reviewContract: "sqlite-existing-values-only-schema-objects-v2"`.
+  If that marker or the object-assessment field is absent, this version
+  of the GUI did not produce the plan; do not infer that the object
+  check passed.
+- Step-3 inspection now visibly shows the **separate** object-audit
+  status and expected/matched schema-entry counts.
+- The data editor no longer permits selecting the SQLite storage type
+  of a cell. It displays the source type read-only and only stages a
+  replacement value of the **same** storage class. Existing NULL values
+  remain NULL in this values-only editor.
+- Both the JS staging/correction builder and Rust migration verifier
+  reject any altered SQLite storage class (TEXT vs INTEGER, etc.).
+  This is in addition to existing SQLite schema/constraint preservation
+  and does not restrict ownership-based editing of values.
+- Changes are still staged on isolated copies only, and no final
+  SQLCipher destination is created or published.
+
+Existing source column definitions were never editable in the
+schema-structure sense: the old type selector affected individual
+cell storage classes. It has nevertheless been removed because it was
+outside the approved values-only scope.

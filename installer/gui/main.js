@@ -2,8 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { previewArguments } from "./preview-arguments.js";
 import { validateDestinationPassword } from "./database-password-policy.js";
 import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js";
-import { assessLegacyAlphaSchema } from "./legacy-schema.js";
-import { assessRegisteredSchemaObjects } from "./schema-object-assessment.js";
+import { databaseReviewEvidence } from "./database-review-evidence.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
 import { assessFieldCoverage } from "./schema-coverage.js";
 import { createFullReview, stageFullCell, fullRowCorrections, fullReviewSummary } from "./full-database-review.js";
@@ -143,8 +142,7 @@ document.querySelector("#preview").addEventListener("click", async () => {
         operation: selectedDatabase ? "legacy_sqlite_to_sqlcipher" : "create_sqlcipher",
         source: selectedDatabase,
         sourceInspected: Boolean(lastDatabaseInspection),
-        schemaAssessment: lastDatabaseInspection ? assessLegacyAlphaSchema(lastDatabaseInspection) : null,
-        schemaObjectAssessment: lastDatabaseInspection ? assessRegisteredSchemaObjects(lastDatabaseInspection) : null,
+        ...databaseReviewEvidence(lastDatabaseInspection),
         destinationEncryptionRequired: true,
         // The five domain tabs now share the same full-row editor. Legacy
         // correction arrays remain in the plan shape for older consumers.
@@ -432,8 +430,15 @@ async function inspectSelectedSqlite() {
     retainedSourceUnlockPassword = unlockPassword;
     renderGroupedDatabase();
     updateReviewSummary();
+    const objectAudit = databaseReviewEvidence(preview).schemaObjectAssessment;
+    const objectCounts = Number.isSafeInteger(objectAudit.matchedSchemaEntryCount) &&
+      Number.isSafeInteger(objectAudit.expectedSchemaEntryCount)
+      ? " (" + objectAudit.matchedSchemaEntryCount + "/" +
+        objectAudit.expectedSchemaEntryCount + " entries)"
+      : "";
     output.textContent = "Database integrity verified. " +
       records.tables.length + " complete SQLite table(s) loaded in the five review areas." +
+      " SQLite schema-object audit: " + objectAudit.reason + objectCounts + "." +
       " Unrecognized extensions are listed separately. Migration remains disabled.";
   } catch (error) {
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
@@ -665,8 +670,7 @@ function refreshReview() {
         applicationId: lastDatabaseInspection.applicationId,
         userVersion: lastDatabaseInspection.userVersion,
         tableCount: lastDatabaseInspection.tables.length,
-        schemaAssessment: assessLegacyAlphaSchema(lastDatabaseInspection),
-        schemaObjectAssessment: assessRegisteredSchemaObjects(lastDatabaseInspection)
+        ...databaseReviewEvidence(lastDatabaseInspection)
       }, null, 2)
     : "No database inspected. Fresh installation still requires encrypted SQLCipher.";
   updateReviewSummary();

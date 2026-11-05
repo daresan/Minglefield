@@ -511,3 +511,24 @@ fn rehearses_workflow_host_rules_and_binary_cell_changes_without_source_writes()
     assert_eq!(std::fs::read(&file).unwrap(), before_bytes);
     std::fs::remove_file(file).unwrap();
 }
+
+#[test]
+fn full_row_rejects_type_changes_at_the_core_migration_boundary() {
+    for (before, after) in [
+        (full_cell("text", Some("5")), full_cell("integer", Some("5"))),
+        (full_cell("null", None), full_cell("text", Some("filled"))),
+        (full_cell("blob", Some("00ff")), full_cell("text", Some("00ff"))),
+    ] {
+        let correction = ReviewCorrection::FullRow {
+            table: "sec01_host_rules".to_owned(),
+            row_id: Some("1".to_owned()),
+            columns: vec!["config".to_owned()],
+            before: vec![before],
+            after: vec![after],
+        };
+        assert_eq!(
+            verify_correction(&correction).unwrap_err(),
+            "SQLite storage type changes are not permitted in data review"
+        );
+    }
+}

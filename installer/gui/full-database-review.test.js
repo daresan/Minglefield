@@ -61,3 +61,23 @@ test("rejects unverified rows, schema change and altered row identities",()=>{
   const invalid=source();invalid.tables[2].rows[0].cells[1].value="zz";
   assert.throws(()=>createFullReview(invalid),/BLOB/);
 });
+
+test("refuses storage-type changes while allowing value edits of the original type", () => {
+  const original = source();
+  for (const [table, column, kind, value] of [
+    ["sec01_host_rules", "settings", "integer", "12"],
+    ["password_data", "hash", "text", "00ff"],
+    ["sec01_host_comfy_workflows", "workflow_json", "null", null]
+  ]) {
+    assert.throws(
+      () => stageFullCell(original, table, 0, column, kind, value),
+      /storage type changes are not allowed/
+    );
+  }
+  const changed = createFullReview(original);
+  changed.tables[1].rows[0].cells[2] = {kind:"integer", value:"2"};
+  assert.throws(() => fullRowCorrections(original, changed), /storage type changed/);
+  const valid = stageFullCell(original, "sec01_host_rules", 0, "settings", "text",
+    '{"max_parallel":9}');
+  assert.equal(fullRowCorrections(original, valid).length, 1);
+});

@@ -76,6 +76,9 @@ export function stageFullCell(review, tableName, rowIndex, columnName, kind, val
   const index = table.columns.indexOf(columnName);
   if (index < 0 || !Number.isInteger(rowIndex) ||
       rowIndex < 0 || rowIndex >= table.rows.length) throw new Error("Unknown source cell");
+  if (table.rows[rowIndex].cells[index].kind !== kind) {
+    throw new Error("SQLite storage type changes are not allowed in data review");
+  }
   table.rows[rowIndex].cells[index] = typed;
   return next;
 }
@@ -92,6 +95,9 @@ export function fullRowCorrections(original, edited) {
     for (let r = 0; r < a.rows.length; r++) {
       const left = a.rows[r], right = b.rows[r];
       if (left.rowId !== right.rowId) throw new Error("Original row identity changed");
+      if (left.cells.some((cell, index) => cell.kind !== right.cells[index].kind)) {
+        throw new Error("SQLite storage type changed during value review");
+      }
       if (JSON.stringify(left.cells) !== JSON.stringify(right.cells)) {
         changes.push({
           kind: "full_row", table: a.name, row_id: left.rowId,

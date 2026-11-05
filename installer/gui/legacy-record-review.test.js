@@ -4,6 +4,7 @@ import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrectio
 
 const sample = () => ({
   agents: [{ agentId: "agent1", userId: "alice", disabled: false }],
+  hostRuntimes: [{ hostId: "host-a", runtimeId: "comfy1", runtimeType: "comfyui", endpoint: "http://127.0.0.1:8188", enabled: true, inputFolder: "/comfy/input" }],
   hosts: [{ hostId: "host-a", ownerId: "alice" }],
   effects: [{ hostId: "host-a", effectId: "effect-a", description: "Before", enabled: false }],
   hostJobs: [{ jobId: "job-a", hostId: "host-a", effectId: "effect-a", requestedBy: "alice", state: "queued" }],

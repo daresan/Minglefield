@@ -1,6 +1,6 @@
 //! Allowlisted, bounded read-only view of existing host-policy and game tables.
-use minglefield_installer_core::sqlite_inspection::{inspect_sqlite_with_password, InspectedTable};
-use rusqlite::{Connection, OpenFlags, Row};
+use minglefield_installer_core::sqlite_inspection::{open_inspected_snapshot, InspectedTable};
+use rusqlite::{Connection, Row};
 use serde::Serialize;
 use std::path::Path;
 
@@ -90,16 +90,10 @@ where
 }
 
 fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
-    let schema = inspect_sqlite_with_password(path, password)
+    let (db, schema) = open_inspected_snapshot(path, password)
         .map_err(|error| format!("Database inspection rejected: {error:?}"))?;
     if !schema.integrity_ok || schema.foreign_key_violations != 0 {
         return Err("Database integrity validation failed".to_owned());
-    }
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| "Cannot open selected database".to_owned())?;
-    if !password.is_empty() {
-        db.pragma_update(None, "key", password)
-            .map_err(|_| "Cannot unlock selected database".to_owned())?;
     }
     let mut result = LegacyRecordReview {
         hosts: vec![],

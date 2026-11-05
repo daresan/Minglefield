@@ -206,7 +206,16 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
     if present(
         &schema.tables,
         "alpha_git_profiles",
-        &["host_id", "profile_id", "owner_id", "label", "auth_method", "git_executable", "author_name", "author_email"],
+        &[
+            "host_id",
+            "profile_id",
+            "owner_id",
+            "label",
+            "auth_method",
+            "git_executable",
+            "author_name",
+            "author_email",
+        ],
         &mut result.unavailable,
     )? {
         result.git_profiles = read(

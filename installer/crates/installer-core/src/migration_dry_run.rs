@@ -66,9 +66,59 @@ pub struct TableRowCount {
     pub rows: u64,
 }
 
+/// Schema-only field inventory. Column names are never accompanied by row
+/// values, credential material or arbitrary JSON configuration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TableFieldCoverage {
+    pub table: String,
+    pub columns: Vec<String>,
+    pub staged_editable_columns: Vec<String>,
+    pub protected_columns: Vec<String>,
+}
+
+fn staged_columns(table: &str) -> &'static [&'static str] {
+    match table {
+        "alpha_users" | "alpha_agents" => &["disabled"],
+        "sec01_host_effect_definitions" => &["description", "enabled"],
+        "alpha_game_projects" => &[
+            "name", "repository_root", "job_attachments_root", "output_root",
+        ],
+        _ => &[],
+    }
+}
+
+fn field_coverage(inspection: &SqliteInspection) -> Vec<TableFieldCoverage> {
+    inspection
+        .tables
+        .iter()
+        .map(|table| {
+            let allowed = staged_columns(&table.name);
+            let staged_editable_columns = table
+                .columns
+                .iter()
+                .filter(|column| allowed.contains(&column.as_str()))
+                .cloned()
+                .collect();
+            let protected_columns = table
+                .columns
+                .iter()
+                .filter(|column| !allowed.contains(&column.as_str()))
+                .cloned()
+                .collect();
+            TableFieldCoverage {
+                table: table.name.clone(),
+                columns: table.columns.clone(),
+                staged_editable_columns,
+                protected_columns,
+            }
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MigrationDryRun {
     pub tables: Vec<TableRowCount>,
+    pub field_coverage: Vec<TableFieldCoverage>,
     pub schema_objects: usize,
     pub verified_changes: usize,
     pub source_records_written: bool,
@@ -467,6 +517,7 @@ pub fn rehearse_migration(
     }
     Ok(MigrationDryRun {
         tables: original_counts,
+        field_coverage: field_coverage(&inspection),
         schema_objects: inspection.schema_objects.len(),
         verified_changes: corrections.len(),
         source_records_written: false,

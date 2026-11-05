@@ -1,6 +1,8 @@
 // GUI-only entrypoint: suppress the Windows console subsystem window in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod legacy_record_review;
+
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
 use minglefield_installer_core::Mode;
@@ -494,6 +496,7 @@ fn main() {
             inspect_sqlite_database,
             inspect_alpha_users,
             inspect_alpha_jobs,
+            legacy_record_review::inspect_legacy_records,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

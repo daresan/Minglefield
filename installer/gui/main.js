@@ -461,47 +461,67 @@ async function inspectSelectedSqlite() {
     output.textContent = "Select a database first.";
     return;
   }
+  const path = selectedDatabase;
+  resetAlphaUserReview();
+  const requestSequence = reviewRequestSequence;
+  lastDatabaseInspection = null;
   output.textContent = "Inspecting a read-only SQLite snapshot…";
   try {
     const unlockPassword = existingDbPassword.value;
-    const request = invoke("inspect_sqlite_database", { path: selectedDatabase, password: unlockPassword });
+    const request = invoke("inspect_sqlite_database", { path, password: unlockPassword });
     existingDbPassword.value = "";
     const preview = await request;
+    if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
     lastDatabaseInspection = preview;
-    resetAlphaUserReview();
     if (!preview.integrityOk || !preview.foreignKeysOk) {
       document.querySelector("#data-editor-status").textContent =
         "Database integrity verification failed. Editing is unavailable.";
       output.textContent = "Database integrity or foreign-key verification failed. Migration cannot proceed.";
       return;
     }
+    const results = await Promise.allSettled([
+      invoke("inspect_alpha_users", { path, password: unlockPassword }),
+      invoke("inspect_alpha_jobs", { path, password: unlockPassword }),
+      invoke("inspect_legacy_records", { path, password: unlockPassword })
+    ]);
+    if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
     try {
-      const users = await invoke("inspect_alpha_users", { path: selectedDatabase, password: unlockPassword });
-      originalAlphaUsers = createAlphaUserReview(users);
-      editedAlphaUsers = createAlphaUserReview(users);
-      renderAlphaUsers();
-      const jobsRoot = document.querySelector("#data-fields-jobs");
-      jobsRoot.replaceChildren();
-      try {
-        inspectedAlphaJobs = await invoke("inspect_alpha_jobs", { path: selectedDatabase, password: unlockPassword });
-        for (const job of inspectedAlphaJobs) {
-          const line = document.createElement("p");
-          line.textContent = "Job " + job.jobId + " — User " + job.userId + " — Agent " + job.agentId;
-          jobsRoot.append(line);
-        }
-        if (!inspectedAlphaJobs.length) jobsRoot.textContent = "No Alpha jobs in this database.";
-      } catch (jobError) {
-        jobsRoot.textContent = "Alpha job review unavailable: " + String(jobError);
+      if (results[0].status === "fulfilled") {
+        originalAlphaUsers = createAlphaUserReview(results[0].value);
+        editedAlphaUsers = createAlphaUserReview(results[0].value);
+      } else {
+        reviewLoadIssues.push("Alpha users: " + String(results[0].reason));
       }
-      updateReviewSummary();
-    } catch (reviewError) {
-      document.querySelector("#data-editor-status").textContent =
-        "Application data could not be loaded for editing: " + String(reviewError);
+    } catch (error) {
+      reviewLoadIssues.push("Alpha users: " + String(error));
     }
-    output.textContent = preview.integrityOk && preview.foreignKeysOk
-      ? "Database integrity verified. Continue after confirming the new encrypted database password. Application data mapping and migration execution are still pending."
-      : "Database integrity or foreign-key verification failed. Migration cannot proceed.";
+    try {
+      if (results[1].status === "fulfilled") {
+        inspectedAlphaJobs = results[1].value;
+      } else {
+        reviewLoadIssues.push("Alpha jobs: " + String(results[1].reason));
+      }
+    } catch (error) {
+      reviewLoadIssues.push("Alpha jobs: " + String(error));
+    }
+    try {
+      if (results[2].status === "fulfilled") {
+        originalLegacyRecords = createLegacyReview(results[2].value);
+        editedLegacyRecords = createLegacyReview(results[2].value);
+      } else {
+        reviewLoadIssues.push("Hosts / Effects / Jobs / Games: " + String(results[2].reason));
+      }
+    } catch (error) {
+      reviewLoadIssues.push("Hosts / Effects / Jobs / Games: " + String(error));
+    }
+    renderAlphaUsers();
+    renderLegacyRecords();
+    renderJobRecords();
+    updateReviewSummary();
+    output.textContent = "Database integrity verified. Read-only record review completed with " +
+      reviewLoadIssues.length + " warning(s). Migration and installation remain disabled.";
   } catch (error) {
+    if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
     output.textContent = "Database inspection could not be completed. Check the selected file and existing database unlock password. " + String(error);
   }
 }

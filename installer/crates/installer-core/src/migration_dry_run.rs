@@ -8,8 +8,50 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::BTreeSet;
 use std::path::Path;
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawCell {
+    pub kind: String,
+    pub value: Option<String>,
+}
+
+impl RawCell {
+    fn to_sql(&self) -> Result<rusqlite::types::Value, String> {
+        use rusqlite::types::Value;
+        let raw = self.value.as_deref();
+        match (self.kind.as_str(), raw) {
+            ("null", None) => Ok(Value::Null),
+            ("integer", Some(value)) => value.parse::<i64>()
+                .map(Value::Integer).map_err(|_| "Invalid SQLite integer".to_owned()),
+            ("real", Some(value)) => value.parse::<f64>()
+                .ok().filter(|v| v.is_finite()).map(Value::Real)
+                .ok_or_else(|| "Invalid SQLite real value".to_owned()),
+            ("text", Some(value)) if value.len() <= 4 * 1024 * 1024 =>
+                Ok(Value::Text(value.to_owned())),
+            ("blob", Some(value)) if value.len() <= 8 * 1024 * 1024 && value.len() % 2 == 0 => {
+                let mut bytes = Vec::with_capacity(value.len() / 2);
+                for part in value.as_bytes().chunks_exact(2) {
+                    let text = std::str::from_utf8(part)
+                        .map_err(|_| "Invalid hexadecimal BLOB".to_owned())?;
+                    bytes.push(u8::from_str_radix(text, 16)
+                        .map_err(|_| "Invalid hexadecimal BLOB".to_owned())?);
+                }
+                Ok(Value::Blob(bytes))
+            }
+            _ => Err("Invalid or oversized SQLite cell".to_owned()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReviewCorrection {
+    FullRow {
+        table: String,
+        row_id: Option<String>,
+        columns: Vec<String>,
+        before: Vec<RawCell>,
+        after: Vec<RawCell>,
+    },
     UserDisabled {
         user_id: String,
         before: bool,
@@ -104,39 +146,16 @@ pub struct TableFieldCoverage {
     pub protected_columns: Vec<String>,
 }
 
-fn staged_columns(table: &str) -> &'static [&'static str] {
-    match table {
-        "alpha_users" | "alpha_agents" => &["disabled"],
-        "alpha_git_profiles" => &["label", "author_name", "author_email"],
-        "sec01_host_effect_definitions" => &["description", "enabled"],
-        "alpha_game_projects" => &[
-            "name",
-            "repository_root",
-            "job_attachments_root",
-            "output_root",
-        ],
-        _ => &[],
-    }
-}
-
 fn field_coverage(inspection: &SqliteInspection) -> Vec<TableFieldCoverage> {
     inspection
         .tables
         .iter()
         .map(|table| {
-            let allowed = staged_columns(&table.name);
-            let staged_editable_columns = table
-                .columns
-                .iter()
-                .filter(|column| allowed.contains(&column.as_str()))
-                .cloned()
-                .collect();
-            let protected_columns = table
-                .columns
-                .iter()
-                .filter(|column| !allowed.contains(&column.as_str()))
-                .cloned()
-                .collect();
+            // Every stored column is available to the generic typed review.
+            // Database constraints and generated-column restrictions are
+            // checked by SQLite on an isolated copy before accepting edits.
+            let staged_editable_columns = table.columns.clone();
+            let protected_columns = Vec::new();
             TableFieldCoverage {
                 table: table.name.clone(),
                 columns: table.columns.clone(),
@@ -250,6 +269,27 @@ fn valid_game_path(value: &str) -> bool {
 
 fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, String), String> {
     match correction {
+        ReviewCorrection::FullRow { table, row_id, columns, before, after } => {
+            if table.is_empty() || table.starts_with("sqlite_") || table.len() > 256
+                || columns.is_empty() || columns.len() > 1024
+                || before.len() != columns.len() || after.len() != columns.len()
+                || before == after
+                || columns.iter().any(|col| col.is_empty() || col.len() > 256)
+                || columns.iter().collect::<BTreeSet<_>>().len() != columns.len()
+            {
+                return Err("Invalid full-row migration correction".to_owned());
+            }
+            if let Some(id) = row_id {
+                id.parse::<i64>().map_err(|_| "Invalid original row identifier")?;
+            }
+            for cell in before.iter().chain(after) {
+                cell.to_sql()?;
+            }
+            // Row identity uses a native rowid when available. WITHOUT ROWID
+            // tables are matched by their complete original typed values.
+            let identity = row_id.clone().unwrap_or_else(|| format!("{before:?}"));
+            Ok((7, table.clone(), identity))
+        }
         ReviewCorrection::UserDisabled {
             user_id,
             before,
@@ -365,6 +405,66 @@ fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, Strin
 
 fn apply_verified_change(db: &Connection, correction: &ReviewCorrection) -> Result<(), String> {
     match correction {
+        ReviewCorrection::FullRow { table, row_id, columns, before, after } => {
+            let expected: Vec<String> = {
+                let mut stmt = db.prepare("SELECT name FROM pragma_table_xinfo(?1) ORDER BY cid")
+                    .map_err(|_| "Cannot inspect staged table columns")?;
+                stmt.query_map([table], |row| row.get(0))
+                    .map_err(|_| "Cannot inspect staged table layout")?
+                    .collect::<rusqlite::Result<_>>()
+                    .map_err(|_| "Cannot read staged table layout")?
+            };
+            if &expected != columns {
+                return Err("Source table schema changed since review".to_owned());
+            }
+            let name = format!("\"{}\"", table.replace('"', "\"\""));
+            let quoted = columns.iter().map(|col| format!("\"{}\"", col.replace('"', "\"\"")))
+                .collect::<Vec<_>>();
+            let previous = before.iter().map(RawCell::to_sql).collect::<Result<Vec<_>, _>>()?;
+            let new = after.iter().map(RawCell::to_sql).collect::<Result<Vec<_>, _>>()?;
+            let mut predicate_values = Vec::new();
+            let predicate = if let Some(id) = row_id {
+                predicate_values.push(rusqlite::types::Value::Integer(id.parse()
+                    .map_err(|_| "Invalid original row identifier")?));
+                "rowid IS ?".to_owned()
+            } else {
+                predicate_values.extend(previous.iter().cloned());
+                quoted.iter().map(|col| format!("{col} IS ?"))
+                    .collect::<Vec<_>>().join(" AND ")
+            };
+            let read_sql = format!("SELECT {} FROM {name} WHERE {predicate}", quoted.join(","));
+            let mut stmt = db.prepare(&read_sql)
+                .map_err(|_| "Cannot prepare original row verification")?;
+            let mut rows = stmt.query(rusqlite::params_from_iter(predicate_values.iter()))
+                .map_err(|_| "Cannot verify original row")?;
+            let observed = rows.next().map_err(|_| "Cannot read original row")?
+                .ok_or("Original row no longer exists")?;
+            let actual = (0..columns.len()).map(|index| observed.get::<_, rusqlite::types::Value>(index))
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|_| "Cannot decode original row")?;
+            if actual != previous {
+                return Err("Staged row contains stale original values".to_owned());
+            }
+            if rows.next().map_err(|_| "Cannot check ambiguous original rows")?.is_some() {
+                return Err("Original row is ambiguous without an SQLite rowid".to_owned());
+            }
+            drop(rows);
+            drop(stmt);
+            let changed_columns: Vec<usize> = (0..columns.len())
+                .filter(|index| previous[*index] != new[*index]).collect();
+            let setters = changed_columns.iter()
+                .map(|index| format!("{} = ?", quoted[*index]))
+                .collect::<Vec<_>>().join(",");
+            let update_sql = format!("UPDATE {name} SET {setters} WHERE {predicate}");
+            let mut bind = changed_columns.iter().map(|index| new[*index].clone())
+                .collect::<Vec<_>>();
+            bind.extend(predicate_values);
+            let count = db.execute(&update_sql, rusqlite::params_from_iter(bind.iter()))
+                .map_err(|_| "Cannot apply staged full-row edit to isolated copy")?;
+            if count != 1 {
+                return Err("Staged full-row edit did not match exactly one row".to_owned());
+            }
+        }
         ReviewCorrection::UserDisabled {
             user_id,
             before,

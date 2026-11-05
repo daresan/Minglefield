@@ -1,6 +1,7 @@
 // GUI-only entrypoint: suppress the Windows console subsystem window in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod full_database_review;
 mod legacy_record_review;
 mod migration_review;
 
@@ -505,6 +506,7 @@ fn main() {
             inspect_alpha_users,
             inspect_alpha_jobs,
             legacy_record_review::inspect_legacy_records,
+            full_database_review::inspect_full_database,
             migration_review::preview_migration_rehearsal,
             migration_review::verify_temporary_encrypted_copy,
             browse_directory,

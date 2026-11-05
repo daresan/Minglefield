@@ -7,9 +7,31 @@ use minglefield_installer_core::migration_dry_run::{
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FullCellValue {
+    pub(crate) kind: String,
+    pub(crate) value: Option<String>,
+}
+
+impl FullCellValue {
+    fn into_core(self) -> minglefield_installer_core::migration_dry_run::RawCell {
+        minglefield_installer_core::migration_dry_run::RawCell {
+            kind: self.kind,
+            value: self.value,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum StagedCorrection {
+    FullRow {
+        table: String,
+        row_id: Option<String>,
+        columns: Vec<String>,
+        before: Vec<FullCellValue>,
+        after: Vec<FullCellValue>,
+    },
     UserDisabled {
         user_id: String,
         before: bool,
@@ -96,6 +118,13 @@ impl From<StagedGamePathField> for GamePathField {
 impl From<StagedCorrection> for ReviewCorrection {
     fn from(value: StagedCorrection) -> Self {
         match value {
+            StagedCorrection::FullRow { table, row_id, columns, before, after } => Self::FullRow {
+                table,
+                row_id,
+                columns,
+                before: before.into_iter().map(FullCellValue::into_core).collect(),
+                after: after.into_iter().map(FullCellValue::into_core).collect(),
+            },
             StagedCorrection::UserDisabled {
                 user_id,
                 before,

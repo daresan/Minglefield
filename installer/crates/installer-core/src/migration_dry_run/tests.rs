@@ -72,26 +72,21 @@ fn reviews_all_tables_and_rolls_back_every_staged_change() {
         .iter()
         .find(|entry| entry.table == "alpha_game_projects")
         .unwrap();
-    assert_eq!(games.staged_editable_columns.len(), 4);
-    assert!(games.protected_columns.contains(&"owner_id".to_owned()));
-    assert!(games
-        .protected_columns
-        .contains(&"settings_revision".to_owned()));
+    assert_eq!(games.staged_editable_columns.len(), 8);
+    assert!(games.protected_columns.is_empty());
     let passwords = preview
         .field_coverage
         .iter()
         .find(|entry| entry.table == "alpha_passwords")
         .unwrap();
-    assert!(passwords.staged_editable_columns.is_empty());
-    assert!(passwords
-        .protected_columns
-        .contains(&"password_hash".to_owned()));
+    assert!(passwords.staged_editable_columns.contains(&"password_hash".to_owned()));
+    assert!(passwords.protected_columns.is_empty());
     let extension = preview
         .field_coverage
         .iter()
         .find(|entry| entry.table == "extension_data")
         .unwrap();
-    assert!(extension.staged_editable_columns.is_empty());
+    assert_eq!(extension.staged_editable_columns, vec!["secret"]);
     assert_eq!(extension.columns, vec!["secret"]);
     assert_eq!(
         preview
@@ -333,10 +328,8 @@ fn rehearses_git_metadata_but_never_authentication_or_owner() {
         .iter()
         .find(|entry| entry.table == "alpha_git_profiles")
         .unwrap();
-    assert_eq!(git.staged_editable_columns.len(), 3);
-    assert!(git.protected_columns.contains(&"auth_method".to_owned()));
-    assert!(git.protected_columns.contains(&"git_executable".to_owned()));
-    assert!(git.protected_columns.contains(&"owner_id".to_owned()));
+    assert_eq!(git.staged_editable_columns.len(), 8);
+    assert!(git.protected_columns.is_empty());
     assert_eq!(std::fs::read(&file).unwrap(), before_bytes);
     for bad in [
         ReviewCorrection::GitProfileText {
@@ -422,5 +415,74 @@ fn plaintext_alpha_with_optional_password_keeps_second_copy_unencrypted() {
     assert!(changed.fidelity.values_verified);
     assert_eq!(changed.verified_changes, 3);
     assert_eq!(std::fs::read(&file).unwrap(), original_bytes);
+    std::fs::remove_file(file).unwrap();
+}
+
+
+fn full_cell(kind: &str, value: Option<&str>) -> RawCell {
+    RawCell {
+        kind: kind.to_owned(),
+        value: value.map(str::to_owned),
+    }
+}
+
+#[test]
+fn rehearses_workflow_host_rules_and_binary_cell_changes_without_source_writes() {
+    let file = fixture();
+    {
+        let db = Connection::open(&file).unwrap();
+        db.execute_batch(
+            r#"CREATE TABLE sec01_host_rules(host_id TEXT, rule_id TEXT, config TEXT);
+            INSERT INTO sec01_host_rules VALUES('h1','rule1','{"parallel":2}');
+            CREATE TABLE sec01_host_comfy_workflows(host_id TEXT, workflow_id TEXT, definition BLOB);
+            INSERT INTO sec01_host_comfy_workflows VALUES('h1','rig',x'00ff');
+            CREATE TABLE extra_no_rowid(k TEXT PRIMARY KEY, note TEXT) WITHOUT ROWID;
+            INSERT INTO extra_no_rowid VALUES('key','old');"#
+        ).unwrap();
+    }
+    let before_bytes = std::fs::read(&file).unwrap();
+    let changes = vec![
+        ReviewCorrection::FullRow {
+            table: "sec01_host_rules".into(),
+            row_id: Some("1".into()),
+            columns: vec!["host_id".into(), "rule_id".into(), "config".into()],
+            before: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
+                full_cell("text", Some(r#"{"parallel":2}"#))],
+            after: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
+                full_cell("text", Some(r#"{"parallel":3}"#))],
+        },
+        ReviewCorrection::FullRow {
+            table: "sec01_host_comfy_workflows".into(),
+            row_id: Some("1".into()),
+            columns: vec!["host_id".into(), "workflow_id".into(), "definition".into()],
+            before: vec![full_cell("text", Some("h1")), full_cell("text", Some("rig")),
+                full_cell("blob", Some("00ff"))],
+            after: vec![full_cell("text", Some("h1")), full_cell("text", Some("rig")),
+                full_cell("blob", Some("12ab"))],
+        },
+        ReviewCorrection::FullRow {
+            table: "extra_no_rowid".into(),
+            row_id: None,
+            columns: vec!["k".into(), "note".into()],
+            before: vec![full_cell("text", Some("key")), full_cell("text", Some("old"))],
+            after: vec![full_cell("text", Some("key")), full_cell("text", Some("new"))],
+        },
+    ];
+    let result = rehearse_migration(&file, "", &changes).unwrap();
+    assert_eq!(result.verified_changes, 3);
+    assert!(result.fidelity.values_verified);
+    assert!(!result.source_records_written);
+    assert_eq!(std::fs::read(&file).unwrap(), before_bytes);
+    let stale = vec![ReviewCorrection::FullRow {
+        table: "sec01_host_rules".into(),
+        row_id: Some("1".into()),
+        columns: vec!["host_id".into(), "rule_id".into(), "config".into()],
+        before: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
+            full_cell("text", Some("stale"))],
+        after: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
+            full_cell("text", Some("new"))],
+    }];
+    assert!(rehearse_migration(&file, "", &stale).is_err());
+    assert_eq!(std::fs::read(&file).unwrap(), before_bytes);
     std::fs::remove_file(file).unwrap();
 }

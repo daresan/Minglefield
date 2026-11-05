@@ -392,36 +392,61 @@ function renderLegacyRecords() {
   renderJobRecords();
 }
 
-// Review only the supported user-disabled corrections. Other categories remain
-// explicitly unavailable until their real backend record readers exist.
+// Final review reports both original values and staged values; never writes the source.
 function updateReviewSummary() {
   const summary = document.querySelector("#review-data-corrections");
   const status = document.querySelector("#data-editor-status");
-  const categories = ["hosts", "effects", "jobs", "games"];
-  for (const category of categories) {
-    if (category === "jobs" && inspectedAlphaJobs) continue;
-    document.querySelector("#data-fields-" + category).textContent =
-      "Record review not implemented for this category. No values have been loaded or staged.";
-  }
-  if (!originalAlphaUsers || !editedAlphaUsers) {
+  if (!originalAlphaUsers && !originalLegacyRecords) {
     summary.textContent = "No verified application records loaded for review. No changes staged.";
     return;
   }
   try {
-    const changes = alphaUserCorrections(originalAlphaUsers, editedAlphaUsers);
-    const before = new Map(originalAlphaUsers.map(record => [record.userId, record]));
+    const alphaChanges = originalAlphaUsers && editedAlphaUsers
+      ? alphaUserCorrections(originalAlphaUsers, editedAlphaUsers) : [];
+    const legacyChanges = originalLegacyRecords && editedLegacyRecords
+      ? legacyCorrections(originalLegacyRecords, editedLegacyRecords) : [];
+    const changes = [
+      ...alphaChanges.map(change => ({
+        label: "User " + change.userId + " / Disabled",
+        previous: originalAlphaUsers.find(item => item.userId === change.userId).disabled,
+        next: change.disabled
+      })),
+      ...legacyChanges.map(change => ({
+        label: (change.category === "effects" ? "Effect " : "Game ") +
+          change.key + " / " + change.field,
+        previous: change.previous,
+        next: change.next
+      }))
+    ];
     summary.replaceChildren();
     const heading = document.createElement("p");
-    heading.textContent = changes.length + " supported Alpha user correction(s) staged in memory. No source data changed.";
+    heading.textContent = changes.length + " correction(s) staged in memory. No source data changed.";
     summary.append(heading);
+    if (editedLegacyRecords) {
+      const counts = document.createElement("p");
+      counts.textContent = "Verified records: " + editedLegacyRecords.hosts.length + " hosts, " +
+        editedLegacyRecords.effects.length + " effects, " +
+        editedLegacyRecords.hostJobs.length + " host jobs, " +
+        editedLegacyRecords.games.length + " games; " +
+        (inspectedAlphaJobs?.length ?? 0) + " Alpha jobs; " +
+        (editedAlphaUsers?.length ?? 0) + " Alpha users.";
+      summary.append(counts);
+    }
     for (const change of changes) {
       const line = document.createElement("p");
-      line.textContent = "User " + change.userId + ": Disabled " +
-        String(before.get(change.userId).disabled) + " → " + String(change.disabled);
+      line.textContent = change.label + ": " + String(change.previous) + " → " + String(change.next);
       summary.append(line);
     }
-    status.textContent = changes.length + " Alpha user correction(s) staged in memory only. " +
-      "Hosts, Effects, Jobs and Games are not yet editable. Migration remains disabled.";
+    for (const issue of [...(originalLegacyRecords?.unavailable ?? []), ...reviewLoadIssues]) {
+      const line = document.createElement("p");
+      line.textContent = "Not included: " + issue;
+      summary.append(line);
+    }
+    const limitation = document.createElement("p");
+    limitation.textContent = "Unchanged/read-only: host owners, agent/job identities, job states, effect activation, game paths, secrets and authentication sessions. No migration or installation is authorized.";
+    summary.append(limitation);
+    status.textContent = changes.length + " supported correction(s) staged in memory. " +
+      reviewLoadIssues.length + " record reader warning(s). Migration remains disabled.";
   } catch (error) {
     summary.textContent = "Review validation failed: " + String(error);
     status.textContent = "Review validation failed: " + String(error);

@@ -248,9 +248,11 @@ let selectedDatabase = null;
 let lastDatabaseInspection = null;
 let originalAlphaUsers = null;
 let editedAlphaUsers = null;
+let inspectedAlphaJobs = null;
 function resetAlphaUserReview() {
   originalAlphaUsers = null;
   editedAlphaUsers = null;
+  inspectedAlphaJobs = null;
   document.querySelector("#data-fields-login").replaceChildren();
   updateReviewSummary();
 }
@@ -283,6 +285,7 @@ function updateReviewSummary() {
   const status = document.querySelector("#data-editor-status");
   const categories = ["hosts", "effects", "jobs", "games"];
   for (const category of categories) {
+    if (category === "jobs" && inspectedAlphaJobs) continue;
     document.querySelector("#data-fields-" + category).textContent =
       "Record review not implemented for this category. No values have been loaded or staged.";
   }
@@ -336,6 +339,19 @@ async function inspectSelectedSqlite() {
       originalAlphaUsers = createAlphaUserReview(users);
       editedAlphaUsers = createAlphaUserReview(users);
       renderAlphaUsers();
+      const jobsRoot = document.querySelector("#data-fields-jobs");
+      jobsRoot.replaceChildren();
+      try {
+        inspectedAlphaJobs = await invoke("inspect_alpha_jobs", { path: selectedDatabase, password: unlockPassword });
+        for (const job of inspectedAlphaJobs) {
+          const line = document.createElement("p");
+          line.textContent = "Job " + job.jobId + " — User " + job.userId + " — Agent " + job.agentId;
+          jobsRoot.append(line);
+        }
+        if (!inspectedAlphaJobs.length) jobsRoot.textContent = "No Alpha jobs in this database.";
+      } catch (jobError) {
+        jobsRoot.textContent = "Alpha job review unavailable: " + String(jobError);
+      }
       updateReviewSummary();
     } catch (reviewError) {
       document.querySelector("#data-editor-status").textContent =

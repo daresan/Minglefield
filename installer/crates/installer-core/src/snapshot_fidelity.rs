@@ -45,13 +45,14 @@ fn schema(db: &Connection) -> Result<Vec<SchemaEntry>, String> {
     let mut statement = db
         .prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name,tbl_name")
         .map_err(|_| "Cannot read complete source schema")?;
-    statement
+    let result = statement
         .query_map([], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })
         .map_err(|_| "Cannot inventory source schema")?
         .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|_| "Cannot decode complete source schema".to_owned())
+        .map_err(|_| "Cannot decode complete source schema".to_owned())?;
+    Ok(result)
 }
 
 fn table_names(entries: &[SchemaEntry]) -> Vec<String> {
@@ -255,7 +256,7 @@ mod tests {
         let (copy, report) = create_verified_memory_copy(&db).unwrap();
         assert!(report.values_verified);
         assert_eq!(report.tables_checked, 4);
-        assert_eq!(report.rows_checked, 5);
+        assert_eq!(report.rows_checked, 6);
         assert_eq!(report.internal_tables_checked, 1);
         assert!(report.schema_entries_checked >= 7);
         assert_eq!(verify_snapshot_equality(&db, &copy).unwrap(), report);

@@ -41,7 +41,33 @@ pub enum ReviewCorrection {
         before: String,
         after: String,
     },
+    GitProfileText {
+        host_id: String,
+        profile_id: String,
+        owner_id: String,
+        field: GitProfileField,
+        before: String,
+        after: String,
+    },
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitProfileField {
+    Label,
+    AuthorName,
+    AuthorEmail,
+}
+
+impl GitProfileField {
+    fn column(self) -> &'static str {
+        match self {
+            Self::Label => "label",
+            Self::AuthorName => "author_name",
+            Self::AuthorEmail => "author_email",
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GamePathField {
@@ -79,6 +105,7 @@ pub struct TableFieldCoverage {
 fn staged_columns(table: &str) -> &'static [&'static str] {
     match table {
         "alpha_users" | "alpha_agents" => &["disabled"],
+        "alpha_git_profiles" => &["label", "author_name", "author_email"],
         "sec01_host_effect_definitions" => &["description", "enabled"],
         "alpha_game_projects" => &[
             "name",
@@ -288,6 +315,30 @@ fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, Strin
             }
             Ok((3, host_id.clone(), effect_id.clone()))
         }
+        ReviewCorrection::GitProfileText {
+            host_id,
+            profile_id,
+            owner_id,
+            field,
+            before,
+            after,
+        } => {
+            if !valid_id(host_id)
+                || !valid_id(profile_id)
+                || !valid_id(owner_id)
+                || before == after
+                || before.contains('\0')
+                || after.contains('\0')
+                || before.chars().count() > 256
+                || after.chars().count() > 256
+                || (matches!(field, GitProfileField::Label)
+                    && (after.trim() != after || after.is_empty()
+                        || after.chars().count() > 120))
+            {
+                return Err("Invalid Git profile text correction".to_owned());
+            }
+            Ok((6, format!("{host_id}:{profile_id}"), field.column().to_owned()))
+        }
         ReviewCorrection::GamePath {
             project_id,
             field,
@@ -425,6 +476,35 @@ fn apply_verified_change(db: &Connection, correction: &ReviewCorrection) -> Resu
             ).map_err(|_| "Cannot simulate effect activation")?;
             if changed != 1 {
                 return Err("Staged effect activation update failed".to_owned());
+            }
+        }
+        ReviewCorrection::GitProfileText {
+            host_id,
+            profile_id,
+            owner_id,
+            field,
+            before,
+            after,
+        } => {
+            let column = field.column();
+            let sql = format!(
+                "SELECT {column} FROM alpha_git_profiles WHERE host_id=?1 AND profile_id=?2 AND owner_id=?3"
+            );
+            let actual: Option<String> = db
+                .query_row(&sql, params![host_id, profile_id, owner_id], |r| r.get(0))
+                .optional()
+                .map_err(|_| "Cannot verify staged Git profile")?;
+            if actual.as_deref() != Some(before.as_str()) {
+                return Err("Staged Git profile value, identity or owner is stale".to_owned());
+            }
+            let sql = format!(
+                "UPDATE alpha_git_profiles SET {column}=?1 WHERE host_id=?2 AND profile_id=?3 AND owner_id=?4 AND {column}=?5"
+            );
+            let changed = db
+                .execute(&sql, params![after, host_id, profile_id, owner_id, before])
+                .map_err(|_| "Cannot simulate Git profile correction")?;
+            if changed != 1 {
+                return Err("Staged Git profile update failed".to_owned());
             }
         }
         ReviewCorrection::GamePath {

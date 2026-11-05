@@ -35,7 +35,7 @@ impl RawCell {
             }
             ("blob", Some(value)) if value.len() <= 8 * 1024 * 1024 && value.len() % 2 == 0 => {
                 let mut bytes = Vec::with_capacity(value.len() / 2);
-                for part in value.as_bytes().chunks_exact(2) {
+                for part in value.as_bytes().as_chunks::<2>().0 {
                     let text = std::str::from_utf8(part)
                         .map_err(|_| "Invalid hexadecimal BLOB".to_owned())?;
                     bytes.push(

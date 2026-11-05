@@ -313,9 +313,8 @@ pub async fn verify_temporary_encrypted_copy(
             .map(ReviewCorrection::from)
             .collect();
         let baseline = rehearse_migration(source, &existing_password, &changes)?;
-        let proof = rehearse_encrypted_test_copy(
-            source, &existing_password, &new_password, &changes,
-        )?;
+        let proof =
+            rehearse_encrypted_test_copy(source, &existing_password, &new_password, &changes)?;
         if proof.staged_changes_verified != changes.len()
             || proof.staged_changes_verified != baseline.verified_changes
             || !proof.staged_values_match_ciphertext

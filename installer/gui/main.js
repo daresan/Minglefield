@@ -150,6 +150,12 @@ document.querySelector("#preview").addEventListener("click", async () => {
           status: lastMigrationRehearsal.status,
           verifiedChanges: lastMigrationRehearsal.verifiedChanges,
           preservedTableCount: lastMigrationRehearsal.preservedTables.length,
+          inventoriedColumnCount: lastMigrationRehearsal.fieldCoverage.reduce(
+            (sum, entry) => sum + entry.columns.length, 0
+          ),
+          protectedColumnCount: lastMigrationRehearsal.fieldCoverage.reduce(
+            (sum, entry) => sum + entry.protectedColumns.length, 0
+          ),
           schemaObjectCount: lastMigrationRehearsal.schemaObjectCount,
           proposedDestination: lastMigrationRehearsal.destinationPath,
           sourcePreserved: lastMigrationRehearsal.sourcePreserved,
@@ -699,15 +705,20 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
     const preview = await request;
     if (requestSequence !== rehearsalRequestSequence || selectedDatabase !== source) return;
     if (preview.executionEnabled || preview.destinationCreated ||
-        !preview.sourcePreserved || !preview.sourceIntegrityVerified) {
+        !preview.sourcePreserved || !preview.sourceIntegrityVerified ||
+        !Array.isArray(preview.fieldCoverage) ||
+        preview.fieldCoverage.length !== preview.preservedTables.length) {
       throw new Error("Unexpected unsafe migration rehearsal result");
     }
     lastMigrationRehearsal = { ...preview, sourcePath: source, destinationPath };
     migrationResult.textContent = JSON.stringify(preview, null, 2);
     document.querySelector("#review-migration-rehearsal-status").textContent =
       "Verified rehearsal: " + preview.verifiedChanges + " staged correction(s), " +
-      preview.preservedTables.length + " existing tables accounted for. " +
-      "Source preserved; no destination created. Migration execution disabled.";
+      preview.preservedTables.length + " existing tables accounted for, " +
+      preview.fieldCoverage.reduce((sum, entry) => sum + entry.columns.length, 0) +
+      " columns inventoried (" +
+      preview.fieldCoverage.reduce((sum, entry) => sum + entry.protectedColumns.length, 0) +
+      " protected). Source preserved; no destination created. Migration execution disabled.";
   } catch (error) {
     if (requestSequence !== rehearsalRequestSequence) return;
     migrationResult.textContent = "Migration rehearsal rejected: " + String(error);

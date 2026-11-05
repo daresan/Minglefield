@@ -191,14 +191,17 @@ pub fn open_inspected_snapshot(
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|_| InspectionError::DatabaseError)?;
     drop(objects_stmt);
-    Ok((snapshot, SqliteInspection {
-        application_id,
-        user_version,
-        tables,
-        schema_objects,
-        integrity_ok: true,
-        foreign_key_violations,
-    }))
+    Ok((
+        snapshot,
+        SqliteInspection {
+            application_id,
+            user_version,
+            tables,
+            schema_objects,
+            integrity_ok: true,
+            foreign_key_violations,
+        },
+    ))
 }
 
 #[cfg(test)]

@@ -144,6 +144,15 @@ pub struct TableCountPreview {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TableFieldCoveragePreview {
+    table: String,
+    columns: Vec<String>,
+    staged_editable_columns: Vec<String>,
+    protected_columns: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MigrationRehearsalPreview {
     status: &'static str,
     source_integrity_verified: bool,
@@ -152,6 +161,7 @@ pub struct MigrationRehearsalPreview {
     destination_created: bool,
     verified_changes: usize,
     preserved_tables: Vec<TableCountPreview>,
+    field_coverage: Vec<TableFieldCoveragePreview>,
     schema_object_count: usize,
     execution_enabled: bool,
 }
@@ -186,6 +196,16 @@ pub async fn preview_migration_rehearsal(
                 .map(|table| TableCountPreview {
                     table: table.table,
                     rows: table.rows,
+                })
+                .collect(),
+            field_coverage: inspected
+                .field_coverage
+                .into_iter()
+                .map(|coverage| TableFieldCoveragePreview {
+                    table: coverage.table,
+                    columns: coverage.columns,
+                    staged_editable_columns: coverage.staged_editable_columns,
+                    protected_columns: coverage.protected_columns,
                 })
                 .collect(),
             schema_object_count: inspected.schema_objects,

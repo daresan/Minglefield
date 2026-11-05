@@ -6,6 +6,13 @@ use std::path::Path;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentRecord {
+    agent_id: String,
+    user_id: String,
+    disabled: bool,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HostRecord {
     host_id: String,
     owner_id: String,
@@ -42,6 +49,7 @@ pub struct GameRecord {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyRecordReview {
+    agents: Vec<AgentRecord>,
     hosts: Vec<HostRecord>,
     effects: Vec<EffectRecord>,
     host_jobs: Vec<HostJobRecord>,
@@ -99,12 +107,34 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
         return Err("Database integrity validation failed".to_owned());
     }
     let mut result = LegacyRecordReview {
+        agents: vec![],
         hosts: vec![],
         effects: vec![],
         host_jobs: vec![],
         games: vec![],
         unavailable: vec![],
     };
+    if present(
+        &schema.tables,
+        "alpha_agents",
+        &["agent_id", "user_id", "disabled"],
+        &mut result.unavailable,
+    )? {
+        result.agents = read(&db,
+            "SELECT agent_id,user_id,disabled FROM alpha_agents ORDER BY agent_id LIMIT 501",
+            |row| {
+                let value: i64 = row.get(2)?;
+                if value != 0 && value != 1 {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+                Ok(AgentRecord {
+                    agent_id: bounded(row, 0, 128)?,
+                    user_id: bounded(row, 1, 128)?,
+                    disabled: value == 1,
+                })
+            },
+        )?;
+    }
     if present(
         &schema.tables,
         "sec01_host_owners",
@@ -199,7 +229,7 @@ mod tests {
             db.execute_batch("CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY);")
                 .unwrap();
         }
-        assert_eq!(inspect(&path, "").unwrap().unavailable.len(), 4);
+        assert_eq!(inspect(&path, "").unwrap().unavailable.len(), 5);
         {
             let db = Connection::open(&path).unwrap();
             db.execute_batch("CREATE TABLE sec01_host_owners(host_id TEXT);")
@@ -219,7 +249,9 @@ mod tests {
         {
             let db = Connection::open(&path).unwrap();
             db.execute_batch(
-                "CREATE TABLE sec01_host_owners(host_id TEXT,owner_id TEXT);
+                "CREATE TABLE alpha_agents(agent_id TEXT,user_id TEXT,disabled INTEGER);
+                 INSERT INTO alpha_agents VALUES('agent1','alice',0);
+                 CREATE TABLE sec01_host_owners(host_id TEXT,owner_id TEXT);
                  INSERT INTO sec01_host_owners VALUES('h1','alice');
                  CREATE TABLE sec01_host_effect_definitions(host_id TEXT,effect_id TEXT,description TEXT,enabled INTEGER);
                  INSERT INTO sec01_host_effect_definitions VALUES('h1','e1','Workflow',0);
@@ -234,6 +266,8 @@ mod tests {
         }
         let original_bytes = std::fs::read(&path).unwrap();
         let reviewed = inspect(&path, "").unwrap();
+        assert_eq!(reviewed.agents[0].agent_id, "agent1");
+        assert!(!reviewed.agents[0].disabled);
         assert_eq!(reviewed.hosts[0].owner_id, "alice");
         assert_eq!(reviewed.effects[0].description, "Workflow");
         assert!(!reviewed.effects[0].enabled);

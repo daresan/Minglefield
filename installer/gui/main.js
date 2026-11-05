@@ -426,10 +426,38 @@ function renderLegacyRecords() {
         document.querySelector("#data-editor-status").textContent = String(error);
       }
     });
-    const path = document.createElement("small");
-    path.textContent = "Repository: " + game.repositoryRoot + " (read-only)";
-    label.append(field, path);
+    label.append(field);
     games.append(label);
+    const revision = document.createElement("p");
+    revision.textContent = "Settings revision: " + game.settingsRevision +
+      " (read-only; existing owner/host identity is preserved)";
+    games.append(revision);
+    for (const [fieldName, description] of [
+      ["repositoryRoot", "Repository directory"],
+      ["jobAttachmentsRoot", "Job attachments directory"],
+      ["outputRoot", "Output directory"]
+    ]) {
+      const pathLabel = document.createElement("label");
+      pathLabel.textContent = description + " — " + game.projectId;
+      const pathField = document.createElement("input");
+      pathField.type = "text";
+      pathField.maxLength = 1024;
+      pathField.value = game[fieldName];
+      pathField.addEventListener("change", () => {
+        try {
+          editedLegacyRecords = stageLegacyText(editedLegacyRecords, "games",
+            game.projectId, fieldName, pathField.value);
+          invalidateMigrationRehearsal();
+          updateReviewSummary();
+        } catch (error) {
+          document.querySelector("#data-editor-status").textContent = String(error);
+        }
+        pathField.value = editedLegacyRecords.games.find(
+          item => item.projectId === game.projectId)[fieldName];
+      });
+      pathLabel.append(pathField);
+      games.append(pathLabel);
+    }
   }
   for (const [root, table, description] of [
     [hosts, "sec01_host_owners", "hosts"],
@@ -496,7 +524,7 @@ function updateReviewSummary() {
       summary.append(line);
     }
     const limitation = document.createElement("p");
-    limitation.textContent = "Unchanged/read-only: host owners, agent/job identities, job states, effect activation, game paths, secrets and authentication sessions. No migration or installation is authorized.";
+    limitation.textContent = "Unchanged/read-only: host owners, agent/job identities, job states, game project revisions, credentials and authentication sessions. Activations and paths are only staged; no execution is authorized. No migration or installation is authorized.";
     summary.append(limitation);
     status.textContent = changes.length + " supported correction(s) staged in memory. " +
       reviewLoadIssues.length + " record reader warning(s). Migration remains disabled.";

@@ -55,3 +55,9 @@ test("rejects invalid names, excessive text, duplicate identities and removed re
   fewer.games.pop();
   assert.throws(() => legacyCorrections(before, fewer), /Record count changed/);
 });
+
+test("rejects an extra property", () => {
+  const value = sample();
+  value.hosts[0].extra = "unexpected";
+  assert.throws(() => createLegacyReview(value), /Unexpected record fields/);
+});

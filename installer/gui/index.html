@@ -31,7 +31,17 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <section id="data-editor-effects" hidden><h3>Effekte</h3><div id="data-fields-effects"></div></section>
 <section id="data-editor-jobs" hidden><h3>Jobs</h3><div id="data-fields-jobs"></div></section>
 <section id="data-editor-games" hidden><h3>Games</h3><div id="data-fields-games"></div></section>
-<p id="data-editor-status" class="help" role="status">Database field mapping is not yet available. Migration cannot proceed until actual values can be loaded and saved.</p>
+<p id="data-editor-status" class="help" role="status">No verified records loaded. Migration remains disabled.</p>
+<fieldset><legend>Migration rehearsal (no installation or data writes)</legend>
+<p class="help">Recheck the complete existing Alpha schema and all table row counts. Simulate staged changes on an in-memory snapshot, then roll them back. A separate, existing destination directory and unused filename are required; no destination file is created.</p>
+<label for="migration-destination-path">Proposed new encrypted database file (absolute path)</label>
+<input id="migration-destination-path" spellcheck="false" placeholder="Select a different destination directory and filename" />
+<button id="browse-migration-destination" type="button" class="secondary">Choose destination folder</button>
+<label for="migration-existing-password">Existing database password (enter again for the independent verification)</label>
+<input id="migration-existing-password" type="password" autocomplete="off" spellcheck="false" />
+<button id="preview-migration-rehearsal" type="button">Verify migration rehearsal (no writes)</button>
+<pre id="migration-rehearsal-result" role="status" aria-live="polite">No migration rehearsal completed.</pre>
+</fieldset>
 </section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">Review the effective paths, database and security settings, then validate the combined installation and migration plan. Execution remains unavailable until the migration core is verified.</p><div class="mode" role="group" aria-label="Review categories">
 <button type="button" class="secondary" id="review-tab-paths">Paths</button>
 <button type="button" class="secondary" id="review-tab-database">Database</button>
@@ -43,7 +53,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <p class="help" id="review-paths-status" role="status" aria-live="polite">Review the effective paths for the chosen setup mode.</p></section>
 <section id="review-database" hidden><label for="review-database-path">Selected existing database</label><input id="review-database-path" readonly />
 <pre id="review-database-summary">No database inspected yet.</pre><h3>Staged application data corrections</h3><div id="review-data-corrections" role="status" aria-live="polite">No verified application records loaded for review.</div>
-<p class="help">The source database remains read-only. Corrections on the Data Review page are staged for future migration.</p></section>
+<p class="help" id="review-migration-rehearsal-status">No verified migration rehearsal yet. Execution remains disabled.</p><p class="help">The source database remains read-only. Corrections on the Data Review page are staged for future migration.</p></section>
 <section id="review-security" hidden><p id="review-security-summary" class="help">Database encryption and migration are not yet enabled.</p></section>
 <h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>

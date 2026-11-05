@@ -560,7 +560,7 @@ pub fn rehearse_migration(
     }
     validate_alpha_schema(&inspection)?;
     let original_counts = table_counts(&snapshot_db, &inspection)?;
-    let (mut rehearsal_db, before_fidelity) = create_verified_memory_copy(&snapshot_db)?;
+    let (mut rehearsal_db, before_fidelity) = create_verified_memory_copy(&snapshot_db, existing_password)?;
     let mut identities = BTreeSet::new();
     for correction in corrections {
         let identity = verify_correction(correction)?;

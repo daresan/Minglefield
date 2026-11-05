@@ -212,9 +212,18 @@ pub fn verify_snapshot_equality(
 /// API used for source inspection. Verify *before* allowing staged changes.
 pub fn create_verified_memory_copy(
     source: &Connection,
+    existing_password: &str,
 ) -> Result<(Connection, SnapshotFidelity), String> {
     let mut copied = Connection::open_in_memory()
         .map_err(|_| "Cannot prepare isolated in-memory migration copy")?;
+    // SQLCipher's backup API requires consistent source/destination keying.
+    // For an encrypted source, the inspected snapshot already has this key.
+    // The second database is still only memory-resident and never persisted.
+    if !existing_password.is_empty() {
+        copied
+            .pragma_update(None, "key", existing_password)
+            .map_err(|_| "Cannot initialize protected in-memory migration copy")?;
+    }
     {
         let backup = Backup::new(source, &mut copied)
             .map_err(|_| "Cannot initialize isolated migration backup")?;
@@ -253,7 +262,7 @@ mod tests {
     #[test]
     fn verifies_complete_copy_including_blob_duplicates_and_sqlite_sequence() {
         let db = fixture();
-        let (copy, report) = create_verified_memory_copy(&db).unwrap();
+        let (copy, report) = create_verified_memory_copy(&db, "").unwrap();
         assert!(report.values_verified);
         assert_eq!(report.tables_checked, 4);
         assert_eq!(report.rows_checked, 6);
@@ -265,7 +274,7 @@ mod tests {
     #[test]
     fn detects_corrupted_blob_even_with_unchanged_row_counts() {
         let db = fixture();
-        let (copy, _) = create_verified_memory_copy(&db).unwrap();
+        let (copy, _) = create_verified_memory_copy(&db, "").unwrap();
         copy.execute(
             "UPDATE duplicate_values SET payload=x'99' WHERE rowid=2",
             [],
@@ -277,7 +286,7 @@ mod tests {
     #[test]
     fn detects_missing_duplicate_even_when_total_counts_match() {
         let db = fixture();
-        let (copy, _) = create_verified_memory_copy(&db).unwrap();
+        let (copy, _) = create_verified_memory_copy(&db, "").unwrap();
         copy.execute_batch(
             "DELETE FROM duplicate_values WHERE rowid=2;
              INSERT INTO duplicate_values VALUES(x'040506','different');",
@@ -289,7 +298,7 @@ mod tests {
     #[test]
     fn detects_schema_and_version_drift_and_rollback_recovery() {
         let db = fixture();
-        let (mut copy, _) = create_verified_memory_copy(&db).unwrap();
+        let (mut copy, _) = create_verified_memory_copy(&db, "").unwrap();
         {
             let transaction = copy.transaction().unwrap();
             transaction
@@ -301,7 +310,7 @@ mod tests {
         assert!(verify_snapshot_equality(&db, &copy).is_ok());
         copy.execute_batch("DROP VIEW visible;").unwrap();
         assert!(verify_snapshot_equality(&db, &copy).is_err());
-        let (copy, _) = create_verified_memory_copy(&db).unwrap();
+        let (copy, _) = create_verified_memory_copy(&db, "").unwrap();
         copy.pragma_update(None, "user_version", 20).unwrap();
         assert!(verify_snapshot_equality(&db, &copy).is_err());
     }

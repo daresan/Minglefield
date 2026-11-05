@@ -207,4 +207,38 @@ mod tests {
             .contains("incompatible schema"));
         std::fs::remove_file(path).unwrap();
     }
+    #[test]
+    fn reads_records_without_exposing_passwords_or_mutating_source() {
+        let path = std::env::temp_dir().join(format!(
+            "minglefield-review-values-{}.sqlite3",
+            std::process::id()
+        ));
+        {
+            let db = Connection::open(&path).unwrap();
+            db.execute_batch(
+                "CREATE TABLE sec01_host_owners(host_id TEXT,owner_id TEXT);
+                 INSERT INTO sec01_host_owners VALUES('h1','alice');
+                 CREATE TABLE sec01_host_effect_definitions(host_id TEXT,effect_id TEXT,description TEXT,enabled INTEGER);
+                 INSERT INTO sec01_host_effect_definitions VALUES('h1','e1','Workflow',0);
+                 CREATE TABLE sec01_host_jobs(job_id TEXT,host_id TEXT,effect_id TEXT,requested_by TEXT,state TEXT);
+                 INSERT INTO sec01_host_jobs VALUES('j1','h1','e1','alice','queued');
+                 CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT);
+                 INSERT INTO alpha_game_projects VALUES('g1','h1','alice','Demo','/games/demo');
+                 CREATE TABLE alpha_passwords(user_id TEXT,password_hash BLOB);
+                 INSERT INTO alpha_passwords VALUES('alice',x'1234');",
+            )
+            .unwrap();
+        }
+        let original_bytes = std::fs::read(&path).unwrap();
+        let reviewed = inspect(&path, "").unwrap();
+        assert_eq!(reviewed.hosts[0].owner_id, "alice");
+        assert_eq!(reviewed.effects[0].description, "Workflow");
+        assert!(!reviewed.effects[0].enabled);
+        assert_eq!(reviewed.host_jobs[0].state, "queued");
+        assert_eq!(reviewed.games[0].name, "Demo");
+        assert!(reviewed.unavailable.is_empty());
+        assert_eq!(std::fs::read(&path).unwrap(), original_bytes);
+        std::fs::remove_file(path).unwrap();
+    }
+
 }

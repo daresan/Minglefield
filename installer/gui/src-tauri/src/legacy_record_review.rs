@@ -35,6 +35,9 @@ pub struct GameRecord {
     owner_id: String,
     name: String,
     repository_root: String,
+    job_attachments_root: String,
+    output_root: String,
+    settings_revision: i64,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -154,12 +157,18 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
             "owner_id",
             "name",
             "repository_root",
+            "job_attachments_root",
+            "output_root",
+            "settings_revision",
         ],
         &mut result.unavailable,
     )? {
-        result.games = read(&db, "SELECT project_id,host_id,owner_id,name,repository_root FROM alpha_game_projects ORDER BY project_id LIMIT 501", |r| Ok(GameRecord {
+        result.games = read(&db, "SELECT project_id,host_id,owner_id,name,repository_root,job_attachments_root,output_root,settings_revision FROM alpha_game_projects ORDER BY project_id LIMIT 501", |r| Ok(GameRecord {
             project_id: bounded(r,0,128)?, host_id: bounded(r,1,128)?, owner_id: bounded(r,2,128)?,
             name: bounded(r,3,120)?, repository_root: bounded(r,4,1024)?,
+            job_attachments_root: bounded(r,5,1024)?,
+            output_root: bounded(r,6,1024)?,
+            settings_revision: r.get(7)?,
         }))?;
     }
     Ok(result)
@@ -216,8 +225,8 @@ mod tests {
                  INSERT INTO sec01_host_effect_definitions VALUES('h1','e1','Workflow',0);
                  CREATE TABLE sec01_host_jobs(job_id TEXT,host_id TEXT,effect_id TEXT,requested_by TEXT,state TEXT);
                  INSERT INTO sec01_host_jobs VALUES('j1','h1','e1','alice','queued');
-                 CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT);
-                 INSERT INTO alpha_game_projects VALUES('g1','h1','alice','Demo','/games/demo');
+                 CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT,job_attachments_root TEXT,output_root TEXT,settings_revision INTEGER);
+                 INSERT INTO alpha_game_projects VALUES('g1','h1','alice','Demo','/games/demo','/games/attachments','/games/output',1);
                  CREATE TABLE alpha_passwords(user_id TEXT,password_hash BLOB);
                  INSERT INTO alpha_passwords VALUES('alice',x'1234');",
             )

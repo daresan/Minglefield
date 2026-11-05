@@ -293,4 +293,86 @@ mod tests {
         }
         assert!(!path.exists());
     }
+    fn editable_alpha_fixture(encrypted: bool) -> PathBuf {
+        let path = fixture(encrypted);
+        {
+            let db = Connection::open(&path).unwrap();
+            if encrypted {
+                db.pragma_update(None, "key", "ExistingKey9!").unwrap();
+            }
+            db.execute_batch(
+                "CREATE TABLE alpha_invites(invitation_hash TEXT,user_id TEXT,expires_at INTEGER,redeemed INTEGER,revoked INTEGER);
+                 CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);
+                 INSERT INTO alpha_users VALUES('alice',0);
+                 CREATE TABLE alpha_agents(agent_id TEXT,user_id TEXT,disabled INTEGER);
+                 INSERT INTO alpha_agents VALUES('a1','alice',0);
+                 CREATE TABLE alpha_sessions(token_hash TEXT,user_id TEXT,expires_at INTEGER,revoked INTEGER);
+                 CREATE TABLE alpha_jobs(job_id TEXT,user_id TEXT,agent_id TEXT,idempotency_key TEXT,action TEXT);
+                 CREATE TABLE alpha_passwords(user_id TEXT,salt BLOB,password_hash BLOB);
+                 CREATE TABLE alpha_agent_grants(agent_id TEXT,grantee_user_id TEXT,action TEXT,revoked INTEGER);
+                 CREATE TABLE sec01_host_effect_definitions(host_id TEXT,effect_id TEXT,description TEXT,enabled INTEGER);
+                 INSERT INTO sec01_host_effect_definitions VALUES('h1','e1','Original effect',1);
+                 CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT,job_attachments_root TEXT,output_root TEXT,settings_revision INTEGER);
+                 INSERT INTO alpha_game_projects VALUES('g1','h1','alice','Original game','/tmp/game','/tmp/input','/tmp/out',7);
+                 CREATE TABLE alpha_git_profiles(host_id TEXT,profile_id TEXT,owner_id TEXT,label TEXT,auth_method TEXT,git_executable TEXT,author_name TEXT,author_email TEXT);
+                 INSERT INTO alpha_git_profiles VALUES('h1','p1','alice','Personal','local','git','Alice','alice@example.test');"
+            ).unwrap();
+        }
+        path
+    }
+
+    fn changes() -> Vec<ReviewCorrection> {
+        use crate::migration_dry_run::{GamePathField, GitProfileField};
+        vec![
+            ReviewCorrection::UserDisabled {
+                user_id: "alice".into(), before: false, after: true,
+            },
+            ReviewCorrection::EffectDescription {
+                host_id: "h1".into(), effect_id: "e1".into(),
+                before: "Original effect".into(), after: "Updated effect".into(),
+            },
+            ReviewCorrection::GamePath {
+                project_id: "g1".into(), field: GamePathField::RepositoryRoot,
+                before: "/tmp/game".into(), after: "/tmp/updated-game".into(),
+            },
+            ReviewCorrection::GitProfileText {
+                host_id: "h1".into(), profile_id: "p1".into(), owner_id: "alice".into(),
+                field: GitProfileField::AuthorName,
+                before: "Alice".into(), after: "Alice Changed".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn verified_staged_edits_roundtrip_in_encrypted_temp_db_without_touching_source() {
+        for encrypted in [false, true] {
+            let path = editable_alpha_fixture(encrypted);
+            let before = fs::read(&path).unwrap();
+            let key = if encrypted { "ExistingKey9!" } else { "" };
+            let proof = rehearse_encrypted_test_copy(&path, key, "NewKey123!", &changes()).unwrap();
+            assert_eq!(proof.staged_changes_verified, 4);
+            assert!(proof.staged_values_match_ciphertext && proof.full_disk_copy_verified);
+            assert!(proof.temporary_files_removed && proof.wrong_key_rejected);
+            assert!(!proof.destination_created && !proof.encrypted_destination_verified);
+            assert_eq!(fs::read(&path).unwrap(), before);
+            fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn stale_or_duplicate_staged_edits_are_rejected_before_disk_export() {
+        let path = editable_alpha_fixture(false);
+        let before = fs::read(&path).unwrap();
+        let mut stale = changes();
+        if let ReviewCorrection::UserDisabled { before, .. } = &mut stale[0] {
+            *before = true;
+        }
+        assert!(rehearse_encrypted_test_copy(&path, "", "NewKey123!", &stale).is_err());
+        let mut duplicate = changes();
+        duplicate.push(changes()[0].clone());
+        assert!(rehearse_encrypted_test_copy(&path, "", "NewKey123!", &duplicate).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        fs::remove_file(path).unwrap();
+    }
+
 }

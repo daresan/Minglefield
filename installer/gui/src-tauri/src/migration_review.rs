@@ -75,9 +75,17 @@ impl From<StagedCorrection> for ReviewCorrection {
                 before,
                 after,
             },
-            StagedCorrection::AgentDisabled { agent_id, user_id, before, after } => {
-                Self::AgentDisabled { agent_id, user_id, before, after }
-            }
+            StagedCorrection::AgentDisabled {
+                agent_id,
+                user_id,
+                before,
+                after,
+            } => Self::AgentDisabled {
+                agent_id,
+                user_id,
+                before,
+                after,
+            },
             StagedCorrection::EffectDescription {
                 host_id,
                 effect_id,

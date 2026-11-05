@@ -308,7 +308,9 @@ fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, Strin
                 .zip(after.iter())
                 .any(|(original, next)| original.kind != next.kind)
             {
-                return Err("SQLite storage type changes are not permitted in data review".to_owned());
+                return Err(
+                    "SQLite storage type changes are not permitted in data review".to_owned(),
+                );
             }
             // Row identity uses a native rowid when available. WITHOUT ROWID
             // tables are matched by their complete original typed values.

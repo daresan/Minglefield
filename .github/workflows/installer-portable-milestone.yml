@@ -1,0 +1,20 @@
+name: Minglefield portable GUI milestone build
+
+# Run portable packaging only for an explicit feature-branch milestone request.
+# Ordinary commits on the feature branch do not trigger this workflow.
+on:
+  push:
+    branches:
+      - feat/game-integration-updates
+    paths:
+      - "installer/gui/PORTABLE-TEST-REQUEST.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-preview:
+    uses: ./.github/workflows/installer-tauri-packaging.yml
+    permissions:
+      contents: read

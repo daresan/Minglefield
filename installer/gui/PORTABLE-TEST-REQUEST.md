@@ -1,52 +1,58 @@
+# Portable GUI milestone — fix source-encryption-aware rehearsal backup
 
-# Portable GUI milestone — complete in-memory data fidelity, 2026-11-05
+**2026-11-05 / Shadow regression after manual GUI acceptance attempt**
 
-A single explicit portable build for Windows, Linux and macOS is requested
-by updating this file. Ordinary development commits **must not** trigger
-portable packaging automatically.
+This file is the one explicit marker for a portable preview on Windows,
+Linux and macOS. Ordinary commits on the feature branch do not trigger
+portable packaging.
 
-## Implementation being accepted
+## Failure reproduced from the latest Shadow test
 
-- The verified SQLCipher/SQLite snapshot is copied to a *second*
-  isolated, memory-only database via SQLite's backup API.
-- Rust compares **all row values** across all tables and all schema
-  objects, including duplicate rows, exact BLOB bytes, internal tables,
-  indexes, views and triggers. No record value or per-row digest is exposed.
-- SQLCipher sources are unlocked with the supplied existing source password;
-  the second memory-only connection uses matching key initialization.
-  Correct-key and wrong-key regression cases are covered in CI.
-- Supported edits are simulated only in the second copy; the transaction
-  is rolled back. The same complete comparison is run again afterwards.
-- The rehearsal and final preview expose `fullDataCopyVerified: true`,
-  `verifiedRowCount`, `verifiedTableCount`,
-  `verifiedSchemaEntryCount`, `verifiedInternalTableCount`.
-- `destinationCreated: false`,
-  `encryptedDestinationVerified: false`,
-  `migrationEnabled: false` and `executionEnabled: false` remain mandatory.
+The displayed error was:
+`Migration rehearsal rejected: Cannot initialize isolated migration backup.`
 
-## Manual Windows/Shadow acceptance (when available)
+The initial inspected source snapshot distinguishes actual SQLCipher source
+encryption by its on-disk SQLite header, and correctly ignores an optional
+existing-source password when the database is *plaintext*. The new second
+in-memory-copy path incorrectly treated any nonempty password as evidence of
+encryption and initialized the second destination connection with that key,
+making the backup incompatible with the plaintext snapshot.
 
-1. Launch the portable executable directly; no setup-manager installation
-   or dependency preinstallation should be required.
-2. Select the existing Alpha database. Check the existing five data
-   categories and complete column coverage.
-3. Run rehearsal with no edits. It must report full data copy verified;
-   all 27 known application tables and 111 known columns should still be
-   represented if the source has not changed. Extra internal tables are
-   checked but do not alter the source's reported application-table list.
-4. Stage an allowed Git profile label, effect description or Game path
-   correction, and repeat. The changed-field count should increase,
-   the copied database should pass full rollback verification, and the
-   original Alpha file must remain unchanged.
-5. Use a distinct unused target filename in the same directory; confirm
-   that identical filenames, existing files and SQLite sidecar names are
-   rejected. No destination database must actually appear.
-6. Check the final review makes **clear that encryption of a destination
-   database has not yet been verified** and migration/installation remain
-   unavailable. If the source is a *genuinely encrypted* SQLCipher DB,
-   test correct and incorrect source-password handling separately.
+## Corrective implementation and acceptance
 
-This is a non-executing migration fidelity milestone, **not** acceptance
-of a real SQLCipher output, application installation, or Host onboarding.
-The next executor milestone requires an independent encrypted destination
-write/reopen/check and rollback design, after explicit GUI review acceptance.
+- The inspected SQLite snapshot carries a trusted `source_encrypted` flag,
+  established during source inspection rather than inferred from user input.
+- The secondary memory-only backup uses a SQLCipher key **only when the
+  inspected source really is encrypted**.
+- A new regression runs the complete Alpha migration rehearsal both with
+  an empty password and an optional nonempty password on the same plaintext
+  fixture, including supported staged changes. Both must pass with identical
+  full-data-copy fidelity and unchanged source bytes.
+- Existing SQLCipher tests verify that genuinely encrypted sources still
+  require the correct existing key, wrong keys fail, and source bytes remain
+  unchanged.
+- Source/destination directory policy is unchanged (same folder allowed if
+  filename differs); macOS fixture directory naming is made concurrency-safe.
+
+## Manual test on Shadow
+
+1. Run the new portable EXE and select the same real Alpha source database.
+2. If `alpha.sqlite3` is ordinary SQLite, the *existing source password*
+   can be blank, and an optional filled password must no longer break
+   the second in-memory backup.
+3. Run **Migration rehearsal** without staged changes.
+4. Check the JSON for `fullDataCopyVerified: true` and the
+   `verifiedRowCount`, `verifiedTableCount`, `verifiedSchemaEntryCount`
+   and `verifiedInternalTableCount` fields. In the final Review plan,
+   find `database.verifiedMigrationRehearsal.fullDataCopyVerified`.
+5. Rehearse one harmless staged metadata change. The source remains
+   unchanged and the destination file is **not** created.
+6. `encryptedDestinationVerified`, `destinationCreated` and
+   `executionEnabled` **must remain false**. This is still not an
+   executable SQLCipher migration.
+
+Do not confuse the *existing database unlock password* with the separate,
+mandatory strong *new destination database password*. The latter remains
+required for every new installation, and no migration execution is enabled.
+
+These artifacts are temporary test previews, not release installers.

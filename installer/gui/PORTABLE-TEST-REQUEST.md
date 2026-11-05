@@ -1,58 +1,56 @@
-# Portable GUI milestone — fix source-encryption-aware rehearsal backup
+# Portable GUI milestone — verified temporary SQLCipher disk copy
 
-**2026-11-05 / Shadow regression after manual GUI acceptance attempt**
+**2026-11-05 — single explicit milestone request.** This marker alone triggers
+portable packaging on the feature branch. Routine commits do not.
 
-This file is the one explicit marker for a portable preview on Windows,
-Linux and macOS. Ordinary commits on the feature branch do not trigger
-portable packaging.
+## New capability
 
-## Failure reproduced from the latest Shadow test
+- The source Alpha SQLite/SQLCipher database remains read-only.
+- After an independently verified **zero-change** memory rehearsal,
+  a user must explicitly press **Test encrypted temporary disk copy
+  (create, verify, delete)** on Data Review.
+- A strong *test-only* SQLCipher password is required and independently
+  checked in Rust. It is not stored, and is separate from the permanent
+  new-installation SQLCipher password and existing source unlock key.
+- The Rust core creates a randomized private OS-temp directory, exports
+  the verified source with SQLCipher's supported `ATTACH ... KEY ?` and
+  `sqlcipher_export`, preserves schema metadata, checks the encrypted
+  file header, rejects an incorrect key, reopens with the correct key,
+  compares every schema object and record, then deletes the temporary
+  encrypted file and containing directory.
+- The independent Tauri command also revalidates destination-path
+  safety, Alpha schema, and full in-memory source fidelity; all final
+  destination paths are *preflight-only*, never opened for writing.
+- A zero-change test is required because staged corrections currently
+  are verified only in memory; they are **not** applied to the temporary
+  ciphertext. No application installation, Host claim or migration is
+  enabled.
 
-The displayed error was:
-`Migration rehearsal rejected: Cannot initialize isolated migration backup.`
+## Shadow manual acceptance
 
-The initial inspected source snapshot distinguishes actual SQLCipher source
-encryption by its on-disk SQLite header, and correctly ignores an optional
-existing-source password when the database is *plaintext*. The new second
-in-memory-copy path incorrectly treated any nonempty password as evidence of
-encryption and initialized the second destination connection with that key,
-making the backup incompatible with the plaintext snapshot.
+1. Run the new portable Windows EXE.
+2. Inspect the existing Alpha database. Repeat the memory rehearsal with
+   **0 staged edits**, expecting `fullDataCopyVerified: true` and, if
+   data is unchanged, 27 application tables, 111 columns and 143 rows.
+3. On Data Review, enter and confirm a strong **temporary test** key.
+   Click the explicit disk test button. For an unencrypted source,
+   the existing source unlock password may be blank.
+4. Expected response: `temporaryEncryptedCopyVerified: true`,
+   `ciphertextHeaderVerified: true`, `wrongKeyRejected: true`,
+   `fullDiskCopyVerified: true`, `temporaryFilesRemoved: true`.
+   The disk-copy row/table counts should match the memory rehearsal.
+5. The reviewed proposed permanent destination file must **not exist**,
+   and all original source values must remain unchanged.
+6. Stage one allowed edit and confirm the temporary disk-test action
+   rejects it until the changes are cleared and a new zero-change
+   memory rehearsal succeeds.
+7. On final Review, verify the independent temporary encrypted-copy
+   proof is present, but `encryptedDestinationVerified: false`,
+   `destinationCreated: false`, `migrationEnabled: false` and
+   `executionEnabled: false`.
 
-## Corrective implementation and acceptance
-
-- The inspected SQLite snapshot carries a trusted `source_encrypted` flag,
-  established during source inspection rather than inferred from user input.
-- The secondary memory-only backup uses a SQLCipher key **only when the
-  inspected source really is encrypted**.
-- A new regression runs the complete Alpha migration rehearsal both with
-  an empty password and an optional nonempty password on the same plaintext
-  fixture, including supported staged changes. Both must pass with identical
-  full-data-copy fidelity and unchanged source bytes.
-- Existing SQLCipher tests verify that genuinely encrypted sources still
-  require the correct existing key, wrong keys fail, and source bytes remain
-  unchanged.
-- Source/destination directory policy is unchanged (same folder allowed if
-  filename differs); macOS fixture directory naming is made concurrency-safe.
-
-## Manual test on Shadow
-
-1. Run the new portable EXE and select the same real Alpha source database.
-2. If `alpha.sqlite3` is ordinary SQLite, the *existing source password*
-   can be blank, and an optional filled password must no longer break
-   the second in-memory backup.
-3. Run **Migration rehearsal** without staged changes.
-4. Check the JSON for `fullDataCopyVerified: true` and the
-   `verifiedRowCount`, `verifiedTableCount`, `verifiedSchemaEntryCount`
-   and `verifiedInternalTableCount` fields. In the final Review plan,
-   find `database.verifiedMigrationRehearsal.fullDataCopyVerified`.
-5. Rehearse one harmless staged metadata change. The source remains
-   unchanged and the destination file is **not** created.
-6. `encryptedDestinationVerified`, `destinationCreated` and
-   `executionEnabled` **must remain false**. This is still not an
-   executable SQLCipher migration.
-
-Do not confuse the *existing database unlock password* with the separate,
-mandatory strong *new destination database password*. The latter remains
-required for every new installation, and no migration execution is enabled.
-
-These artifacts are temporary test previews, not release installers.
+No generated artifact is a release installer or an executable migration.
+Temporary-file cleanup and all three native builds must be checked before
+a real durable encrypted target migration is considered. The required
+strong NEW destination password for every installation remains a separate
+future security gate.

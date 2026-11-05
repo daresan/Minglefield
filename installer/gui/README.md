@@ -80,3 +80,21 @@ See [platform-versus-game installation boundary](../../docs/PLATFORM-VS-GAME-INS
 ## Shadow acceptance and implementation order (2026-11-04)
 
 See [Shadow acceptance findings](../../docs/SETUP-MANAGER-SHADOW-ACCEPTANCE-2026-11-04.md). The portable Windows preview displayed an unwanted console window and stale README licensing text; these are addressed by a release-only Windows GUI subsystem attribute and a correction to the root README, with a Rust regression assertion. Actual startup/focus must still be manually verified. **A single-page plan preview is not an acceptable finished wizard.** Next increments: multi-page Back/Next wizard; optional Git/gh/Python/Conda/ComfyUI/**Blender** detection and opt-in configuration; then real Minglefield app installation and local Host setup. The current preview still does not install the app.
+
+## Existing application record review (read-only)
+
+The Source inspection wizard step can inspect a user-selected SQLite or SQLCipher database. Each record reader independently verifies SQLite integrity and foreign keys before querying allowlisted tables with read-only connections and a 500-row-per-category cap. SQLCipher credentials are never displayed or included in the review. This is **not** a transferable migration manifest yet: all corrections are held in frontend memory and discarded when the inspected database is changed or the wizard is restarted.
+
+| Tab | Existing Alpha table | Loaded fields | Editable in memory |
+| --- | --- | --- | --- |
+| Anmeldung | `alpha_users` | User ID, disabled | Disabled |
+| Hosts | `sec01_host_owners` | Host ID, owner ID | None — ownership is authorization data |
+| Effekte | `sec01_host_effect_definitions` | Host/effect ID, description, enabled | Description (maximum 256 characters) |
+| Jobs | `alpha_jobs`, `sec01_host_jobs` | IDs, ownership/requester, effect, state | None — job and execution records are immutable |
+| Games | `alpha_game_projects` | Project ID, host/owner IDs, name, repository root | Project name (trimmed, 1–120 characters) |
+
+The host-policy tables are optional in older Alpha databases. Absent tables, failed readers and other unavailable data are explicitly listed in the final Database review rather than fabricated. Unknown columns and tables are not silently migrated. Host runtime JSON, project attachment paths, effect workflows, sessions, credential hashes, grants and ledgers are excluded from editing. The reader is not yet a complete inventory of every persisted platform object.
+
+**Before enabling migration:** use a transactionally consistent, revalidated source snapshot with verified source identity and schema compatibility; define the destination mapping for *all* persisted tables, preservation of sensitive authorization data, operator confirmation, atomic backup/restore and rollback behavior. Cross-category frontend review does not satisfy these requirements. `migration_enabled` and `execution_enabled` remain false.
+
+Frontend correction guards have Node regression tests in `legacy-record-review.test.js` and `alpha-user-review.test.js`; Tauri reader tests verify available/missing schemas and source preservation. A green CI run proves only automated checks; a real DB migration and installation acceptance test remains outstanding.

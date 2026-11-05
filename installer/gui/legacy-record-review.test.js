@@ -5,6 +5,7 @@ import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrectio
 const sample = () => ({
   agents: [{ agentId: "agent1", userId: "alice", disabled: false }],
   hostRuntimes: [{ hostId: "host-a", runtimeId: "comfy1", runtimeType: "comfyui", endpoint: "http://127.0.0.1:8188", enabled: true, inputFolder: "/comfy/input" }],
+  gitProfiles: [{ hostId: "host-a", profileId: "profile1", ownerId: "alice", label: "Personal", authMethod: "local", gitExecutable: "git", authorName: "Alice", authorEmail: "alice@example.test" }],
   hosts: [{ hostId: "host-a", ownerId: "alice" }],
   effects: [{ hostId: "host-a", effectId: "effect-a", description: "Before", enabled: false }],
   hostJobs: [{ jobId: "job-a", hostId: "host-a", effectId: "effect-a", requestedBy: "alice", state: "queued" }],
@@ -101,4 +102,25 @@ test("Agent status may be staged without changing ownership or source data", () 
   const invalid = createLegacyReview(source);
   invalid.agents[0].userId = "other";
   assert.throws(() => legacyCorrections(source, invalid), /Read-only field changed/);
+});
+
+test("Git profile label and author corrections preserve authentication, executable and identity", () => {
+  const source = sample();
+  const key = JSON.stringify(["host-a", "profile1"]);
+  let edited = stageLegacyText(source, "gitProfiles", key, "label", " Renamed Git ");
+  edited = stageLegacyText(edited, "gitProfiles", key, "authorName", "Alice Doe");
+  edited = stageLegacyText(edited, "gitProfiles", key, "authorEmail", "alice@new.example");
+  assert.deepEqual(legacyCorrections(source, edited), [
+    {category: "gitProfiles", key, field: "label", previous: "Personal", next: "Renamed Git"},
+    {category: "gitProfiles", key, field: "authorName", previous: "Alice", next: "Alice Doe"},
+    {category: "gitProfiles", key, field: "authorEmail", previous: "alice@example.test", next: "alice@new.example"}
+  ]);
+  assert.equal(source.gitProfiles[0].label, "Personal");
+  assert.throws(() => stageLegacyText(source, "gitProfiles", key, "authMethod", "ssh"), /not editable/);
+  assert.throws(() => stageLegacyText(source, "gitProfiles", key, "gitExecutable", "/tmp/evil"), /not editable/);
+  assert.throws(() => stageLegacyText(source, "gitProfiles", key, "label", "   "), /1–120/);
+  assert.throws(() => stageLegacyText(source, "gitProfiles", key, "authorName", "x".repeat(257)), /256/);
+  const tampered = createLegacyReview(source);
+  tampered.gitProfiles[0].ownerId = "mallory";
+  assert.throws(() => legacyCorrections(source, tampered), /Read-only field changed/);
 });

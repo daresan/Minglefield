@@ -19,6 +19,18 @@ pub struct HostRecord {
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitProfileRecord {
+    host_id: String,
+    profile_id: String,
+    owner_id: String,
+    label: String,
+    auth_method: String,
+    git_executable: String,
+    author_name: String,
+    author_email: String,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HostRuntimeRecord {
     host_id: String,
     runtime_id: String,
@@ -62,6 +74,7 @@ pub struct LegacyRecordReview {
     agents: Vec<AgentRecord>,
     hosts: Vec<HostRecord>,
     host_runtimes: Vec<HostRuntimeRecord>,
+    git_profiles: Vec<GitProfileRecord>,
     effects: Vec<EffectRecord>,
     host_jobs: Vec<HostJobRecord>,
     games: Vec<GameRecord>,
@@ -121,6 +134,7 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
         agents: vec![],
         hosts: vec![],
         host_runtimes: vec![],
+        git_profiles: vec![],
         effects: vec![],
         host_jobs: vec![],
         games: vec![],
@@ -187,6 +201,27 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
                     input_folder: bounded(r,5,512)?,
                 })
             }
+        )?;
+    }
+    if present(
+        &schema.tables,
+        "alpha_git_profiles",
+        &["host_id", "profile_id", "owner_id", "label", "auth_method", "git_executable", "author_name", "author_email"],
+        &mut result.unavailable,
+    )? {
+        result.git_profiles = read(
+            &db,
+            "SELECT host_id,profile_id,owner_id,label,auth_method,git_executable,author_name,author_email FROM alpha_git_profiles ORDER BY host_id,profile_id LIMIT 501",
+            |r| Ok(GitProfileRecord {
+                host_id: bounded(r, 0, 128)?,
+                profile_id: bounded(r, 1, 128)?,
+                owner_id: bounded(r, 2, 128)?,
+                label: bounded(r, 3, 120)?,
+                auth_method: bounded(r, 4, 32)?,
+                git_executable: bounded(r, 5, 256)?,
+                author_name: bounded(r, 6, 256)?,
+                author_email: bounded(r, 7, 256)?,
+            }),
         )?;
     }
     if present(
@@ -266,7 +301,7 @@ mod tests {
             db.execute_batch("CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY);")
                 .unwrap();
         }
-        assert_eq!(inspect(&path, "").unwrap().unavailable.len(), 6);
+        assert_eq!(inspect(&path, "").unwrap().unavailable.len(), 7);
         {
             let db = Connection::open(&path).unwrap();
             db.execute_batch("CREATE TABLE sec01_host_owners(host_id TEXT);")
@@ -290,6 +325,8 @@ mod tests {
                  INSERT INTO alpha_agents VALUES('agent1','alice',0);
                  CREATE TABLE sec01_host_owners(host_id TEXT,owner_id TEXT);
                  INSERT INTO sec01_host_owners VALUES('h1','alice');
+                 CREATE TABLE alpha_git_profiles(host_id TEXT,profile_id TEXT,owner_id TEXT,label TEXT,auth_method TEXT,git_executable TEXT,author_name TEXT,author_email TEXT);
+                 INSERT INTO alpha_git_profiles VALUES('h1','git1','alice','Main Git','local','git','Alice','alice@example.test');
                  CREATE TABLE sec01_host_runtimes(host_id TEXT,runtime_id TEXT,config TEXT);
                  INSERT INTO sec01_host_runtimes VALUES('h1','comfy1','{"type":"comfyui","endpoint":"http://127.0.0.1:8188","enabled":true,"input_folder":"/comfy/input"}');
                  CREATE TABLE sec01_host_effect_definitions(host_id TEXT,effect_id TEXT,description TEXT,enabled INTEGER);
@@ -308,6 +345,8 @@ mod tests {
         assert_eq!(reviewed.agents[0].agent_id, "agent1");
         assert!(!reviewed.agents[0].disabled);
         assert_eq!(reviewed.hosts[0].owner_id, "alice");
+        assert_eq!(reviewed.git_profiles[0].label, "Main Git");
+        assert_eq!(reviewed.git_profiles[0].author_email, "alice@example.test");
         assert_eq!(reviewed.host_runtimes[0].runtime_type, "comfyui");
         assert!(reviewed.host_runtimes[0].enabled);
         assert_eq!(reviewed.effects[0].description, "Workflow");

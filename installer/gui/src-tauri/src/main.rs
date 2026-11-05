@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod legacy_record_review;
+mod migration_review;
 
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
@@ -504,6 +505,7 @@ fn main() {
             inspect_alpha_users,
             inspect_alpha_jobs,
             legacy_record_review::inspect_legacy_records,
+            migration_review::preview_migration_rehearsal,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

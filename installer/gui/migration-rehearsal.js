@@ -18,7 +18,15 @@ export function stagedMigrationChanges(
     before: before.get(change.userId).disabled,
     after: change.disabled
   }));
+  const owners = new Map(originalLegacyRecords.agents.map(agent => [agent.agentId, agent.userId]));
   const records = legacyCorrections(originalLegacyRecords, editedLegacyRecords).map(change => {
+    if (change.category === "agents" && change.field === "disabled") {
+      return {
+        kind: "agent_disabled", agent_id: change.key,
+        user_id: owners.get(change.key),
+        before: change.previous, after: change.next
+      };
+    }
     if (change.category === "effects" && change.field === "description") {
       const [host_id, effect_id] = JSON.parse(change.key);
       return {

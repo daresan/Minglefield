@@ -16,6 +16,7 @@ fn fixture() -> std::path::PathBuf {
          CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);
          INSERT INTO alpha_users VALUES('alice',0);
          CREATE TABLE alpha_agents(agent_id TEXT,user_id TEXT,disabled INTEGER);
+         INSERT INTO alpha_agents VALUES('agent1','alice',0);
          CREATE TABLE alpha_sessions(token_hash TEXT,user_id TEXT,expires_at INTEGER,revoked INTEGER);
          CREATE TABLE alpha_jobs(job_id TEXT,user_id TEXT,agent_id TEXT,idempotency_key TEXT,action TEXT);
          CREATE TABLE alpha_passwords(user_id TEXT,salt BLOB,password_hash BLOB);
@@ -243,5 +244,24 @@ fn rejects_invalid_and_stale_game_paths_and_effect_activation() {
     ] {
         assert!(rehearse_migration(&file, "", &[change]).is_err());
     }
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn rehearses_agent_disabled_without_changing_source() {
+    let file = fixture();
+    let original = std::fs::read(&file).unwrap();
+    let change = ReviewCorrection::AgentDisabled {
+        agent_id: "agent1".to_owned(), user_id: "alice".to_owned(),
+        before: false, after: true,
+    };
+    let preview = rehearse_migration(&file, "", &[change]).unwrap();
+    assert_eq!(preview.verified_changes, 1);
+    assert_eq!(std::fs::read(&file).unwrap(), original);
+    let stale = ReviewCorrection::AgentDisabled {
+        agent_id: "agent1".to_owned(), user_id: "mallory".to_owned(),
+        before: false, after: true,
+    };
+    assert!(rehearse_migration(&file, "", &[stale]).is_err());
     std::fs::remove_file(file).unwrap();
 }

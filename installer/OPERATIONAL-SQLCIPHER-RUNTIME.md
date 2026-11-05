@@ -45,7 +45,8 @@ launcher flag, or duplicate database.
 
 ## Cross-platform verification
 
-`.github/workflows/alpha-sqlcipher-runtime.yml` installs a pinned
+The `operational-sqlcipher` matrix in the existing
+`.github/workflows/installer-rust.yml` installs a pinned
 `sqlcipher3==0.6.4` **binary wheel** on Python 3.11 for Windows, Linux
 and macOS, then runs actual encrypted connection/reopen, wrong-key,
 password quoting, live Alpha authentication and Host project uniqueness

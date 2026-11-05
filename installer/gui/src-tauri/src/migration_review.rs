@@ -1,6 +1,6 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::migration_destination::preview_migration_destination;
-use minglefield_installer_core::migration_dry_run::{rehearse_migration, ReviewCorrection};
+use minglefield_installer_core::migration_dry_run::{rehearse_migration, GamePathField, ReviewCorrection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -23,6 +23,36 @@ pub enum StagedCorrection {
         before: String,
         after: String,
     },
+    EffectEnabled {
+        host_id: String,
+        effect_id: String,
+        before: bool,
+        after: bool,
+    },
+    GamePath {
+        project_id: String,
+        field: StagedGamePathField,
+        before: String,
+        after: String,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StagedGamePathField {
+    RepositoryRoot,
+    JobAttachmentsRoot,
+    OutputRoot,
+}
+
+impl From<StagedGamePathField> for GamePathField {
+    fn from(value: StagedGamePathField) -> Self {
+        match value {
+            StagedGamePathField::RepositoryRoot => Self::RepositoryRoot,
+            StagedGamePathField::JobAttachmentsRoot => Self::JobAttachmentsRoot,
+            StagedGamePathField::OutputRoot => Self::OutputRoot,
+        }
+    }
 }
 
 impl From<StagedCorrection> for ReviewCorrection {
@@ -57,6 +87,12 @@ impl From<StagedCorrection> for ReviewCorrection {
                 before,
                 after,
             },
+            StagedCorrection::EffectEnabled { host_id, effect_id, before, after } => {
+                Self::EffectEnabled { host_id, effect_id, before, after }
+            }
+            StagedCorrection::GamePath { project_id, field, before, after } => {
+                Self::GamePath { project_id, field: field.into(), before, after }
+            }
         }
     }
 }

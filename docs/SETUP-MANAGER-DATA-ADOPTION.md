@@ -34,6 +34,14 @@ The existing `inspect_source_path` command is a narrow source-checkout classifie
 6. A clean laptop without existing data installs using defaults, without a misleading migration warning.
 7. Re-running migration is idempotent or requires explicit conflict handling; failed staging can recover safely.
 
-## Implementation order
+## Binding implementation order (confirmed 2026-11-05)
 
-Inventory actual application config/DB locations and schemas; implement read-only per-artifact discovery; expose adoption choices in the wizard; add tested copy/snapshot and versioned transformations; finally integrate into the actual installation transaction. Keep preview-only behavior explicit until execution is implemented.
+**Immediate priority: finish the existing GUI database-data review and editable fields before implementing executable migration or application installation.** Do not switch to migration/installation execution merely because read-only inspection and preview are available.
+
+1. **Reuse existing discovery and inspection:** The selected repository/data directory and known per-user data locations already have read-only candidate inventory; retain their bounded search and repository-independent data detection. Extend coverage only for demonstrated missing actual data paths.
+2. **Complete the existing wizard data-review UI:** Load verified, recognized application records from the inspected database into the existing Login, Hosts, Effects, Jobs and Games review tabs. Distinguish available records, unsupported schemas and missing categories; do not invent placeholder records or silently omit data.
+3. **Finish editable review fields:** Show original values, permit only supported corrections, validate types and relationships, and keep proposed changes in review state without writing to the source database. Credentials and secrets must not be exposed or implicitly migrated.
+4. **Complete the final review:** Present original versus proposed values, selections, validation errors, exclusions and destination/conflict implications; require explicit confirmation before any later mutation. Provide focused regression tests and a build with visible, usable review functionality for maintainer acceptance.
+5. **Only after the GUI review is complete and accepted:** Implement tested consistent SQLite snapshot/staging, versioned migration transformations, destination backups/rollback and real Minglefield application installation. Integrate authenticated local Host first-run provisioning through the existing Hosts architecture, not a parallel Host system.
+
+Until executable paths are implemented and verified, `migration_enabled` and `execution_enabled` must remain false. Their values are safety gates, not an indication that the read-only discovery or review work must be restarted. Do not change these flags merely to make the wizard appear complete.

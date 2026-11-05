@@ -1,14 +1,8 @@
 name: Prepare installer SQLite lockfiles
 
+# Manual dependency-resolution maintenance only. Never regenerate lockfiles
+# or push bot commits as a side effect of normal feature-branch development.
 on:
-  push:
-    branches:
-      - feat/game-integration-updates
-    paths:
-      - .github/workflows/prepare-installer-lockfiles.yml
-      - installer/crates/installer-core/Cargo.toml
-      - installer/gui/src-tauri/Cargo.toml
-      - installer/gui/src-tauri/Cargo.lock
   workflow_dispatch:
 
 permissions:

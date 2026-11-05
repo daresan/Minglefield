@@ -132,7 +132,8 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
         &["agent_id", "user_id", "disabled"],
         &mut result.unavailable,
     )? {
-        result.agents = read(&db,
+        result.agents = read(
+            &db,
             "SELECT agent_id,user_id,disabled FROM alpha_agents ORDER BY agent_id LIMIT 501",
             |row| {
                 let value: i64 = row.get(2)?;

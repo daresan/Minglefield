@@ -408,3 +408,20 @@ fn encrypted_alpha_source_is_verified_without_creating_output_or_changing_bytes(
     assert!(rehearse_migration(&file, "incorrect-password", &[]).is_err());
     std::fs::remove_file(file).unwrap();
 }
+
+#[test]
+fn plaintext_alpha_with_optional_password_keeps_second_copy_unencrypted() {
+    let file = fixture();
+    let original_bytes = std::fs::read(&file).unwrap();
+    let normal = rehearse_migration(&file, "", &[]).unwrap();
+    let password_supplied =
+        rehearse_migration(&file, "IgnoredExistingDbPassword9!", &[]).unwrap();
+    assert!(normal.fidelity.values_verified);
+    assert_eq!(password_supplied.fidelity, normal.fidelity);
+    assert_eq!(password_supplied.verified_changes, 0);
+    let changed = rehearse_migration(&file, "IgnoredExistingDbPassword9!", &changes()).unwrap();
+    assert!(changed.fidelity.values_verified);
+    assert_eq!(changed.verified_changes, 3);
+    assert_eq!(std::fs::read(&file).unwrap(), original_bytes);
+    std::fs::remove_file(file).unwrap();
+}

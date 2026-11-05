@@ -560,8 +560,16 @@ pub fn rehearse_migration(
     }
     validate_alpha_schema(&inspection)?;
     let original_counts = table_counts(&snapshot_db, &inspection)?;
+    // A password may have been entered for a plaintext Alpha source.
+    // Only initialize the second SQLCipher in-memory copy with a key when
+    // source inspection actually detected an encrypted database.
+    let snapshot_key = if inspection.source_encrypted {
+        existing_password
+    } else {
+        ""
+    };
     let (mut rehearsal_db, before_fidelity) =
-        create_verified_memory_copy(&snapshot_db, existing_password)?;
+        create_verified_memory_copy(&snapshot_db, snapshot_key)?;
     let mut identities = BTreeSet::new();
     for correction in corrections {
         let identity = verify_correction(correction)?;

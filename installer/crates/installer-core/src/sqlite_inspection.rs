@@ -24,6 +24,9 @@ pub struct SchemaObject {
 pub struct SqliteInspection {
     pub application_id: i64,
     pub user_version: i64,
+    /// Whether the inspected source actually required SQLCipher unlocking.
+    /// A non-empty optional password does not make plaintext SQLite encrypted.
+    pub source_encrypted: bool,
     pub tables: Vec<InspectedTable>,
     pub schema_objects: Vec<SchemaObject>,
     pub integrity_ok: bool,
@@ -196,6 +199,7 @@ pub fn open_inspected_snapshot(
         SqliteInspection {
             application_id,
             user_version,
+            source_encrypted: !plaintext,
             tables,
             schema_objects,
             integrity_ok: true,
@@ -279,7 +283,8 @@ mod tests {
             db.execute_batch("CREATE TABLE alpha_users (id TEXT PRIMARY KEY);")
                 .unwrap();
         }
-        assert!(inspect_sqlite_with_password(&path, "ignored-existing-password").is_ok());
+        let checked = inspect_sqlite_with_password(&path, "ignored-existing-password").unwrap();
+        assert!(!checked.source_encrypted);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -305,6 +310,7 @@ mod tests {
         );
         let result = inspect_sqlite_with_password(&path, "StrongPassword9!").unwrap();
         assert_eq!(result.tables[0].name, "alpha_users");
+        assert!(result.source_encrypted);
         std::fs::remove_file(path).unwrap();
     }
 

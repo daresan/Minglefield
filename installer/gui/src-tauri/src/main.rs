@@ -252,11 +252,10 @@ async fn inspect_alpha_users(
     password: String,
 ) -> Result<Vec<AlphaUserReview>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        use rusqlite::{Connection, OpenFlags};
         use std::path::Path;
         let source = Path::new(&path);
-        let inspection =
-            minglefield_installer_core::sqlite_inspection::inspect_sqlite_with_password(
+        let (db, inspection) =
+            minglefield_installer_core::sqlite_inspection::open_inspected_snapshot(
                 source, &password,
             )
             .map_err(|error| format!("Database inspection rejected: {error:?}"))?;
@@ -272,12 +271,6 @@ async fn inspect_alpha_users(
             || !users.columns.contains(&"disabled".to_owned())
         {
             return Err("Alpha users schema is not compatible".to_owned());
-        }
-        let db = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|_| "Cannot open selected database".to_owned())?;
-        if !password.is_empty() {
-            db.pragma_update(None, "key", &password)
-                .map_err(|_| "Cannot unlock selected database".to_owned())?;
         }
         let mut stmt = db
             .prepare("SELECT user_id, disabled FROM alpha_users ORDER BY user_id LIMIT 501")
@@ -312,10 +305,9 @@ struct AlphaJobReview {
 #[tauri::command]
 async fn inspect_alpha_jobs(path: String, password: String) -> Result<Vec<AlphaJobReview>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        use rusqlite::{Connection, OpenFlags};
         let source = std::path::Path::new(&path);
-        let inspection =
-            minglefield_installer_core::sqlite_inspection::inspect_sqlite_with_password(
+        let (db, inspection) =
+            minglefield_installer_core::sqlite_inspection::open_inspected_snapshot(
                 source, &password,
             )
             .map_err(|error| format!("Database inspection rejected: {error:?}"))?;
@@ -332,12 +324,6 @@ async fn inspect_alpha_jobs(path: String, password: String) -> Result<Vec<AlphaJ
             .all(|column| table.columns.iter().any(|c| c == column))
         {
             return Err("Alpha jobs schema is not compatible".to_owned());
-        }
-        let db = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|_| "Cannot open selected database".to_owned())?;
-        if !password.is_empty() {
-            db.pragma_update(None, "key", &password)
-                .map_err(|_| "Cannot unlock selected database".to_owned())?;
         }
         let mut stmt = db
             .prepare("SELECT job_id, user_id, agent_id FROM alpha_jobs ORDER BY job_id LIMIT 501")

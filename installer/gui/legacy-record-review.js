@@ -1,6 +1,15 @@
 // Validated, in-memory corrections to allowlisted Minglefield Alpha fields.
 // Identity, ownership, execution state, paths and permissions are read-only.
 const id = value => typeof value === "string" && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+const absolutePath = value => typeof value === "string" && value.length > 0 &&
+  value.length <= 1024 && !value.includes("\0") &&
+  (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) ||
+    /^\\\\[^\\]+\\[^\\]+/.test(value)) &&
+  !/(^|[\\/])\.\.([\\/]|$)/.test(value);
+const editableFields = {
+  effects: ["description", "enabled"],
+  games: ["name", "repositoryRoot", "jobAttachmentsRoot", "outputRoot"]
+};
 const categories = ["hosts", "effects", "hostJobs", "games"];
 const keyFor = (category, item) => category === "hosts" ? item.hostId
   : category === "effects" ? JSON.stringify([item.hostId, item.effectId])
@@ -17,7 +26,7 @@ function verify(records) {
       const key = keyFor(category, row);
       if (!key || seen.has(key)) throw new Error("Duplicate " + category + " identity");
       seen.add(key);
-      const allowed = category === "hosts" ? ["hostId","ownerId"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot"];
+      const allowed = category === "hosts" ? ["hostId","ownerId"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot","jobAttachmentsRoot","outputRoot","settingsRevision"];
       if (Object.keys(row).sort().join("|") !== allowed.sort().join("|")) throw new Error("Unexpected record fields");
       const required = category === "hosts" ? ["hostId", "ownerId"]
         : category === "effects" ? ["hostId", "effectId"]
@@ -34,7 +43,10 @@ function verify(records) {
       if (category === "games" && (typeof row.name !== "string" ||
           !row.name.trim() || row.name.trim().length > 120 ||
           typeof row.repositoryRoot !== "string" || !row.repositoryRoot ||
-          row.repositoryRoot.length > 1024)) {
+          !absolutePath(row.repositoryRoot) ||
+          !absolutePath(row.jobAttachmentsRoot) ||
+          !absolutePath(row.outputRoot) ||
+          !Number.isSafeInteger(row.settingsRevision) || row.settingsRevision < 1)) {
         throw new Error("Invalid game project fields");
       }
     }

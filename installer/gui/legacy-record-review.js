@@ -11,9 +11,10 @@ const editableFields = {
   effects: ["description", "enabled"],
   games: ["name", "repositoryRoot", "jobAttachmentsRoot", "outputRoot"]
 };
-const categories = ["agents", "hosts", "effects", "hostJobs", "games"];
+const categories = ["agents", "hosts", "hostRuntimes", "effects", "hostJobs", "games"];
 const keyFor = (category, item) => category === "agents" ? item.agentId
   : category === "hosts" ? item.hostId
+  : category === "hostRuntimes" ? JSON.stringify([item.hostId, item.runtimeId])
   : category === "effects" ? JSON.stringify([item.hostId, item.effectId])
   : category === "hostJobs" ? item.jobId : item.projectId;
 
@@ -29,16 +30,25 @@ function verify(records) {
       if (!key || seen.has(key)) throw new Error("Duplicate " + category + " identity");
       seen.add(key);
       const allowed = category === "agents" ? ["agentId","userId","disabled"]
-        : category === "hosts" ? ["hostId","ownerId"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot","jobAttachmentsRoot","outputRoot","settingsRevision"];
+        : category === "hosts" ? ["hostId","ownerId"]
+        : category === "hostRuntimes" ? ["hostId","runtimeId","runtimeType","endpoint","enabled","inputFolder"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot","jobAttachmentsRoot","outputRoot","settingsRevision"];
       if (Object.keys(row).sort().join("|") !== allowed.sort().join("|")) throw new Error("Unexpected record fields");
       const required = category === "agents" ? ["agentId", "userId"]
         : category === "hosts" ? ["hostId", "ownerId"]
+        : category === "hostRuntimes" ? ["hostId", "runtimeId"]
         : category === "effects" ? ["hostId", "effectId"]
         : category === "hostJobs" ? ["jobId", "hostId", "effectId", "requestedBy"]
         : ["projectId", "hostId", "ownerId"];
       if (!required.every(field => id(row[field]))) throw new Error("Invalid " + category + " identity");
       if (category === "agents" && typeof row.disabled !== "boolean") {
         throw new Error("Invalid Alpha agent disabled flag");
+      }
+      if (category === "hostRuntimes" && (typeof row.runtimeType !== "string" ||
+          !row.runtimeType || row.runtimeType.length > 32 ||
+          typeof row.endpoint !== "string" || row.endpoint.length > 256 ||
+          typeof row.enabled !== "boolean" ||
+          typeof row.inputFolder !== "string" || row.inputFolder.length > 512)) {
+        throw new Error("Invalid host runtime metadata");
       }
       if (category === "effects" && (typeof row.description !== "string" ||
           row.description.length > 256 || typeof row.enabled !== "boolean")) {

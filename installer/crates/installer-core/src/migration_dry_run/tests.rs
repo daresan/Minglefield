@@ -61,6 +61,17 @@ fn reviews_all_tables_and_rolls_back_every_staged_change() {
     let preview = rehearse_migration(&file, "", &changes()).unwrap();
     assert_eq!(preview.verified_changes, 3);
     assert_eq!(preview.tables.len(), 10);
+    assert_eq!(preview.field_coverage.len(), preview.tables.len());
+    let games = preview.field_coverage.iter().find(|entry| entry.table == "alpha_game_projects").unwrap();
+    assert_eq!(games.staged_editable_columns.len(), 4);
+    assert!(games.protected_columns.contains(&"owner_id".to_owned()));
+    assert!(games.protected_columns.contains(&"settings_revision".to_owned()));
+    let passwords = preview.field_coverage.iter().find(|entry| entry.table == "alpha_passwords").unwrap();
+    assert!(passwords.staged_editable_columns.is_empty());
+    assert!(passwords.protected_columns.contains(&"password_hash".to_owned()));
+    let extension = preview.field_coverage.iter().find(|entry| entry.table == "extension_data").unwrap();
+    assert!(extension.staged_editable_columns.is_empty());
+    assert_eq!(extension.columns, vec!["secret"]);
     assert_eq!(
         preview
             .tables

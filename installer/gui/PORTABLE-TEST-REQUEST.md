@@ -1,4 +1,4 @@
-# Portable GUI milestone — single destination password and encrypted staged edits
+# Portable GUI milestone — tabular data review and single-page database credentials
 
 **2026-11-05 — explicitly requested one-time test build** on
 `feat/game-integration-updates`. Only changes to this marker trigger portable
@@ -11,7 +11,11 @@ packaging on the feature branch. Routine installer commits do not.
   The temporary encrypted-copy test reuses those existing in-memory inputs.
   Passwords are never added to installation-plan JSON or persisted.
 - The existing Alpha source unlock password remains separate and optional
-  for unencrypted SQLite; a reentered source key takes precedence when given.
+  for unencrypted SQLite. The Step-3 source key is reused for both Step-4
+  verification actions after successful inspection; there is no second
+  source-key input. The key is kept only in the running GUI session, never
+  written to the installation plan or to disk. Switching databases or
+  changing the source key invalidates the prior inspection and proof.
 - The existing **in-memory migration rehearsal** applies corrections and
   rolls back; the original source is still never modified.
 - The new encrypted-copy rehearsal verifies all the same staged corrections
@@ -30,18 +34,34 @@ packaging on the feature branch. Routine installer commits do not.
   `encryptedDestinationVerified`, `migrationEnabled` and
   `executionEnabled` remain **false**; no Minglefield install or Host claim.
 
+- The Data Review step displays the vetted Alpha application records as
+  horizontally scrollable tables in five tabs: Anmeldung, Hosts, Effekte,
+  Jobs and Games. Each field returned by the existing verified readers
+  has a separate column; the seven existing correction kinds are represented
+  by directly editable controls. Protected identity/ownership/job-state,
+  authentication and other sensitive fields remain read-only and are not
+  given a generic SQL writer. Full-table schema coverage is still reported
+  by the migration rehearsal.
+- Table editors stage changes in memory and apply the existing correction
+  validators; rejected values return to their last accepted state, and
+  changing a value invalidates the previous rehearsal.
+
 ## Manual acceptance on Shadow
 
 1. Run the portable Windows executable. Inspect the same existing Alpha
    database (previously 27 application tables, 111 columns, 143 rows).
-2. On **Step 3**, set and confirm a strong **new** SQLCipher database
-   password once. The password remains masked and is not in JSON.
-3. On Step 4, run the normal memory rehearsal with zero changes. Run the
-   temporary encrypted-disk-copy test **without reentering the new key**.
+2. On **Step 3**, enter an existing database unlock key only if needed,
+   inspect the database and set/confirm a strong **new** SQLCipher key.
+   Neither password is included in the displayed plan JSON. Step 4 must
+   contain no source or destination password input.
+3. On Step 4, inspect the five tabs: all loaded fields should be visible
+   as table columns, with controls for only approved corrections. Run the
+   memory rehearsal with zero changes and then the temporary encrypted-disk-
+   copy test **without reentering either database key**.
    Check `verifiedStagedChanges: 0`, `stagedValuesMatchCiphertext: true`,
    `temporaryFilesRemoved: true` and unchanged source/final destination.
-4. Stage one or more changes (e.g. Git label, effect description or Game
-   name); rerun the memory rehearsal, then the temporary disk-copy test
+4. Stage one or more table-cell changes (e.g. Git label, effect description,
+   enabled status or Game name); rerun the memory rehearsal, then the disk test
    using the still-confirmed Step-3 password. Its `verifiedStagedChanges`
    should exactly equal the staged correction count, with full ciphertext
    value equality and temporary cleanup.

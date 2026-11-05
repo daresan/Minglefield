@@ -325,6 +325,12 @@ async function inspectSelectedSqlite() {
     const preview = await request;
     lastDatabaseInspection = preview;
     resetAlphaUserReview();
+    if (!preview.integrityOk || !preview.foreignKeysOk) {
+      document.querySelector("#data-editor-status").textContent =
+        "Database integrity verification failed. Editing is unavailable.";
+      output.textContent = "Database integrity or foreign-key verification failed. Migration cannot proceed.";
+      return;
+    }
     try {
       const users = await invoke("inspect_alpha_users", { path: selectedDatabase, password: unlockPassword });
       originalAlphaUsers = createAlphaUserReview(users);

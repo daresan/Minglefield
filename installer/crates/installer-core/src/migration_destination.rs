@@ -15,7 +15,6 @@ pub enum MigrationDestinationError {
     DestinationParentIsSymlink,
     SamePath,
     SameFileName,
-    SourceAndDestinationSameDirectory,
     IoError,
 }
 
@@ -28,9 +27,10 @@ pub struct MigrationDestinationPreview {
 }
 
 /// Fail closed when the source is missing, the destination exists, or a path
-/// cannot be validated. A different directory is required to avoid confusion
-/// with SQLite WAL/SHM sidecars. The execution layer must recheck all paths
-/// atomically and create the destination exclusively before any writes.
+/// cannot be validated. The destination may share the source directory,
+/// but must use a different filename; it must not replace a WAL/SHM sidecar.
+/// An eventual execution layer must recheck all paths atomically and create
+/// the destination exclusively before any writes.
 pub fn preview_migration_destination(
     source: &Path,
     destination: &Path,
@@ -66,9 +66,6 @@ pub fn preview_migration_destination(
         .ok_or(MigrationDestinationError::DestinationParentUnavailable)?;
     if file_name == source.file_name().unwrap_or_default() {
         return Err(MigrationDestinationError::SameFileName);
-    }
-    if parent == source.parent().unwrap_or_else(|| Path::new("")) {
-        return Err(MigrationDestinationError::SourceAndDestinationSameDirectory);
     }
     let destination = parent.join(file_name);
     if destination == source {
@@ -125,9 +122,14 @@ mod tests {
         fs::create_dir_all(&target_dir).unwrap();
         let source = source_dir.join("alpha.sqlite3");
         fs::write(&source, b"fixture").unwrap();
+        let in_place = source_dir.join("new.sqlite3");
+        let preview = preview_migration_destination(&source, &in_place).unwrap();
+        assert_eq!(preview.destination, in_place);
+        assert!(preview.preserves_source);
+        assert!(!in_place.exists());
         assert_eq!(
-            preview_migration_destination(&source, &source_dir.join("new.sqlite3")),
-            Err(MigrationDestinationError::SourceAndDestinationSameDirectory)
+            preview_migration_destination(&source, &target_dir.join("alpha.sqlite3")),
+            Err(MigrationDestinationError::SameFileName)
         );
         let destination = target_dir.join("new.sqlite3");
         fs::write(&destination, b"existing").unwrap();

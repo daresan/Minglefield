@@ -7,11 +7,13 @@ const absolutePath = value => typeof value === "string" && value.length > 0 &&
     /^\\\\[^\\]+\\[^\\]+/.test(value)) &&
   !/(^|[\\/])\.\.([\\/]|$)/.test(value);
 const editableFields = {
+  agents: ["disabled"],
   effects: ["description", "enabled"],
   games: ["name", "repositoryRoot", "jobAttachmentsRoot", "outputRoot"]
 };
-const categories = ["hosts", "effects", "hostJobs", "games"];
-const keyFor = (category, item) => category === "hosts" ? item.hostId
+const categories = ["agents", "hosts", "effects", "hostJobs", "games"];
+const keyFor = (category, item) => category === "agents" ? item.agentId
+  : category === "hosts" ? item.hostId
   : category === "effects" ? JSON.stringify([item.hostId, item.effectId])
   : category === "hostJobs" ? item.jobId : item.projectId;
 
@@ -26,13 +28,18 @@ function verify(records) {
       const key = keyFor(category, row);
       if (!key || seen.has(key)) throw new Error("Duplicate " + category + " identity");
       seen.add(key);
-      const allowed = category === "hosts" ? ["hostId","ownerId"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot","jobAttachmentsRoot","outputRoot","settingsRevision"];
+      const allowed = category === "agents" ? ["agentId","userId","disabled"]
+        : category === "hosts" ? ["hostId","ownerId"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot","jobAttachmentsRoot","outputRoot","settingsRevision"];
       if (Object.keys(row).sort().join("|") !== allowed.sort().join("|")) throw new Error("Unexpected record fields");
-      const required = category === "hosts" ? ["hostId", "ownerId"]
+      const required = category === "agents" ? ["agentId", "userId"]
+        : category === "hosts" ? ["hostId", "ownerId"]
         : category === "effects" ? ["hostId", "effectId"]
         : category === "hostJobs" ? ["jobId", "hostId", "effectId", "requestedBy"]
         : ["projectId", "hostId", "ownerId"];
       if (!required.every(field => id(row[field]))) throw new Error("Invalid " + category + " identity");
+      if (category === "agents" && typeof row.disabled !== "boolean") {
+        throw new Error("Invalid Alpha agent disabled flag");
+      }
       if (category === "effects" && (typeof row.description !== "string" ||
           row.description.length > 256 || typeof row.enabled !== "boolean")) {
         throw new Error("Invalid effect fields");
@@ -82,13 +89,15 @@ export function stageLegacyText(records, category, key, field, value) {
 }
 
 export function stageLegacyToggle(records, category, key, field, value) {
-  if (category !== "effects" || field !== "enabled" || typeof value !== "boolean") {
+  if (typeof value !== "boolean" ||
+      !((category === "effects" && field === "enabled") ||
+        (category === "agents" && field === "disabled"))) {
     throw new Error("Field is not editable as a toggle");
   }
   const next = createLegacyReview(records);
-  const row = next.effects.find(record => keyFor("effects", record) === key);
-  if (!row) throw new Error("Unknown effect");
-  row.enabled = value;
+  const row = next[category].find(record => keyFor(category, record) === key);
+  if (!row) throw new Error("Unknown record");
+  row[field] = value;
   return next;
 }
 

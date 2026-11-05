@@ -144,6 +144,18 @@ document.querySelector("#preview").addEventListener("click", async () => {
         destinationEncryptionRequired: true,
         stagedAlphaUserCorrections: originalAlphaUsers && editedAlphaUsers
           ? alphaUserCorrections(originalAlphaUsers, editedAlphaUsers) : [],
+        stagedEffectAndGameCorrections: originalLegacyRecords && editedLegacyRecords
+          ? legacyCorrections(originalLegacyRecords, editedLegacyRecords) : [],
+        verifiedMigrationRehearsal: lastMigrationRehearsal ? {
+          status: lastMigrationRehearsal.status,
+          verifiedChanges: lastMigrationRehearsal.verifiedChanges,
+          preservedTableCount: lastMigrationRehearsal.preservedTables.length,
+          schemaObjectCount: lastMigrationRehearsal.schemaObjectCount,
+          proposedDestination: lastMigrationRehearsal.destinationPath,
+          sourcePreserved: lastMigrationRehearsal.sourcePreserved,
+          destinationCreated: false,
+          executionEnabled: false
+        } : null,
         migrationEnabled: false,
         executionEnabled: false
       }
@@ -686,6 +698,13 @@ function refreshReview() {
       }, null, 2)
     : "No database inspected. Fresh installation still requires encrypted SQLCipher.";
   updateReviewSummary();
+  if (lastMigrationRehearsal) {
+    document.querySelector("#review-migration-rehearsal-status").textContent =
+      "Dry-run verified for " + lastMigrationRehearsal.verifiedChanges +
+      " staged correction(s), " + lastMigrationRehearsal.preservedTables.length +
+      " tables and " + lastMigrationRehearsal.schemaObjectCount +
+      " schema objects. No destination file created. Migration execution remains disabled.";
+  }
   document.querySelector("#review-security-summary").textContent =
     "SQLCipher is mandatory for fresh installs and legacy imports. Destination password: " +
     validateDestinationPassword(newDbPassword.value, confirmDbPassword.value).message +

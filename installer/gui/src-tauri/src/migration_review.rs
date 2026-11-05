@@ -1,7 +1,7 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
-    rehearse_migration, GamePathField, ReviewCorrection,
+    rehearse_migration, GamePathField, GitProfileField, ReviewCorrection,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -43,7 +43,34 @@ pub enum StagedCorrection {
         before: String,
         after: String,
     },
+    GitProfileText {
+        host_id: String,
+        profile_id: String,
+        owner_id: String,
+        field: StagedGitProfileField,
+        before: String,
+        after: String,
+    },
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StagedGitProfileField {
+    Label,
+    AuthorName,
+    AuthorEmail,
+}
+
+impl From<StagedGitProfileField> for GitProfileField {
+    fn from(value: StagedGitProfileField) -> Self {
+        match value {
+            StagedGitProfileField::Label => Self::Label,
+            StagedGitProfileField::AuthorName => Self::AuthorName,
+            StagedGitProfileField::AuthorEmail => Self::AuthorEmail,
+        }
+    }
+}
+
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -127,6 +154,21 @@ impl From<StagedCorrection> for ReviewCorrection {
                 after,
             } => Self::GamePath {
                 project_id,
+                field: field.into(),
+                before,
+                after,
+            },
+            StagedCorrection::GitProfileText {
+                host_id,
+                profile_id,
+                owner_id,
+                field,
+                before,
+                after,
+            } => Self::GitProfileText {
+                host_id,
+                profile_id,
+                owner_id,
                 field: field.into(),
                 before,
                 after,

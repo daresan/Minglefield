@@ -98,3 +98,28 @@ The host-policy tables are optional in older Alpha databases. Absent tables, fai
 **Before enabling migration:** use a transactionally consistent, revalidated source snapshot with verified source identity and schema compatibility; define the destination mapping for *all* persisted tables, preservation of sensitive authorization data, operator confirmation, atomic backup/restore and rollback behavior. Cross-category frontend review does not satisfy these requirements. `migration_enabled` and `execution_enabled` remain false.
 
 Frontend correction guards have Node regression tests in `legacy-record-review.test.js` and `alpha-user-review.test.js`; Tauri reader tests verify available/missing schemas and source preservation. A green CI run proves only automated checks; a real DB migration and installation acceptance test remains outstanding.
+
+## Verified migration rehearsal (dry-run only)
+
+The **Data Review → Migration rehearsal** action now uses a backend-enforced preflight, not only a frontend summary:
+
+1. Select and integrity-check a source Alpha SQLite/SQLCipher database and load the Login, Hosts, Effects, Jobs and Games review.
+2. Stage supported changes (user disabled flag, effect description, game project name). Select an **existing, different destination directory** and a **new filename** that does not already exist. The installer checks the path through the shared `migration_destination` module. It does not create that file.
+3. Enter the existing source database password again when requested. It is cleared from the form following the request.
+4. The Rust core snapshots the current source transactionally, verifies SQLite integrity and foreign keys, checks the seven mandatory Alpha authentication/job tables and their required columns, and inventories **row counts for every table**, including sensitive and extension tables without returning their contents.
+5. The core revalidates staged original values against the newly checked snapshot, rejects duplicate/unrecognized/oversized changes, rejects databases with unreviewed triggers when corrections are requested, and simulates the changes inside a **temporary in-memory transaction**. Row counts, `quick_check` and foreign-key checks must still pass. The transaction is rolled back. No records are written back to the source.
+6. The final preview displays the checked destination, all source table row counts, schema-object count and staged-correction count. Editing a value or switching the source invalidates prior verification.
+
+This is an actionable **rehearsal of the supported record corrections**, but **not** a complete or executable data migration. A matching set of Alpha table names is not publisher identity or provenance. No SQLCipher destination is generated or tested; all original records (including host runtime configuration, grants, sessions, workflows, game projects, and opaque extensions) must still be transferred and verified by a future executor. Transactionally consistent source identity and destination encryption/integrity checks must be repeated immediately at actual execution time. Application installation and Host provisioning remain disabled.
+
+Regression tests:
+
+```powershell
+cd installer
+cargo test --workspace --locked
+cargo test --manifest-path gui/src-tauri/Cargo.toml --locked
+cd gui
+node --test
+```
+
+The portable GUI build is reserved for **significant manual acceptance milestones**, not every code change on the feature branch.

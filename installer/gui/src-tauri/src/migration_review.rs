@@ -1,4 +1,5 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
+use minglefield_installer_core::encrypted_copy_preflight::rehearse_encrypted_test_copy;
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
     rehearse_migration, GamePathField, GitProfileField, ReviewCorrection,
@@ -267,4 +268,73 @@ pub async fn preview_migration_rehearsal(
     })
     .await
     .map_err(|_| "Migration rehearsal worker failed".to_owned())?
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemporaryEncryptedCopyPreview {
+    status: &'static str,
+    source_integrity_verified: bool,
+    full_source_copy_verified: bool,
+    temporary_encrypted_copy_verified: bool,
+    ciphertext_header_verified: bool,
+    wrong_key_rejected: bool,
+    full_disk_copy_verified: bool,
+    checked_rows: u64,
+    checked_tables: usize,
+    checked_schema_entries: usize,
+    temporary_files_removed: bool,
+    destination_created: bool,
+    encrypted_destination_verified: bool,
+    execution_enabled: bool,
+}
+
+/// Explicit, user-initiated, temporary disk rehearsal. Nothing is written
+/// to the proposed destination path or the Alpha source.
+#[tauri::command]
+pub async fn verify_temporary_encrypted_copy(
+    source_path: String,
+    destination_path: String,
+    existing_password: String,
+    new_password: String,
+) -> Result<TemporaryEncryptedCopyPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let source = Path::new(&source_path);
+        let destination = Path::new(&destination_path);
+        preview_migration_destination(source, destination)
+            .map_err(|error| format!("Migration destination rejected: {error:?}"))?;
+        // Check Alpha schema and rows independently before any temporary write.
+        let baseline = rehearse_migration(source, &existing_password, &[])?;
+        let proof = rehearse_encrypted_test_copy(
+            source, &existing_password, &new_password
+        )?;
+        if proof.rows_checked != baseline.fidelity.rows_checked
+            || proof.tables_checked != baseline.fidelity.tables_checked
+            || proof.schema_entries_checked != baseline.fidelity.schema_entries_checked
+            || !proof.temporary_files_removed
+            || proof.destination_created
+            || proof.encrypted_destination_verified
+            || proof.execution_enabled
+        {
+            return Err("Encrypted disk rehearsal did not satisfy safety checks".to_owned());
+        }
+        Ok(TemporaryEncryptedCopyPreview {
+            status: "temporary_encrypted_copy_verified",
+            source_integrity_verified: true,
+            full_source_copy_verified: proof.full_source_verified,
+            temporary_encrypted_copy_verified: proof.full_disk_copy_verified,
+            ciphertext_header_verified: proof.ciphertext_header_verified,
+            wrong_key_rejected: proof.wrong_key_rejected,
+            full_disk_copy_verified: proof.full_disk_copy_verified,
+            checked_rows: proof.rows_checked,
+            checked_tables: proof.tables_checked,
+            checked_schema_entries: proof.schema_entries_checked,
+            temporary_files_removed: proof.temporary_files_removed,
+            destination_created: false,
+            encrypted_destination_verified: false,
+            execution_enabled: false,
+        })
+    })
+    .await
+    .map_err(|_| "Temporary encrypted copy rehearsal worker failed".to_owned())?
 }

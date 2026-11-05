@@ -506,6 +506,7 @@ fn main() {
             inspect_alpha_jobs,
             legacy_record_review::inspect_legacy_records,
             migration_review::preview_migration_rehearsal,
+            migration_review::verify_temporary_encrypted_copy,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

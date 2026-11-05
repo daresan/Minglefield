@@ -3,7 +3,11 @@ use crate::database_password::validate_new_database_password;
 use crate::snapshot_fidelity::{create_verified_memory_copy, verify_snapshot_equality};
 use crate::sqlite_inspection::open_inspected_snapshot;
 use rusqlite::{params, Connection, OpenFlags};
-use std::{fs, io::Read, path::{Path, PathBuf}};
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncryptedTestCopy {
@@ -20,14 +24,17 @@ pub struct EncryptedTestCopy {
     pub execution_enabled: bool,
 }
 
-struct PrivateTempDir { path: PathBuf, cleaned: bool }
+struct PrivateTempDir {
+    path: PathBuf,
+    cleaned: bool,
+}
 
 impl PrivateTempDir {
     fn create(source: &Connection) -> Result<Self, String> {
         for _ in 0..8 {
-            let id: String = source.query_row(
-                "SELECT lower(hex(randomblob(16)))", [], |r| r.get(0)
-            ).map_err(|_| "Cannot choose private staging identifier")?;
+            let id: String = source
+                .query_row("SELECT lower(hex(randomblob(16)))", [], |r| r.get(0))
+                .map_err(|_| "Cannot choose private staging identifier")?;
             let path = std::env::temp_dir().join(format!("minglefield-stage-{id}"));
             let mut builder = fs::DirBuilder::new();
             #[cfg(unix)]
@@ -36,9 +43,14 @@ impl PrivateTempDir {
                 builder.mode(0o700);
             }
             match builder.create(&path) {
-                Ok(()) => return Ok(Self { path, cleaned: false }),
+                Ok(()) => {
+                    return Ok(Self {
+                        path,
+                        cleaned: false,
+                    })
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(_) => return Err("Cannot create private temporary staging directory".into())
+                Err(_) => return Err("Cannot create private temporary staging directory".into()),
             }
         }
         Err("Cannot obtain unique private staging directory".into())
@@ -61,20 +73,24 @@ impl Drop for PrivateTempDir {
 fn export(source: &Connection, path: &Path, key: &str) -> Result<(), String> {
     // SQLCipher backup does not support plaintext->encrypted; sqlcipher_export
     // does. Both filename and password are bound, never interpolated into SQL.
-    source.execute(
-        "ATTACH DATABASE ?1 AS encrypted_stage KEY ?2",
-        params![path.to_string_lossy().as_ref(), key],
-    ).map_err(|_| "Cannot attach protected temporary SQLCipher destination")?;
+    source
+        .execute(
+            "ATTACH DATABASE ?1 AS encrypted_stage KEY ?2",
+            params![path.to_string_lossy().as_ref(), key],
+        )
+        .map_err(|_| "Cannot attach protected temporary SQLCipher destination")?;
     let result = (|| -> Result<(), String> {
-        source.query_row("SELECT sqlcipher_export('encrypted_stage')", [], |r| {
-            r.get::<_, String>(0)
-        }).map_err(|_| "SQLCipher export of source records failed")?;
-        let user_version: i64 = source.query_row(
-            "PRAGMA main.user_version", [], |r| r.get(0)
-        ).map_err(|_| "Cannot read source user_version")?;
-        let application_id: i64 = source.query_row(
-            "PRAGMA main.application_id", [], |r| r.get(0)
-        ).map_err(|_| "Cannot read source application_id")?;
+        source
+            .query_row("SELECT sqlcipher_export('encrypted_stage')", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .map_err(|_| "SQLCipher export of source records failed")?;
+        let user_version: i64 = source
+            .query_row("PRAGMA main.user_version", [], |r| r.get(0))
+            .map_err(|_| "Cannot read source user_version")?;
+        let application_id: i64 = source
+            .query_row("PRAGMA main.application_id", [], |r| r.get(0))
+            .map_err(|_| "Cannot read source application_id")?;
         // SQLCipher export does not automatically preserve these metadata.
         source.execute_batch(&format!(
             "PRAGMA encrypted_stage.user_version={user_version}; PRAGMA encrypted_stage.application_id={application_id};"
@@ -105,30 +121,44 @@ pub fn rehearse_encrypted_test_copy(
     if !inspection.integrity_ok || inspection.foreign_key_violations != 0 {
         return Err("Source integrity or foreign-key verification failed".into());
     }
-    let source_key = if inspection.source_encrypted { existing_password } else { "" };
+    let source_key = if inspection.source_encrypted {
+        existing_password
+    } else {
+        ""
+    };
     let (_, source_proof) = create_verified_memory_copy(&source, source_key)?;
-    if !source_proof.values_verified { return Err("Original memory copy did not verify".into()); }
+    if !source_proof.values_verified {
+        return Err("Original memory copy did not verify".into());
+    }
     let private = PrivateTempDir::create(&source)?;
     let staged = private.path.join("temporary-encrypted.sqlite3");
     export(&source, &staged, new_password)?;
     let mut header = [0_u8; 16];
-    fs::File::open(&staged).map_err(|_| "Cannot reopen encrypted file header")?
-        .read_exact(&mut header).map_err(|_| "Encrypted file header is truncated")?;
+    fs::File::open(&staged)
+        .map_err(|_| "Cannot reopen encrypted file header")?
+        .read_exact(&mut header)
+        .map_err(|_| "Encrypted file header is truncated")?;
     if &header == b"SQLite format 3\0" {
         return Err("Temporary encrypted destination has a plaintext header".into());
     }
     let bad_key = Connection::open_with_flags(&staged, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| "Cannot exercise encrypted wrong-key control")?;
-    bad_key.pragma_update(None, "key", "WrongControlPassword123!")
+    bad_key
+        .pragma_update(None, "key", "WrongControlPassword123!")
         .map_err(|_| "Cannot set wrong-key control")?;
-    let wrong_key_rejected = bad_key.query_row(
-        "SELECT count(*) FROM sqlite_schema", [], |r| r.get::<_, i64>(0)
-    ).is_err();
+    let wrong_key_rejected = bad_key
+        .query_row("SELECT count(*) FROM sqlite_schema", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .is_err();
     drop(bad_key);
-    if !wrong_key_rejected { return Err("Encrypted copy accepted wrong key".into()); }
+    if !wrong_key_rejected {
+        return Err("Encrypted copy accepted wrong key".into());
+    }
     let reopened = Connection::open_with_flags(&staged, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| "Cannot reopen temporary encrypted SQLCipher file")?;
-    reopened.pragma_update(None, "key", new_password)
+    reopened
+        .pragma_update(None, "key", new_password)
         .map_err(|_| "Cannot unlock temporary encrypted SQLCipher file")?;
     let fidelity = verify_snapshot_equality(&source, &reopened)?;
     drop(reopened);
@@ -157,13 +187,19 @@ mod tests {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     fn fixture(encrypted: bool) -> PathBuf {
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
-        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "minglefield-encrypted-copy-test-{}-{stamp}-{id}.sqlite3", std::process::id()
+            "minglefield-encrypted-copy-test-{}-{stamp}-{id}.sqlite3",
+            std::process::id()
         ));
         {
             let db = Connection::open(&path).unwrap();
-            if encrypted { db.pragma_update(None, "key", "ExistingKey9!").unwrap(); }
+            if encrypted {
+                db.pragma_update(None, "key", "ExistingKey9!").unwrap();
+            }
             db.execute_batch(
                 "PRAGMA user_version=17; PRAGMA application_id=12345;
                  CREATE TABLE records(id INTEGER PRIMARY KEY AUTOINCREMENT,payload BLOB,name TEXT);
@@ -172,8 +208,9 @@ mod tests {
                  CREATE TABLE duplicate_rows(payload BLOB);
                  INSERT INTO duplicate_rows VALUES(x'1234'),(x'1234');
                  CREATE INDEX idx_records_name ON records(name);
-                 CREATE VIEW readable AS SELECT name FROM records;"
-            ).unwrap();
+                 CREATE VIEW readable AS SELECT name FROM records;",
+            )
+            .unwrap();
         }
         path
     }

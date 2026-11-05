@@ -87,13 +87,13 @@ The Source inspection wizard step can inspect a user-selected SQLite or SQLCiphe
 
 | Tab | Existing Alpha table | Loaded fields | Editable in memory |
 | --- | --- | --- | --- |
-| Anmeldung | `alpha_users` | User ID, disabled | Disabled |
-| Hosts | `sec01_host_owners` | Host ID, owner ID | None — ownership is authorization data |
-| Effekte | `sec01_host_effect_definitions` | Host/effect ID, description, enabled | Description (maximum 256 characters) |
+| Anmeldung | `alpha_users`, `alpha_agents` | User ID and disabled; Agent ID, owner and disabled | User and Agent disabled flags |
+| Hosts | `sec01_host_owners`, `sec01_host_runtimes` | Host ownership and allowlisted runtime ID, type, endpoint, enabled, input folder | None — identities and live runtime configuration remain protected |
+| Effekte | `sec01_host_effect_definitions` | Host/effect ID, description, enabled | Description (≤256 characters) and enabled flag (staged only) |
 | Jobs | `alpha_jobs`, `sec01_host_jobs` | IDs, ownership/requester, effect, state | None — job and execution records are immutable |
-| Games | `alpha_game_projects` | Project ID, host/owner IDs, name, repository root | Project name (trimmed, 1–120 characters) |
+| Games | `alpha_game_projects` | Project and host/owner IDs, name, repository/attachments/output roots, settings revision | Name and all three absolute paths; revision and ownership unchanged |
 
-The host-policy tables are optional in older Alpha databases. Absent tables, failed readers and other unavailable data are explicitly listed in the final Database review rather than fabricated. Unknown columns and tables are not silently migrated. Host runtime JSON, project attachment paths, effect workflows, sessions, credential hashes, grants and ledgers are excluded from editing. The reader is not yet a complete inventory of every persisted platform object.
+The host-policy tables are optional in older Alpha databases. Absent tables, failed readers and other unavailable data are explicitly listed in the final Database review rather than fabricated. Unknown columns and tables are not silently migrated. Raw host runtime JSON, host owner identity, effect workflows, job execution state, sessions, credential hashes, grants and ledgers remain excluded from editing. Only explicitly allowlisted runtime metadata is displayed; credentials and arbitrary config keys are not returned to the UI. The reader is not yet a complete inventory of every persisted platform object.
 
 **Before enabling migration:** use a transactionally consistent, revalidated source snapshot with verified source identity and schema compatibility; define the destination mapping for *all* persisted tables, preservation of sensitive authorization data, operator confirmation, atomic backup/restore and rollback behavior. Cross-category frontend review does not satisfy these requirements. `migration_enabled` and `execution_enabled` remain false.
 
@@ -104,7 +104,7 @@ Frontend correction guards have Node regression tests in `legacy-record-review.t
 The **Data Review → Migration rehearsal** action now uses a backend-enforced preflight, not only a frontend summary:
 
 1. Select and integrity-check a source Alpha SQLite/SQLCipher database and load the Login, Hosts, Effects, Jobs and Games review.
-2. Stage supported changes (user disabled flag, effect description, game project name). Select an **existing, different destination directory** and a **new filename** that does not already exist. The installer checks the path through the shared `migration_destination` module. It does not create that file.
+2. Stage supported changes (user or Agent disabled flag; effect description or activation; game name and three directory paths). Select an **existing destination directory**, which may be the source directory, and a **different, unused filename**. The source filename and potential SQLite sidecar filenames cannot be reused. The installer checks the path through the shared `migration_destination` module. It does not create that file.
 3. Enter the existing source database password again when requested. It is cleared from the form following the request.
 4. The Rust core snapshots the current source transactionally, verifies SQLite integrity and foreign keys, checks the seven mandatory Alpha authentication/job tables and their required columns, and inventories **row counts for every table**, including sensitive and extension tables without returning their contents.
 5. The core revalidates staged original values against the newly checked snapshot, rejects duplicate/unrecognized/oversized changes, rejects databases with unreviewed triggers when corrections are requested, and simulates the changes inside a **temporary in-memory transaction**. Row counts, `quick_check` and foreign-key checks must still pass. The transaction is rolled back. No records are written back to the source.
@@ -123,3 +123,6 @@ node --test
 ```
 
 The portable GUI build is reserved for **significant manual acceptance milestones**, not every code change on the feature branch.
+
+**2026-11-05 field coverage milestone:** Runtime details are displayed as metadata, not edited. Game project directory paths and effect/Agent enablement can be staged and rehearsed against fresh original values. Nothing is applied to the source or to an installation. The same-directory destination allowance is checked in the shared Rust preflight, with exclusive-file creation and live SQLite sidecar exclusion reserved for the eventual executor.
+

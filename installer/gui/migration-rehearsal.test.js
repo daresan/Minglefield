@@ -6,6 +6,7 @@ const alpha = () => [{ userId: "alice", disabled: false }];
 const legacy = () => ({
   agents: [{ agentId: "agent1", userId: "alice", disabled: false }],
   hostRuntimes: [{ hostId: "host1", runtimeId: "comfy1", runtimeType: "comfyui", endpoint: "http://127.0.0.1:8188", enabled: true, inputFolder: "/comfy/input" }],
+  gitProfiles: [{ hostId: "host1", profileId: "profile1", ownerId: "alice", label: "Personal", authMethod: "local", gitExecutable: "git", authorName: "Alice", authorEmail: "alice@example.test" }],
   hosts: [{ hostId: "host1", ownerId: "alice" }],
   effects: [{ hostId: "host1", effectId: "effect1", description: "Old", enabled: false }],
   hostJobs: [{ jobId: "job1", hostId: "host1", effectId: "effect1", requestedBy: "alice", state: "queued" }],
@@ -82,4 +83,22 @@ test("preserves agent ownership when staging disabled-state migration", () => {
     () => stagedMigrationChanges(alpha(), alpha(), before, alteredOwner, []),
     /Read-only field changed/
   );
+});
+
+test("Git profile corrections use immutable owner and only typed safe columns", () => {
+  const source = legacy();
+  const staged = legacy();
+  staged.gitProfiles[0].label = "Updated";
+  staged.gitProfiles[0].authorName = "Alice Doe";
+  const changes = stagedMigrationChanges(alpha(), alpha(), source, staged, []);
+  assert.deepEqual(changes, [
+    {kind: "git_profile_text", host_id: "host1", profile_id: "profile1", owner_id: "alice",
+      field: "label", before: "Personal", after: "Updated"},
+    {kind: "git_profile_text", host_id: "host1", profile_id: "profile1", owner_id: "alice",
+      field: "author_name", before: "Alice", after: "Alice Doe"}
+  ]);
+  const tampered = legacy();
+  tampered.gitProfiles[0].authMethod = "ssh";
+  assert.throws(() => stagedMigrationChanges(alpha(), alpha(), source, tampered, []),
+    /Read-only field changed/);
 });

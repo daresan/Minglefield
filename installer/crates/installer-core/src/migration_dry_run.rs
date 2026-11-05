@@ -1,7 +1,9 @@
 //! Verified, non-persistent migration rehearsal on a consistent SQLite snapshot.
 //! This never writes source records or creates the target SQLCipher database.
+use crate::snapshot_fidelity::{
+    create_verified_memory_copy, verify_snapshot_equality, SnapshotFidelity,
+};
 use crate::sqlite_inspection::{open_inspected_snapshot, SqliteInspection};
-use crate::snapshot_fidelity::{create_verified_memory_copy, verify_snapshot_equality, SnapshotFidelity};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::BTreeSet;
 use std::path::Path;

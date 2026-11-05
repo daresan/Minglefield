@@ -29,7 +29,9 @@ fn check_database(db: &Connection) -> Result<(), String> {
         return Err("Snapshot copy integrity failed".to_owned());
     }
     let violations: i64 = db
-        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| row.get(0))
+        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })
         .map_err(|_| "Cannot verify snapshot copy foreign keys")?;
     if violations != 0 {
         return Err("Snapshot copy contains foreign-key violations".to_owned());
@@ -44,7 +46,9 @@ fn schema(db: &Connection) -> Result<Vec<SchemaEntry>, String> {
         .prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name,tbl_name")
         .map_err(|_| "Cannot read complete source schema")?;
     statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
         .map_err(|_| "Cannot inventory source schema")?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|_| "Cannot decode complete source schema".to_owned())
@@ -112,10 +116,16 @@ fn row_fingerprints(
     let names = columns(db, table)?;
     let sql = format!(
         "SELECT {} FROM {}",
-        names.iter().map(|name| quote(name)).collect::<Vec<_>>().join(","),
+        names
+            .iter()
+            .map(|name| quote(name))
+            .collect::<Vec<_>>()
+            .join(","),
         quote(table)
     );
-    let mut stmt = db.prepare(&sql).map_err(|_| "Cannot inspect all source values")?;
+    let mut stmt = db
+        .prepare(&sql)
+        .map_err(|_| "Cannot inspect all source values")?;
     let count = stmt.column_count();
     let mut rows = stmt.query([]).map_err(|_| "Cannot read source values")?;
     let mut digests = BTreeMap::new();
@@ -128,7 +138,9 @@ fn row_fingerprints(
         let mut encoding = Vec::with_capacity(128);
         encoding.extend_from_slice(&(count as u64).to_be_bytes());
         for index in 0..count {
-            let value = row.get_ref(index).map_err(|_| "Cannot inspect source cell")?;
+            let value = row
+                .get_ref(index)
+                .map_err(|_| "Cannot inspect source cell")?;
             append_value(&mut encoding, value)?;
         }
         let digest = sha256(&encoding);
@@ -182,7 +194,9 @@ pub fn verify_snapshot_equality(
         if before != after {
             return Err(format!("Stored rows differ after snapshot copy: {table}"));
         }
-        total_rows = total_rows.checked_add(before.0).ok_or("Total row count overflow")?;
+        total_rows = total_rows
+            .checked_add(before.0)
+            .ok_or("Total row count overflow")?;
     }
     Ok(SnapshotFidelity {
         tables_checked: table_names.len(),
@@ -203,7 +217,8 @@ pub fn create_verified_memory_copy(
     {
         let backup = Backup::new(source, &mut copied)
             .map_err(|_| "Cannot initialize isolated migration backup")?;
-        backup.run_to_completion(128, Duration::from_millis(50), None)
+        backup
+            .run_to_completion(128, Duration::from_millis(50), None)
             .map_err(|_| "Cannot construct in-memory migration backup")?;
     }
     let verified = verify_snapshot_equality(source, &copied)?;
@@ -250,7 +265,11 @@ mod tests {
     fn detects_corrupted_blob_even_with_unchanged_row_counts() {
         let db = fixture();
         let (copy, _) = create_verified_memory_copy(&db).unwrap();
-        copy.execute("UPDATE duplicate_values SET payload=x'99' WHERE rowid=2", []).unwrap();
+        copy.execute(
+            "UPDATE duplicate_values SET payload=x'99' WHERE rowid=2",
+            [],
+        )
+        .unwrap();
         assert!(verify_snapshot_equality(&db, &copy).is_err());
     }
 
@@ -260,8 +279,9 @@ mod tests {
         let (copy, _) = create_verified_memory_copy(&db).unwrap();
         copy.execute_batch(
             "DELETE FROM duplicate_values WHERE rowid=2;
-             INSERT INTO duplicate_values VALUES(x'040506','different');"
-        ).unwrap();
+             INSERT INTO duplicate_values VALUES(x'040506','different');",
+        )
+        .unwrap();
         assert!(verify_snapshot_equality(&db, &copy).is_err());
     }
 
@@ -271,7 +291,9 @@ mod tests {
         let (mut copy, _) = create_verified_memory_copy(&db).unwrap();
         {
             let transaction = copy.transaction().unwrap();
-            transaction.execute("UPDATE no_rowid SET bytes=x'1234'", []).unwrap();
+            transaction
+                .execute("UPDATE no_rowid SET bytes=x'1234'", [])
+                .unwrap();
             assert!(verify_snapshot_equality(&db, &transaction).is_err());
             transaction.rollback().unwrap();
         }

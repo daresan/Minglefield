@@ -149,3 +149,9 @@ Cause: responded to installer requests with shell commands, Conda assumptions an
 
 ## Maintaining AGENTS.md
 Keep these instructions public-safe, concise and non-redundant. Update existing patterns instead of duplicating requirements from phase specifications. A documented promise is not a completed correction; show the changed artifact, commit and verification. The staged-content guard and human review are complementary and cannot override higher-priority instructions or grant tool access.
+
+## Documentation security and test selection
+- Pure documentation changes do not require unrelated Rust, Python application, Tauri, or cross-platform functional builds. Documentation embedded in binaries or used as build input is not automatically exempt.
+- Every changed documentation file must pass staged-content secret/policy checks before commit and an independent committed-content check in CI. Keep the existing AGENTS-specific guard unchanged.
+- Security checks are mandatory even for documentation-only commits; do not print matched secret values in logs. Human review remains necessary because pattern matching cannot prove absence of sensitive information.
+- Dependency manifest and lockfile updates belong together. Keep the existing separate installer Core/CLI and Tauri Cargo workspaces, use --locked on build paths, and do not have CI automatically push generated lockfiles into an active development branch.

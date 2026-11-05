@@ -230,7 +230,9 @@ struct RegisteredAlphaSchemaObjectsPreview {
 impl From<minglefield_installer_core::legacy_alpha_constraints::AlphaSchemaObjectAudit>
     for RegisteredAlphaSchemaObjectsPreview
 {
-    fn from(value: minglefield_installer_core::legacy_alpha_constraints::AlphaSchemaObjectAudit) -> Self {
+    fn from(
+        value: minglefield_installer_core::legacy_alpha_constraints::AlphaSchemaObjectAudit,
+    ) -> Self {
         Self {
             verified: value.verified,
             reason: value.reason,

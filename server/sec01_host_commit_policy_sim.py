@@ -175,7 +175,6 @@ class HostCommitPolicy:
                             repository_root, job_attachments_root, output_root):
         """Register project metadata without touching the filesystem or host paths."""
         from pathlib import Path
-        import sqlite3
         if (not ident(project_id) or type(name) is not str
                 or not 1 <= len(name.strip()) <= 120):
             return HostDecision("denied","invalid_project_identity")
@@ -192,7 +191,7 @@ class HostCommitPolicy:
                     project_id,host_id,owner_id,name,repository_root,job_attachments_root,output_root)
                     VALUES(?,?,?,?,?,?,?)""",
                     (project_id,host_id,owner_id,name.strip(),*paths))
-            except sqlite3.IntegrityError:
+            except self.authority.store.integrity_error:
                 return HostDecision("denied","project_id_exists")
         return HostDecision("created","game_project_created")
 

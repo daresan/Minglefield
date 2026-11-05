@@ -12,6 +12,13 @@ import time
 from contextlib import closing
 from dataclasses import dataclass
 
+try:
+    from server.alpha_sqlcipher_runtime import open_alpha_database, integrity_error_type
+except ModuleNotFoundError as exc:
+    if exc.name != "server":
+        raise
+    from alpha_sqlcipher_runtime import open_alpha_database, integrity_error_type
+
 def digest(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -25,8 +32,13 @@ class AlphaPrincipal:
     agent_id: str
 
 class AlphaAuthStore:
-    def __init__(self, database, *, clock=None):
+    def __init__(self, database, *, clock=None, sqlcipher_key_provider=None):
         self.database = str(database)
+        # An installed, encrypted database must be unlocked by an explicit
+        # in-memory provider supplied by authenticated local onboarding.
+        # No key is persisted or implicitly read from process arguments/env.
+        self._sqlcipher_key_provider = sqlcipher_key_provider
+        self.integrity_error = integrity_error_type(encrypted=sqlcipher_key_provider is not None)
         self.clock = clock or time.time
         with self._tx() as db:
             db.executescript("""CREATE TABLE IF NOT EXISTS alpha_invites(
@@ -71,7 +83,7 @@ class AlphaAuthStore:
     def _tx(self):
         # Separate context manager implemented below; IMMEDIATE serializes
         # invite redemption, session revocation, and job decisions.
-        return _Transaction(self.database)
+        return _Transaction(self.database, self._sqlcipher_key_provider)
 
     def invite(self, user_id, *, ttl=3600):
         if not ident(user_id) or type(ttl) is not int or not 1 <= ttl <= 86400:
@@ -405,10 +417,11 @@ class AlphaAuthStore:
                             "state":"simulated_no_effect"}
 
 class _Transaction:
-    def __init__(self, database):
+    def __init__(self, database, key_provider=None):
         self.database = database
+        self.key_provider = key_provider
     def __enter__(self):
-        self.db = sqlite3.connect(self.database, timeout=10, isolation_level=None)
+        self.db = open_alpha_database(self.database, key_provider=self.key_provider)
         try:
             self.db.execute("PRAGMA busy_timeout=10000")
             self.db.execute("BEGIN IMMEDIATE")

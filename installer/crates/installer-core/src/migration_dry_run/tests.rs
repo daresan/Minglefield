@@ -23,8 +23,8 @@ fn fixture() -> std::path::PathBuf {
          CREATE TABLE alpha_agent_grants(agent_id TEXT,grantee_user_id TEXT,action TEXT,revoked INTEGER);
          CREATE TABLE sec01_host_effect_definitions(host_id TEXT,effect_id TEXT,description TEXT,enabled INTEGER);
          INSERT INTO sec01_host_effect_definitions VALUES('host1','effect1','Old description',0);
-         CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT);
-         INSERT INTO alpha_game_projects VALUES('game1','host1','alice','Old game','/games/one');
+         CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT,job_attachments_root TEXT,output_root TEXT,settings_revision INTEGER);
+         INSERT INTO alpha_game_projects VALUES('game1','host1','alice','Old game','/games/one','/games/one/attachments','/games/one/output',1);
          CREATE TABLE extension_data(secret BLOB);
          INSERT INTO extension_data VALUES(x'0102030405');"
     ).unwrap();
@@ -179,5 +179,55 @@ fn permits_no_change_rehearsal_and_never_creates_destination() {
     assert_eq!(preview.verified_changes, 0);
     assert_eq!(preview.tables.len(), 10);
     assert!(!preview.execution_enabled);
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn rehearses_effect_activation_and_all_game_paths_without_any_source_mutation() {
+    let file = fixture();
+    let bytes = std::fs::read(&file).unwrap();
+    let changes = vec![
+        ReviewCorrection::EffectEnabled {
+            host_id: "host1".into(), effect_id: "effect1".into(),
+            before: false, after: true,
+        },
+        ReviewCorrection::GamePath {
+            project_id: "game1".into(), field: GamePathField::RepositoryRoot,
+            before: "/games/one".into(), after: "/new/game".into(),
+        },
+        ReviewCorrection::GamePath {
+            project_id: "game1".into(), field: GamePathField::JobAttachmentsRoot,
+            before: "/games/one/attachments".into(), after: "/new/attachments".into(),
+        },
+        ReviewCorrection::GamePath {
+            project_id: "game1".into(), field: GamePathField::OutputRoot,
+            before: "/games/one/output".into(), after: "/new/output".into(),
+        },
+    ];
+    let result = rehearse_migration(&file, "", &changes).unwrap();
+    assert_eq!(result.verified_changes, 4);
+    assert_eq!(std::fs::read(&file).unwrap(), bytes);
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn rejects_invalid_and_stale_game_paths_and_effect_activation() {
+    let file = fixture();
+    for change in [
+        ReviewCorrection::GamePath {
+            project_id: "game1".into(), field: GamePathField::RepositoryRoot,
+            before: "/games/one".into(), after: "relative".into(),
+        },
+        ReviewCorrection::GamePath {
+            project_id: "game1".into(), field: GamePathField::OutputRoot,
+            before: "/stale".into(), after: "/games/updated".into(),
+        },
+        ReviewCorrection::EffectEnabled {
+            host_id: "host1".into(), effect_id: "effect1".into(),
+            before: true, after: false,
+        },
+    ] {
+        assert!(rehearse_migration(&file, "", &[change]).is_err());
+    }
     std::fs::remove_file(file).unwrap();
 }

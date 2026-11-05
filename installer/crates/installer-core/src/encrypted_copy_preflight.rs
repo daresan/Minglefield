@@ -334,6 +334,24 @@ mod tests {
                 before: false,
                 after: true,
             },
+            ReviewCorrection::AgentDisabled {
+                agent_id: "a1".into(),
+                user_id: "alice".into(),
+                before: false,
+                after: true,
+            },
+            ReviewCorrection::EffectEnabled {
+                host_id: "h1".into(),
+                effect_id: "e1".into(),
+                before: true,
+                after: false,
+            },
+            ReviewCorrection::GameName {
+                project_id: "g1".into(),
+                before: "Original game".into(),
+                after: "Updated game".into(),
+            },
+
             ReviewCorrection::EffectDescription {
                 host_id: "h1".into(),
                 effect_id: "e1".into(),
@@ -364,7 +382,7 @@ mod tests {
             let before = fs::read(&path).unwrap();
             let key = if encrypted { "ExistingKey9!" } else { "" };
             let proof = rehearse_encrypted_test_copy(&path, key, "NewKey123!", &changes()).unwrap();
-            assert_eq!(proof.staged_changes_verified, 4);
+            assert_eq!(proof.staged_changes_verified, 7);
             assert!(proof.staged_values_match_ciphertext && proof.full_disk_copy_verified);
             assert!(proof.temporary_files_removed && proof.wrong_key_rejected);
             assert!(!proof.destination_created && !proof.encrypted_destination_verified);
@@ -388,4 +406,20 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), before);
         fs::remove_file(path).unwrap();
     }
+    #[test]
+    fn source_triggers_block_encrypted_disk_edits_without_mutation() {
+        let path = editable_alpha_fixture(false);
+        {
+            let db = Connection::open(&path).unwrap();
+            db.execute_batch(
+                "CREATE TRIGGER audit_user_disabled AFTER UPDATE ON alpha_users
+                 BEGIN UPDATE alpha_users SET disabled=NEW.disabled WHERE user_id=NEW.user_id; END;"
+            ).unwrap();
+        }
+        let before = fs::read(&path).unwrap();
+        assert!(rehearse_encrypted_test_copy(&path, "", "NewKey123!", &changes()).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        fs::remove_file(path).unwrap();
+    }
+
 }

@@ -1,4 +1,4 @@
-# Portable GUI milestone — full Alpha record review, 2026-11-05
+# Portable GUI milestone — complete Alpha field coverage, 2026-11-05
 
 This file is changed **only for significant manual test milestones** and
 triggers one portable build for Windows, Linux and macOS. Ordinary installer
@@ -24,6 +24,23 @@ commits must never trigger portable packaging.
   constraints, and rolls back.
 - No source database writes; no SQLCipher destination creation; no real
   installation or Host claim.
+
+## Full schema-field inventory acceptance
+
+The rehearsal JSON now includes `fieldCoverage` for **all** existing application
+tables, not only the tables displayed in the editor. Each entry contains
+`columns`, `stagedEditableColumns` and `protectedColumns`. Unknown tables
+and sensitive credential/session tables have no staged-editable fields. This
+report exposes **schema column names only**; no credential or record values.
+
+Check that all 27 tables from the actual Alpha database appear both in
+`preservedTables` and `fieldCoverage`, and that each column is classified
+exactly once as editable or protected. In particular, `alpha_passwords`,
+`alpha_sessions`, job execution state and ownership/revision columns must be
+protected. The final wizard review shows total and protected column counts.
+
+No destination database is created; no source data or SQLCipher configuration
+is changed. This milestone is a schema coverage audit, not migration execution.
 
 ## Manual Windows/Shadow acceptance
 

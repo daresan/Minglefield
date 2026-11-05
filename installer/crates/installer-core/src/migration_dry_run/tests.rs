@@ -374,11 +374,15 @@ fn encrypted_alpha_source_is_verified_without_creating_output_or_changing_bytes(
     let file = std::env::temp_dir().join(format!(
         "minglefield-fidelity-cipher-{}-{}.sqlite3",
         std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
     ));
     {
         let db = Connection::open(&file).unwrap();
-        db.pragma_update(None, "key", "ExistingSourcePassword9!").unwrap();
+        db.pragma_update(None, "key", "ExistingSourcePassword9!")
+            .unwrap();
         db.execute_batch(
             "CREATE TABLE alpha_invites(invitation_hash TEXT,user_id TEXT,expires_at INTEGER,redeemed INTEGER,revoked INTEGER);
              CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);

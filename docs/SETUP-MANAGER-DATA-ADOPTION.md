@@ -92,3 +92,27 @@ current checkpoint.
 
 Do not interpret row-copy fidelity as a proof of future encrypted-file
 persistence or a completed migration.
+
+## Ephemeral SQLCipher export / reopen proof — execution still disabled
+
+A distinct, user-invoked *temporary disk proof* is implemented in the Rust
+installer core and GUI. This uses SQLCipher's supported
+`ATTACH ... KEY ?` / `sqlcipher_export` path, not the incompatible
+plaintext-to-encrypted `sqlite3_backup` path. It exports the already
+integrity-verified snapshot into an OS-temporary private directory with a
+strong one-use test key, rejects an unrelated key, reopens under the intended
+key, compares all row multisets and schema including app/user version
+metadata and deletes the temporary directory. Failure paths are
+non-publishing and attempt cleanup. No user's actual final destination,
+installation directory or existing Alpha records are written.
+
+This proof handles **zero staged changes only**. User-staged corrections
+remain in the memory-only rehearsal and cannot yet be applied to the
+encrypted output. The result must not be marketed as an executed migration,
+installed Minglefield application, validated data adoption or completed Host
+claim. Binding decisions for a durable destination still include validated
+source schema mapping, backup/recovery plan, exclusive target publication,
+preflight race safeguards, durable reopening, a strongly validated confirmed
+new password for *every* install and authenticated local Host provisioning
+through existing Hosts. `encryptedDestinationVerified` and
+`executionEnabled` stay false.

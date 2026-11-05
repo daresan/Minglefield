@@ -80,17 +80,12 @@ fn export(source: &Connection, path: &Path, key: &str) -> Result<(), String> {
         )
         .map_err(|_| "Cannot attach protected temporary SQLCipher destination")?;
     let result = (|| -> Result<(), String> {
+        // SQLCipher's export function returns NULL on successful completion.
         source
             .query_row("SELECT sqlcipher_export('encrypted_stage')", [], |r| {
-                r.get::<_, String>(0)
+                r.get::<_, Option<String>>(0)
             })
-            .map_err(|error| {
-                #[cfg(test)]
-                eprintln!("isolated SQLCipher export fixture failed: {error}");
-                #[cfg(not(test))]
-                let _ = error;
-                "SQLCipher export of source records failed"
-            })?;
+            .map_err(|_| "SQLCipher export of source records failed")?;
         let user_version: i64 = source
             .query_row("PRAGMA main.user_version", [], |r| r.get(0))
             .map_err(|_| "Cannot read source user_version")?;

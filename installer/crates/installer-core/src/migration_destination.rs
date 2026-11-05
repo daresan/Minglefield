@@ -45,6 +45,14 @@ pub fn preview_migration_destination(
     if destination.as_os_str().is_empty() {
         return Err(MigrationDestinationError::DestinationParentUnavailable);
     }
+    // Filename identity is a policy violation regardless of OS-dependent
+    // directory lookup errors. Reject it before probing the target path.
+    let file_name = destination
+        .file_name()
+        .ok_or(MigrationDestinationError::DestinationParentUnavailable)?;
+    if file_name == source.file_name().unwrap_or_default() {
+        return Err(MigrationDestinationError::SameFileName);
+    }
     match fs::symlink_metadata(destination) {
         Ok(_) => return Err(MigrationDestinationError::DestinationExists),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -62,12 +70,6 @@ pub fn preview_migration_destination(
         return Err(MigrationDestinationError::DestinationParentNotDirectory);
     }
     let parent = fs::canonicalize(parent).map_err(|_| MigrationDestinationError::IoError)?;
-    let file_name = destination
-        .file_name()
-        .ok_or(MigrationDestinationError::DestinationParentUnavailable)?;
-    if file_name == source.file_name().unwrap_or_default() {
-        return Err(MigrationDestinationError::SameFileName);
-    }
     // A same-directory destination must never claim one of SQLite's possible
     // live sidecar filenames, even when that sidecar does not exist yet.
     if parent == source.parent().unwrap_or_else(|| Path::new("")) {

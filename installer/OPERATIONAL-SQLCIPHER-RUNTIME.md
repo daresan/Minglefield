@@ -91,3 +91,55 @@ until the authorized local-only bootstrap/identity proof is complete.
 This operational-runtime milestone does **not** enable durable
 migration publication or automatic Host claims.
 
+
+
+## Implemented storage primitive for initial Host account (2026-11-06)
+
+The existing `HostCommitPolicy` now contains
+`provision_first_run_local_host_admin_trusted(local_host_id, login_password,
+login_user_id="mingleadmin")`. It is **trusted offline database plumbing,
+not a newly authorized HTTP endpoint or runnable installation flow**.
+
+The function requires the existing `AlphaAuthStore` to be connected
+through the encrypted-only SQLCipher key-provider path, refuses an
+unencrypted development source, and rejects login passwords identical
+to the database key. The login password must satisfy the existing
+12–256-character Alpha user-password policy.
+
+Inside the established `BEGIN IMMEDIATE` store transaction, the helper
+checks the complete available table inventory for identity references and
+Host-ID conflicts (including orphan Host Admin/ownership references).
+It then inserts exactly four records into existing tables:
+
+1. `alpha_users`: the chosen ordinary user identity.
+2. `alpha_passwords`: independently salted **scrypt verifier**, never
+   the login password or the SQLCipher key.
+3. `alpha_executor_hosts`: the single locally authorized host.
+4. `sec01_host_owners`: ownership for that same host only.
+
+No invitation or active session is created; normal `AlphaAuthStore.login`
+works after provisioning. No global administrator or additional remote
+Host grants are created. Existing `sec01_host_admins` stays unchanged
+because the registered Host owner already has Host-admin authority.
+
+If any of the four writes fails, the whole transaction rolls back.
+Repeated calls, preexisting identities, unexpected identity references,
+existing Host IDs, bad credentials, and plaintext databases fail closed.
+
+**Evidence:** `tests/conformance/test_first_run_local_host_admin.py`
+runs 11 focused tests using real disposable SQLCipher targets in the
+Ubuntu Python conformance suite, including transaction failure,
+parallel first-run calls, password separation, role isolation and
+non-overwriting migrated accounts.
+
+**Outstanding authorization boundary:** this trusted storage method is
+not callable from the installer GUI, the HTTP gateway or the public
+Host-claim API. The authorized local, single-use installation-bound
+handshake must prove the actual Host and intended *new target*, then
+invoke it through a trusted process immediately before final encrypted
+publication. On-disk original/source preservation and atomic
+destination publication remain mandatory. No setup action is
+authorized merely by knowing the username, possession of a database
+password or a client-controlled boolean. No `migrationEnabled` or
+`executionEnabled` flag has changed.
+

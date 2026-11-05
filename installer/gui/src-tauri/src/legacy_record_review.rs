@@ -19,6 +19,16 @@ pub struct HostRecord {
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HostRuntimeRecord {
+    host_id: String,
+    runtime_id: String,
+    runtime_type: String,
+    endpoint: String,
+    enabled: bool,
+    input_folder: String,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EffectRecord {
     host_id: String,
     effect_id: String,
@@ -51,6 +61,7 @@ pub struct GameRecord {
 pub struct LegacyRecordReview {
     agents: Vec<AgentRecord>,
     hosts: Vec<HostRecord>,
+    host_runtimes: Vec<HostRuntimeRecord>,
     effects: Vec<EffectRecord>,
     host_jobs: Vec<HostJobRecord>,
     games: Vec<GameRecord>,
@@ -109,6 +120,7 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
     let mut result = LegacyRecordReview {
         agents: vec![],
         hosts: vec![],
+        host_runtimes: vec![],
         effects: vec![],
         host_jobs: vec![],
         games: vec![],
@@ -150,6 +162,30 @@ fn inspect(path: &Path, password: &str) -> Result<LegacyRecordReview, String> {
                     owner_id: bounded(r, 1, 128)?,
                 })
             },
+        )?;
+    }
+    if present(
+        &schema.tables,
+        "sec01_host_runtimes",
+        &["host_id", "runtime_id", "config"],
+        &mut result.unavailable,
+    )? {
+        result.host_runtimes = read(&db,
+            "SELECT host_id,runtime_id,json_extract(config,'$.type'),json_extract(config,'$.endpoint'),json_extract(config,'$.enabled'),coalesce(json_extract(config,'$.input_folder'),'') FROM sec01_host_runtimes ORDER BY host_id,runtime_id LIMIT 501",
+            |r| {
+                let enabled: i64 = r.get(4)?;
+                if enabled != 0 && enabled != 1 {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+                Ok(HostRuntimeRecord {
+                    host_id: bounded(r,0,128)?,
+                    runtime_id: bounded(r,1,128)?,
+                    runtime_type: bounded(r,2,32)?,
+                    endpoint: bounded(r,3,256)?,
+                    enabled: enabled == 1,
+                    input_folder: bounded(r,5,512)?,
+                })
+            }
         )?;
     }
     if present(
@@ -229,7 +265,7 @@ mod tests {
             db.execute_batch("CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY);")
                 .unwrap();
         }
-        assert_eq!(inspect(&path, "").unwrap().unavailable.len(), 5);
+        assert_eq!(inspect(&path, "").unwrap().unavailable.len(), 6);
         {
             let db = Connection::open(&path).unwrap();
             db.execute_batch("CREATE TABLE sec01_host_owners(host_id TEXT);")
@@ -253,6 +289,8 @@ mod tests {
                  INSERT INTO alpha_agents VALUES('agent1','alice',0);
                  CREATE TABLE sec01_host_owners(host_id TEXT,owner_id TEXT);
                  INSERT INTO sec01_host_owners VALUES('h1','alice');
+                 CREATE TABLE sec01_host_runtimes(host_id TEXT,runtime_id TEXT,config TEXT);
+                 INSERT INTO sec01_host_runtimes VALUES('h1','comfy1','{"type":"comfyui","endpoint":"http://127.0.0.1:8188","enabled":true,"input_folder":"/comfy/input"}');
                  CREATE TABLE sec01_host_effect_definitions(host_id TEXT,effect_id TEXT,description TEXT,enabled INTEGER);
                  INSERT INTO sec01_host_effect_definitions VALUES('h1','e1','Workflow',0);
                  CREATE TABLE sec01_host_jobs(job_id TEXT,host_id TEXT,effect_id TEXT,requested_by TEXT,state TEXT);
@@ -269,6 +307,8 @@ mod tests {
         assert_eq!(reviewed.agents[0].agent_id, "agent1");
         assert!(!reviewed.agents[0].disabled);
         assert_eq!(reviewed.hosts[0].owner_id, "alice");
+        assert_eq!(reviewed.host_runtimes[0].runtime_type, "comfyui");
+        assert!(reviewed.host_runtimes[0].enabled);
         assert_eq!(reviewed.effects[0].description, "Workflow");
         assert!(!reviewed.effects[0].enabled);
         assert_eq!(reviewed.host_jobs[0].state, "queued");

@@ -4,6 +4,7 @@ import { validateDestinationPassword } from "./database-password-policy.js";
 import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js";
 import { assessLegacyAlphaSchema } from "./legacy-schema.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
+import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } from "./alpha-user-review.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -139,6 +140,8 @@ document.querySelector("#preview").addEventListener("click", async () => {
         sourceInspected: Boolean(lastDatabaseInspection),
         schemaAssessment: lastDatabaseInspection ? assessLegacyAlphaSchema(lastDatabaseInspection) : null,
         destinationEncryptionRequired: true,
+        stagedAlphaUserCorrections: originalAlphaUsers && editedAlphaUsers
+          ? alphaUserCorrections(originalAlphaUsers, editedAlphaUsers) : [],
         migrationEnabled: false,
         executionEnabled: false
       }
@@ -212,6 +215,7 @@ document.querySelector("#browse-database").addEventListener("click", async () =>
     if (path) {
       selectedDatabase = path;
       lastDatabaseInspection = null;
+      resetAlphaUserReview();
       document.querySelector("#data-result").textContent =
         "Selected database: " + path + ". Use inspection to validate it; migration remains disabled.";
     }
@@ -221,6 +225,35 @@ document.querySelector("#browse-database").addEventListener("click", async () =>
 });
 let selectedDatabase = null;
 let lastDatabaseInspection = null;
+let originalAlphaUsers = null;
+let editedAlphaUsers = null;
+function resetAlphaUserReview() {
+  originalAlphaUsers = null;
+  editedAlphaUsers = null;
+  document.querySelector("#data-fields-login").replaceChildren();
+}
+function renderAlphaUsers() {
+  const root = document.querySelector("#data-fields-login");
+  root.replaceChildren();
+  if (!editedAlphaUsers) return;
+  for (const record of editedAlphaUsers) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.style.width = "auto";
+    checkbox.checked = record.disabled;
+    checkbox.addEventListener("change", () => {
+      editedAlphaUsers = updateAlphaUserReview(editedAlphaUsers, record.userId, checkbox.checked);
+      document.querySelector("#data-editor-status").textContent =
+        alphaUserCorrections(originalAlphaUsers, editedAlphaUsers).length +
+        " Alpha user setting(s) changed. Changes are staged in memory only; migration execution is not yet available.";
+    });
+    label.append(checkbox, document.createTextNode(" Disabled — " + record.userId));
+    root.append(label);
+  }
+  if (!editedAlphaUsers.length) root.textContent = "No Alpha user records in the selected database.";
+}
+
 
 async function inspectSelectedSqlite() {
   const output = document.querySelector("#data-result");
@@ -230,10 +263,21 @@ async function inspectSelectedSqlite() {
   }
   output.textContent = "Inspecting a read-only SQLite snapshot…";
   try {
-    const request = invoke("inspect_sqlite_database", { path: selectedDatabase, password: existingDbPassword.value });
+    const unlockPassword = existingDbPassword.value;
+    const request = invoke("inspect_sqlite_database", { path: selectedDatabase, password: unlockPassword });
     existingDbPassword.value = "";
     const preview = await request;
     lastDatabaseInspection = preview;
+    resetAlphaUserReview();
+    try {
+      const users = await invoke("inspect_alpha_users", { path: selectedDatabase, password: unlockPassword });
+      originalAlphaUsers = createAlphaUserReview(users);
+      editedAlphaUsers = createAlphaUserReview(users);
+      renderAlphaUsers();
+    } catch (reviewError) {
+      document.querySelector("#data-editor-status").textContent =
+        "Application data could not be loaded for editing: " + String(reviewError);
+    }
     output.textContent = preview.integrityOk && preview.foreignKeysOk
       ? "Database integrity verified. Continue after confirming the new encrypted database password. Application data mapping and migration execution are still pending."
       : "Database integrity or foreign-key verification failed. Migration cannot proceed.";
@@ -251,6 +295,7 @@ async function inspectDefaultUserData() {
   selection.replaceChildren();
   selectedDatabase = null;
   lastDatabaseInspection = null;
+  resetAlphaUserReview();
   try {
     const items = await invoke("inspect_default_user_data");
     const databases = items.filter((item) => item.kind === "sqlite_database");
@@ -268,7 +313,7 @@ async function inspectDefaultUserData() {
         radio.name = "selected-database";
         radio.value = item.sourceDirectory + "/" + item.relativePath;
         radio.style.width = "auto";
-        radio.addEventListener("change", () => { selectedDatabase = radio.value; lastDatabaseInspection = null; });
+        radio.addEventListener("change", () => { selectedDatabase = radio.value; lastDatabaseInspection = null; resetAlphaUserReview(); });
         label.append(radio, document.createTextNode(" " + item.sourceDirectory + "/" + item.relativePath + " — " + item.status));
         selection.append(label);
       }
@@ -387,9 +432,13 @@ function showWizardPage(index) {
   if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
   wizardIndex = index;
   if (wizardPages[index].dataset.wizardPage === "data-review") {
-    document.querySelector("#data-editor-status").textContent = selectedDatabase
-      ? "Selected legacy database: application records are not yet mapped for editing. Migration is blocked until the backend supports verified record transfer."
-      : "Fresh installation: editable application defaults are not yet available. Database creation is not enabled.";
+    document.querySelector("#data-editor-status").textContent = editedAlphaUsers
+      ? "Loaded " + editedAlphaUsers.length + " Alpha user record(s). " +
+        alphaUserCorrections(originalAlphaUsers, editedAlphaUsers).length +
+        " change(s) staged; encrypted migration execution is not yet available."
+      : selectedDatabase
+        ? "Inspect the selected database on page 4 to load editable application values. Migration remains blocked."
+        : "Fresh installation: application defaults and encrypted database creation are not yet implemented.";
   }
   if (wizardPages[index].dataset.wizardPage === "review") refreshFinalConfiguration();
   wizardPages.forEach((page, position) => { page.hidden = position !== index; });

@@ -1,8 +1,6 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::migration_destination::preview_migration_destination;
-use minglefield_installer_core::migration_dry_run::{
-    rehearse_migration, ReviewCorrection,
-};
+use minglefield_installer_core::migration_dry_run::{rehearse_migration, ReviewCorrection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -30,9 +28,15 @@ pub enum StagedCorrection {
 impl From<StagedCorrection> for ReviewCorrection {
     fn from(value: StagedCorrection) -> Self {
         match value {
-            StagedCorrection::UserDisabled { user_id, before, after } => {
-                Self::UserDisabled { user_id, before, after }
-            }
+            StagedCorrection::UserDisabled {
+                user_id,
+                before,
+                after,
+            } => Self::UserDisabled {
+                user_id,
+                before,
+                after,
+            },
             StagedCorrection::EffectDescription {
                 host_id,
                 effect_id,
@@ -44,9 +48,15 @@ impl From<StagedCorrection> for ReviewCorrection {
                 before,
                 after,
             },
-            StagedCorrection::GameName { project_id, before, after } => {
-                Self::GameName { project_id, before, after }
-            }
+            StagedCorrection::GameName {
+                project_id,
+                before,
+                after,
+            } => Self::GameName {
+                project_id,
+                before,
+                after,
+            },
         }
     }
 }
@@ -84,7 +94,10 @@ pub async fn preview_migration_rehearsal(
         let destination = Path::new(&destination_path);
         let target = preview_migration_destination(source, destination)
             .map_err(|error| format!("Migration destination rejected: {error:?}"))?;
-        let changes = corrections.into_iter().map(ReviewCorrection::from).collect::<Vec<_>>();
+        let changes = corrections
+            .into_iter()
+            .map(ReviewCorrection::from)
+            .collect::<Vec<_>>();
         let inspected = rehearse_migration(source, &password, &changes)?;
         Ok(MigrationRehearsalPreview {
             status: "verified_rehearsal_only",
@@ -93,10 +106,14 @@ pub async fn preview_migration_rehearsal(
             source_preserved: !inspected.source_records_written,
             destination_created: inspected.destination_created,
             verified_changes: inspected.verified_changes,
-            preserved_tables: inspected.tables.into_iter().map(|table| TableCountPreview {
-                table: table.table,
-                rows: table.rows,
-            }).collect(),
+            preserved_tables: inspected
+                .tables
+                .into_iter()
+                .map(|table| TableCountPreview {
+                    table: table.table,
+                    rows: table.rows,
+                })
+                .collect(),
             schema_object_count: inspected.schema_objects,
             execution_enabled: false,
         })

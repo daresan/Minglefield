@@ -296,6 +296,7 @@ function renderAlphaUsers() {
     checkbox.checked = record.disabled;
     checkbox.addEventListener("change", () => {
       editedAlphaUsers = updateAlphaUserReview(editedAlphaUsers, record.userId, checkbox.checked);
+      invalidateMigrationRehearsal();
       updateReviewSummary();
     });
     label.append(checkbox, document.createTextNode(" Disabled — " + record.userId));
@@ -362,6 +363,7 @@ function renderLegacyRecords() {
       try {
         editedLegacyRecords = stageLegacyText(editedLegacyRecords, "effects",
           JSON.stringify([effect.hostId, effect.effectId]), "description", field.value);
+        invalidateMigrationRehearsal();
         updateReviewSummary();
       } catch (error) {
         field.value = editedLegacyRecords.effects.find(item =>
@@ -385,6 +387,7 @@ function renderLegacyRecords() {
         editedLegacyRecords = stageLegacyText(editedLegacyRecords, "games", game.projectId,
           "name", field.value);
         field.value = editedLegacyRecords.games.find(item => item.projectId === game.projectId).name;
+        invalidateMigrationRehearsal();
         updateReviewSummary();
       } catch (error) {
         field.value = editedLegacyRecords.games.find(item => item.projectId === game.projectId).name;

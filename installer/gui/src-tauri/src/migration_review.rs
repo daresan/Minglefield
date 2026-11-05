@@ -71,7 +71,6 @@ impl From<StagedGitProfileField> for GitProfileField {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StagedGamePathField {

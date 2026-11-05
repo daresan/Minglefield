@@ -33,9 +33,9 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <section id="data-editor-games" hidden><h3>Games</h3><div id="data-fields-games"></div></section>
 <p id="data-editor-status" class="help" role="status">No verified records loaded. Migration remains disabled.</p>
 <fieldset><legend>Migration rehearsal (no installation or data writes)</legend>
-<p class="help">Recheck the complete existing Alpha schema and all table row counts. Simulate staged changes on an in-memory snapshot, then roll them back. A separate, existing destination directory and unused filename are required; no destination file is created.</p>
+<p class="help">Recheck the complete existing Alpha schema and all table row counts. Simulate staged changes on an in-memory snapshot, then roll them back. An existing destination directory is required; it may be the same directory as the source when the new filename differs. Existing files and SQLite sidecar names are rejected; no destination file is created.</p>
 <label for="migration-destination-path">Proposed new encrypted database file (absolute path)</label>
-<input id="migration-destination-path" spellcheck="false" placeholder="Select a different destination directory and filename" />
+<input id="migration-destination-path" spellcheck="false" placeholder="Choose a new filename in this or another existing directory" />
 <button id="browse-migration-destination" type="button" class="secondary">Choose destination folder</button>
 <label for="migration-existing-password">Existing database password (enter again for the independent verification)</label>
 <input id="migration-existing-password" type="password" autocomplete="off" spellcheck="false" />

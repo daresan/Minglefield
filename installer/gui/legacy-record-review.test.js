@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections } from "./legacy-record-review.js";
 
 const sample = () => ({
+  agents: [{ agentId: "agent1", userId: "alice", disabled: false }],
   hosts: [{ hostId: "host-a", ownerId: "alice" }],
   effects: [{ hostId: "host-a", effectId: "effect-a", description: "Before", enabled: false }],
   hostJobs: [{ jobId: "job-a", hostId: "host-a", effectId: "effect-a", requestedBy: "alice", state: "queued" }],
@@ -87,4 +88,16 @@ test("rejects relative paths, parent traversals, invalid toggles and malformed r
   const bad = sample();
   bad.games[0].settingsRevision = 0;
   assert.throws(() => createLegacyReview(bad), /Invalid game project fields/);
+});
+
+test("Agent status may be staged without changing ownership or source data", () => {
+  const source = sample();
+  const edited = stageLegacyToggle(source, "agents", "agent1", "disabled", true);
+  assert.equal(source.agents[0].disabled, false);
+  assert.deepEqual(legacyCorrections(source, edited), [
+    {category: "agents", key: "agent1", field: "disabled", previous: false, next: true}
+  ]);
+  const invalid = createLegacyReview(source);
+  invalid.agents[0].userId = "other";
+  assert.throws(() => legacyCorrections(source, invalid), /Read-only field changed/);
 });

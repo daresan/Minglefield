@@ -207,6 +207,25 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
+    fn verified_snapshot_is_isolated_from_later_source_edits() {
+        let file = std::env::temp_dir().join(format!("mf-snapshot-{}.sqlite3", std::process::id()));
+        {
+            let db = Connection::open(&file).unwrap();
+            db.execute_batch("CREATE TABLE records(id TEXT, label TEXT); INSERT INTO records VALUES('one','before');").unwrap();
+        }
+        let (snapshot, inspection) = open_inspected_snapshot(&file, "").unwrap();
+        assert!(inspection.integrity_ok);
+        {
+            let db = Connection::open(&file).unwrap();
+            db.execute("UPDATE records SET label='after'", []).unwrap();
+        }
+        let value: String = snapshot.query_row("SELECT label FROM records", [], |r| r.get(0)).unwrap();
+        assert_eq!(value, "before");
+        drop(snapshot);
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
     fn snapshots_schema_and_preserves_source() {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)

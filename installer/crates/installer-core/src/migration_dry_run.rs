@@ -68,7 +68,6 @@ impl GitProfileField {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GamePathField {
     RepositoryRoot,
@@ -332,12 +331,15 @@ fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, Strin
                 || before.chars().count() > 256
                 || after.chars().count() > 256
                 || (matches!(field, GitProfileField::Label)
-                    && (after.trim() != after || after.is_empty()
-                        || after.chars().count() > 120))
+                    && (after.trim() != after || after.is_empty() || after.chars().count() > 120))
             {
                 return Err("Invalid Git profile text correction".to_owned());
             }
-            Ok((6, format!("{host_id}:{profile_id}"), field.column().to_owned()))
+            Ok((
+                6,
+                format!("{host_id}:{profile_id}"),
+                field.column().to_owned(),
+            ))
         }
         ReviewCorrection::GamePath {
             project_id,

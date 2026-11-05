@@ -26,6 +26,8 @@ fn fixture() -> std::path::PathBuf {
          INSERT INTO sec01_host_effect_definitions VALUES('host1','effect1','Old description',0);
          CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT,job_attachments_root TEXT,output_root TEXT,settings_revision INTEGER);
          INSERT INTO alpha_game_projects VALUES('game1','host1','alice','Old game','/games/one','/games/one/attachments','/games/one/output',1);
+         CREATE TABLE alpha_git_profiles(host_id TEXT,profile_id TEXT,owner_id TEXT,label TEXT,auth_method TEXT,git_executable TEXT,author_name TEXT,author_email TEXT);
+         INSERT INTO alpha_git_profiles VALUES('host1','profile1','alice','Personal','local','git','Alice','alice@example.test');
          CREATE TABLE extension_data(secret BLOB);
          INSERT INTO extension_data VALUES(x'0102030405');"
     ).unwrap();
@@ -60,7 +62,7 @@ fn reviews_all_tables_and_rolls_back_every_staged_change() {
     let bytes = std::fs::read(&file).unwrap();
     let preview = rehearse_migration(&file, "", &changes()).unwrap();
     assert_eq!(preview.verified_changes, 3);
-    assert_eq!(preview.tables.len(), 10);
+    assert_eq!(preview.tables.len(), 11);
     assert_eq!(preview.field_coverage.len(), preview.tables.len());
     let games = preview
         .field_coverage
@@ -205,7 +207,7 @@ fn permits_no_change_rehearsal_and_never_creates_destination() {
     let file = fixture();
     let preview = rehearse_migration(&file, "", &[]).unwrap();
     assert_eq!(preview.verified_changes, 0);
-    assert_eq!(preview.tables.len(), 10);
+    assert_eq!(preview.tables.len(), 11);
     assert!(!preview.execution_enabled);
     std::fs::remove_file(file).unwrap();
 }
@@ -294,5 +296,51 @@ fn rehearses_agent_disabled_without_changing_source() {
         after: true,
     };
     assert!(rehearse_migration(&file, "", &[stale]).is_err());
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn rehearses_git_metadata_but_never_authentication_or_owner() {
+    let file = fixture();
+    let before_bytes = std::fs::read(&file).unwrap();
+    let corrections = vec![
+        ReviewCorrection::GitProfileText {
+            host_id: "host1".into(), profile_id: "profile1".into(),
+            owner_id: "alice".into(), field: GitProfileField::Label,
+            before: "Personal".into(), after: "Updated".into(),
+        },
+        ReviewCorrection::GitProfileText {
+            host_id: "host1".into(), profile_id: "profile1".into(),
+            owner_id: "alice".into(), field: GitProfileField::AuthorEmail,
+            before: "alice@example.test".into(), after: "alice@new.example".into(),
+        },
+    ];
+    let preview = rehearse_migration(&file, "", &corrections).unwrap();
+    assert_eq!(preview.verified_changes, 2);
+    let git = preview.field_coverage.iter().find(|entry| entry.table == "alpha_git_profiles").unwrap();
+    assert_eq!(git.staged_editable_columns.len(), 3);
+    assert!(git.protected_columns.contains(&"auth_method".to_owned()));
+    assert!(git.protected_columns.contains(&"git_executable".to_owned()));
+    assert!(git.protected_columns.contains(&"owner_id".to_owned()));
+    assert_eq!(std::fs::read(&file).unwrap(), before_bytes);
+    for bad in [
+        ReviewCorrection::GitProfileText {
+            host_id: "host1".into(), profile_id: "profile1".into(),
+            owner_id: "mallory".into(), field: GitProfileField::Label,
+            before: "Personal".into(), after: "Updated".into(),
+        },
+        ReviewCorrection::GitProfileText {
+            host_id: "host1".into(), profile_id: "profile1".into(),
+            owner_id: "alice".into(), field: GitProfileField::AuthorName,
+            before: "stale".into(), after: "Updated".into(),
+        },
+        ReviewCorrection::GitProfileText {
+            host_id: "host1".into(), profile_id: "profile1".into(),
+            owner_id: "alice".into(), field: GitProfileField::Label,
+            before: "Personal".into(), after: "".into(),
+        },
+    ] {
+        assert!(rehearse_migration(&file, "", &[bad]).is_err());
+    }
     std::fs::remove_file(file).unwrap();
 }

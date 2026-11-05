@@ -8,7 +8,7 @@ import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } fr
 import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections } from "./legacy-record-review.js";
 import { stagedMigrationChanges } from "./migration-rehearsal.js";
 import { assessFieldCoverage } from "./schema-coverage.js";
-import { assessTemporaryDiskCopy } from "./temporary-encrypted-review.js";
+import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -863,14 +863,15 @@ document.querySelector("#verify-temporary-sqlcipher").addEventListener("click", 
     if (corrections.length !== lastMigrationRehearsal.verifiedChanges) {
       throw new Error("Staged corrections changed since the last memory rehearsal.");
     }
-    const policy = validateDestinationPassword(newDbPassword.value, confirmDbPassword.value);
-    if (!policy.valid) throw new Error("Step 3: " + policy.message);
-    const sourcePassword = migrationPasswordInput.value || existingDbPassword.value;
+    const credentials = selectTemporaryCopyCredentials({
+      newPassword: newDbPassword.value,
+      confirmation: confirmDbPassword.value,
+      existingSourcePassword: existingDbPassword.value,
+      rehearsalSourcePassword: migrationPasswordInput.value
+    });
     const request = invoke("verify_temporary_encrypted_copy", {
       sourcePath: source, destinationPath,
-      existingPassword: sourcePassword,
-      newPassword: newDbPassword.value,
-      corrections
+      ...credentials, corrections
     });
     migrationPasswordInput.value = "";
     const raw = await request;

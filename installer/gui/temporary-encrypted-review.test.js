@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessTemporaryDiskCopy } from "./temporary-encrypted-review.js";
+import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js";
 
 const rehearsal = () => ({
   verifiedChanges: 0, verifiedRowCount: 143, verifiedTableCount: 27,
@@ -34,4 +34,25 @@ test("rejects unfinished cleanup, partial checks, stale source or a persistent d
   const edited = {...valid(), verifiedStagedChanges: 2};
   const reviewed = {...rehearsal(), verifiedChanges: 2};
   assert.equal(assessTemporaryDiskCopy(edited, reviewed).verifiedStagedChanges, 2);
+});
+
+test("reuses the existing Step 3 password and never includes confirmation in the request", () => {
+  const credentials = selectTemporaryCopyCredentials({
+    newPassword: "NewDestination9!", confirmation: "NewDestination9!",
+    existingSourcePassword: "ExistingKey1!", rehearsalSourcePassword: ""
+  });
+  assert.deepEqual(credentials, { newPassword: "NewDestination9!", existingPassword: "ExistingKey1!" });
+  const replacement = selectTemporaryCopyCredentials({
+    newPassword: "NewDestination9!", confirmation: "NewDestination9!",
+    existingSourcePassword: "ExistingKey1!", rehearsalSourcePassword: "ReenteredKey1!"
+  });
+  assert.equal(replacement.existingPassword, "ReenteredKey1!");
+  assert.throws(() => selectTemporaryCopyCredentials({
+    newPassword: "weak", confirmation: "weak",
+    existingSourcePassword: "", rehearsalSourcePassword: ""
+  }), /Step 3/);
+  assert.throws(() => selectTemporaryCopyCredentials({
+    newPassword: "NewDestination9!", confirmation: "Different9!",
+    existingSourcePassword: "", rehearsalSourcePassword: ""
+  }), /confirmation/);
 });

@@ -1,3 +1,16 @@
+import { validateDestinationPassword } from "./database-password-policy.js";
+
+export function selectTemporaryCopyCredentials({
+  newPassword, confirmation, existingSourcePassword, rehearsalSourcePassword
+}) {
+  const policy = validateDestinationPassword(newPassword, confirmation);
+  if (!policy.valid) throw new Error("Step 3: " + policy.message);
+  return {
+    newPassword,
+    existingPassword: rehearsalSourcePassword || existingSourcePassword
+  };
+}
+
 // Host UI must never promote a temporary encrypted file to the permanent destination.
 export function assessTemporaryDiskCopy(preview, rehearsal) {
   if (!rehearsal || !Number.isSafeInteger(rehearsal.verifiedChanges) ||

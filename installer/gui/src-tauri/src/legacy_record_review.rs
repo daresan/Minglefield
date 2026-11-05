@@ -180,3 +180,31 @@ pub async fn inspect_legacy_records(
         .await
         .map_err(|_| "Application record inspection task failed".to_owned())?
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inspect_reports_missing_tables_and_rejects_incompatible_schema() {
+        let path = std::env::temp_dir().join(format!(
+            "minglefield-review-schema-{}.sqlite3",
+            std::process::id()
+        ));
+        {
+            let db = Connection::open(&path).unwrap();
+            db.execute_batch("CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY);")
+                .unwrap();
+        }
+        assert_eq!(inspect(&path, "").unwrap().unavailable.len(), 4);
+        {
+            let db = Connection::open(&path).unwrap();
+            db.execute_batch("CREATE TABLE sec01_host_owners(host_id TEXT);")
+                .unwrap();
+        }
+        assert!(inspect(&path, "")
+            .unwrap_err()
+            .contains("incompatible schema"));
+        std::fs::remove_file(path).unwrap();
+    }
+}

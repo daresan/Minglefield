@@ -8,6 +8,7 @@ import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } fr
 import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections } from "./legacy-record-review.js";
 import { stagedMigrationChanges } from "./migration-rehearsal.js";
 import { assessFieldCoverage } from "./schema-coverage.js";
+import { assessTemporaryDiskCopy } from "./temporary-encrypted-review.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -168,6 +169,18 @@ document.querySelector("#preview").addEventListener("click", async () => {
           destinationCreated: false,
           executionEnabled: false
         } : null,
+        verifiedTemporaryEncryptedCopy: lastTemporaryEncryptedProof ? {
+          status: lastTemporaryEncryptedProof.status,
+          temporaryEncryptedCopyVerified: lastTemporaryEncryptedProof.temporaryEncryptedCopyVerified,
+          ciphertextHeaderVerified: lastTemporaryEncryptedProof.ciphertextHeaderVerified,
+          wrongKeyRejected: lastTemporaryEncryptedProof.wrongKeyRejected,
+          checkedRows: lastTemporaryEncryptedProof.checkedRows,
+          checkedTables: lastTemporaryEncryptedProof.checkedTables,
+          temporaryFilesRemoved: lastTemporaryEncryptedProof.temporaryFilesRemoved,
+          encryptedDestinationVerified: false,
+          destinationCreated: false,
+          executionEnabled: false
+        } : null,
         migrationEnabled: false,
         executionEnabled: false
       }
@@ -281,8 +294,14 @@ let reviewLoadIssues = [];
 let reviewRequestSequence = 0;
 let lastMigrationRehearsal = null;
 let rehearsalRequestSequence = 0;
+let lastTemporaryEncryptedProof = null;
+let temporaryEncryptedRequestSequence = 0;
 function invalidateMigrationRehearsal() {
   rehearsalRequestSequence += 1;
+  temporaryEncryptedRequestSequence += 1;
+  lastTemporaryEncryptedProof = null;
+  document.querySelector("#temporary-sqlcipher-result").textContent =
+    "Encrypted disk-copy verification must be repeated after review or destination changes.";
   lastMigrationRehearsal = null;
   document.querySelector("#migration-field-coverage").replaceChildren();
   document.querySelector("#migration-rehearsal-result").textContent =
@@ -764,6 +783,10 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
   const source = selectedDatabase;
   const destinationPath = migrationDestinationInput.value.trim();
   const requestSequence = ++rehearsalRequestSequence;
+  temporaryEncryptedRequestSequence += 1;
+  lastTemporaryEncryptedProof = null;
+  document.querySelector("#temporary-sqlcipher-result").textContent =
+    "Encrypted disk test must be repeated after the memory rehearsal.";
   lastMigrationRehearsal = null;
   migrationResult.textContent = "Verifying the complete database and staged changes on a disposable snapshot…";
   try {
@@ -808,6 +831,55 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
     document.querySelector("#review-migration-rehearsal-status").textContent =
       "Migration rehearsal rejected. Migration execution remains disabled.";
   } finally {
+    migrationPasswordInput.value = "";
+  }
+});
+
+const tempDiskKey = document.querySelector("#temporary-sqlcipher-password");
+const tempDiskConfirm = document.querySelector("#temporary-sqlcipher-confirm");
+const tempDiskResult = document.querySelector("#temporary-sqlcipher-result");
+for (const entry of [tempDiskKey, tempDiskConfirm]) {
+  entry.addEventListener("input", () => {
+    temporaryEncryptedRequestSequence += 1;
+    lastTemporaryEncryptedProof = null;
+    tempDiskResult.textContent = "Temporary encryption test password changed; reverify the encrypted disk copy.";
+  });
+}
+document.querySelector("#verify-temporary-sqlcipher").addEventListener("click", async () => {
+  const source = selectedDatabase;
+  const destinationPath = migrationDestinationInput.value.trim();
+  const requestSequence = ++temporaryEncryptedRequestSequence;
+  lastTemporaryEncryptedProof = null;
+  tempDiskResult.textContent = "Creating a temporary encrypted SQLCipher file for independent read-back verification…";
+  try {
+    if (!lastMigrationRehearsal || lastMigrationRehearsal.sourcePath !== source ||
+        lastMigrationRehearsal.destinationPath !== destinationPath ||
+        lastMigrationRehearsal.verifiedChanges !== 0 ||
+        !lastMigrationRehearsal.fullDataCopyVerified) {
+      throw new Error("First complete a successful zero-change in-memory migration rehearsal.");
+    }
+    const policy = validateDestinationPassword(tempDiskKey.value, tempDiskConfirm.value);
+    if (!policy.valid) throw new Error(policy.message);
+    const sourcePassword = migrationPasswordInput.value;
+    const testPassword = tempDiskKey.value;
+    const request = invoke("verify_temporary_encrypted_copy", {
+      sourcePath: source, destinationPath,
+      existingPassword: sourcePassword,
+      newPassword: testPassword
+    });
+    tempDiskKey.value = "";
+    tempDiskConfirm.value = "";
+    migrationPasswordInput.value = "";
+    const raw = await request;
+    if (requestSequence !== temporaryEncryptedRequestSequence || selectedDatabase !== source) return;
+    lastTemporaryEncryptedProof = assessTemporaryDiskCopy(raw, lastMigrationRehearsal);
+    tempDiskResult.textContent = JSON.stringify(lastTemporaryEncryptedProof, null, 2);
+  } catch (error) {
+    if (requestSequence !== temporaryEncryptedRequestSequence) return;
+    tempDiskResult.textContent = "Temporary encrypted disk-copy test rejected: " + String(error);
+  } finally {
+    tempDiskKey.value = "";
+    tempDiskConfirm.value = "";
     migrationPasswordInput.value = "";
   }
 });

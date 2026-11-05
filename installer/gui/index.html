@@ -42,6 +42,15 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <button id="preview-migration-rehearsal" type="button">Verify migration rehearsal (no writes)</button>
 <div id="migration-field-coverage" aria-label="Verified database column coverage" role="region"><p class="help">Column-level coverage appears here after a successful rehearsal. Only schema names, never row contents, are shown.</p></div>
 <pre id="migration-rehearsal-result" role="status" aria-live="polite">No migration rehearsal completed.</pre>
+<fieldset><legend>Temporary encrypted SQLCipher disk test — explicit action</legend>
+<p class="help">Optional security test after a successful zero-change rehearsal. A genuine encrypted copy is briefly created in a private OS-temporary directory, reopened and checked, then deleted. No file is created at the proposed destination. Corrections must remain unstaged for this separate disk-copy test.</p>
+<label for="temporary-sqlcipher-password">Strong temporary SQLCipher test password (not stored; not the final installation password)</label>
+<input id="temporary-sqlcipher-password" type="password" autocomplete="new-password" spellcheck="false" />
+<label for="temporary-sqlcipher-confirm">Confirm temporary test password</label>
+<input id="temporary-sqlcipher-confirm" type="password" autocomplete="new-password" spellcheck="false" />
+<button type="button" id="verify-temporary-sqlcipher">Test encrypted temporary disk copy (create, verify, delete)</button>
+<pre id="temporary-sqlcipher-result" role="status" aria-live="polite">No temporary encrypted disk-copy test performed.</pre>
+</fieldset>
 </fieldset>
 </section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">Review the effective paths, database and security settings, then validate the combined installation and migration plan. Execution remains unavailable until the migration core is verified.</p><div class="mode" role="group" aria-label="Review categories">
 <button type="button" class="secondary" id="review-tab-paths">Paths</button>

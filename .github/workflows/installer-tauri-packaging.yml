@@ -4,7 +4,7 @@ name: Tauri portable manager smoke builds
 # Main-branch changes still produce the OS build artifacts automatically.
 on:
   push:
-    branches: [main, feat/game-integration-updates]
+    branches: [main]
     paths:
       - "installer/gui/**"
       - "installer/crates/**"
@@ -12,7 +12,7 @@ on:
       - "LICENSE"
       - ".github/workflows/installer-tauri-packaging.yml"
   pull_request:
-    branches: [main, feat/game-integration-updates]
+    branches: [main]
     paths:
       - "installer/gui/**"
       - "installer/crates/**"

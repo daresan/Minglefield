@@ -7,6 +7,7 @@ import { optionalSelection, optionalPlanArguments } from "./optional-components.
 import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } from "./alpha-user-review.js";
 import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections } from "./legacy-record-review.js";
 import { stagedMigrationChanges } from "./migration-rehearsal.js";
+import { assessFieldCoverage } from "./schema-coverage.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -278,6 +279,7 @@ let rehearsalRequestSequence = 0;
 function invalidateMigrationRehearsal() {
   rehearsalRequestSequence += 1;
   lastMigrationRehearsal = null;
+  document.querySelector("#migration-field-coverage").replaceChildren();
   document.querySelector("#migration-rehearsal-result").textContent =
     "Migration rehearsal requires a new verification after data or destination changes.";
   document.querySelector("#review-migration-rehearsal-status").textContent =
@@ -708,6 +710,33 @@ async function inspectSelectedSqlite() {
   }
 }
 
+function renderFieldCoverage(summary) {
+  const root = document.querySelector("#migration-field-coverage");
+  root.replaceChildren();
+  const heading = document.createElement("p");
+  heading.textContent = "Verified schema inventory: " + summary.tables +
+    " tables, " + summary.columns + " columns; " + summary.editableColumns +
+    " staged-editable and " + summary.protectedColumns +
+    " protected. No record values are included.";
+  root.append(heading);
+  for (const entry of summary.entries) {
+    const details = document.createElement("details");
+    const label = document.createElement("summary");
+    label.textContent = entry.table + " — " + entry.rows + " rows — " +
+      entry.editable.length + " editable / " + entry.protected.length +
+      " protected columns";
+    details.append(label);
+    const editable = document.createElement("p");
+    editable.textContent = "Staged-editable: " +
+      (entry.editable.length ? entry.editable.join(", ") : "(none)");
+    const protectedFields = document.createElement("p");
+    protectedFields.textContent = "Protected (not editable): " +
+      (entry.protected.length ? entry.protected.join(", ") : "(none)");
+    details.append(editable, protectedFields);
+    root.append(details);
+  }
+}
+
 const migrationDestinationInput = document.querySelector("#migration-destination-path");
 const migrationPasswordInput = document.querySelector("#migration-existing-password");
 const migrationResult = document.querySelector("#migration-rehearsal-result");
@@ -748,11 +777,11 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
     const preview = await request;
     if (requestSequence !== rehearsalRequestSequence || selectedDatabase !== source) return;
     if (preview.executionEnabled || preview.destinationCreated ||
-        !preview.sourcePreserved || !preview.sourceIntegrityVerified ||
-        !Array.isArray(preview.fieldCoverage) ||
-        preview.fieldCoverage.length !== preview.preservedTables.length) {
+        !preview.sourcePreserved || !preview.sourceIntegrityVerified) {
       throw new Error("Unexpected unsafe migration rehearsal result");
     }
+    const coverage = assessFieldCoverage(preview.fieldCoverage, preview.preservedTables);
+    renderFieldCoverage(coverage);
     lastMigrationRehearsal = { ...preview, sourcePath: source, destinationPath };
     migrationResult.textContent = JSON.stringify(preview, null, 2);
     document.querySelector("#review-migration-rehearsal-status").textContent =
@@ -764,6 +793,7 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
       " protected). Source preserved; no destination created. Migration execution disabled.";
   } catch (error) {
     if (requestSequence !== rehearsalRequestSequence) return;
+    document.querySelector("#migration-field-coverage").replaceChildren();
     migrationResult.textContent = "Migration rehearsal rejected: " + String(error);
     document.querySelector("#review-migration-rehearsal-status").textContent =
       "Migration rehearsal rejected. Migration execution remains disabled.";

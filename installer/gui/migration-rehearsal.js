@@ -20,6 +20,24 @@ export function stagedMigrationChanges(
   }));
   const owners = new Map(originalLegacyRecords.agents.map(agent => [agent.agentId, agent.userId]));
   const records = legacyCorrections(originalLegacyRecords, editedLegacyRecords).map(change => {
+    if (change.category === "gitProfiles" &&
+        ["label", "authorName", "authorEmail"].includes(change.field)) {
+      const [host_id, profile_id] = JSON.parse(change.key);
+      const original = originalLegacyRecords.gitProfiles.find(
+        profile => profile.hostId === host_id && profile.profileId === profile_id
+      );
+      if (!original) throw new Error("Unrecognized Git profile correction");
+      return {
+        kind: "git_profile_text", host_id, profile_id,
+        owner_id: original.ownerId,
+        field: {
+          label: "label",
+          authorName: "author_name",
+          authorEmail: "author_email"
+        }[change.field],
+        before: change.previous, after: change.next
+      };
+    }
     if (change.category === "agents" && change.field === "disabled") {
       return {
         kind: "agent_disabled", agent_id: change.key,

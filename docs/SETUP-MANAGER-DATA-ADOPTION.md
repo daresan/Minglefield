@@ -45,3 +45,50 @@ The existing `inspect_source_path` command is a narrow source-checkout classifie
 5. **Only after the GUI review is complete and accepted:** Implement tested consistent SQLite snapshot/staging, versioned migration transformations, destination backups/rollback and real Minglefield application installation. Integrate authenticated local Host first-run provisioning through the existing Hosts architecture, not a parallel Host system.
 
 Until executable paths are implemented and verified, `migration_enabled` and `execution_enabled` must remain false. Their values are safety gates, not an indication that the read-only discovery or review work must be restarted. Do not change these flags merely to make the wizard appear complete.
+
+## Next safety checkpoint: full in-memory row fidelity (implemented 2026-11-05)
+
+The staged Alpha migration rehearsal now makes a **second SQLite backup to
+memory**, rather than applying corrections to the first verified source
+snapshot. Before changes, a full equality checker confirms:
+
+- every original schema record, index, trigger, view, internal table and
+  application/user-version metadata is present in the in-memory copy;
+- every table's complete row multiset matches, not just the row count.
+  Values are encoded by SQLite type, including exact BLOB bytes, length
+  boundaries, NULLs and duplicate rows. Per-row SHA-256 fingerprints and
+  sensitive values remain inside the Rust process;
+- both databases pass quick_check and foreign-key validation;
+- corrections use the existing allowlisted expected-original-value checks
+  against the second in-memory copy, with transaction rollback;
+- all schema objects and values are compared **again after rollback**.
+
+An encrypted SQLCipher *source* is supported by initializing the second
+memory connection with the same existing unlock key. The cross-platform
+regression suite now tests a genuinely encrypted Alpha source, wrong-key
+rejection, unchanged source bytes, BLOB corruption, duplicate-row loss,
+schema/metadata differences and rollback recovery.
+
+The report adds `fullDataCopyVerified`, `verifiedRowCount`,
+`verifiedTableCount`, `verifiedSchemaEntryCount`,
+`verifiedInternalTableCount` and `encryptedDestinationVerified=false`.
+Limits are explicit and fail closed: currently one million rows per table,
+1024 columns per table, and 128 MiB per encoded record. No SQLCipher
+destination is created, no files are published, and the original Alpha
+database is not modified.
+
+**Binding remaining blockers for actual migration:** (1) manual acceptance
+of the existing GUI data-review on Shadow; (2) a recognized/versioned
+source-to-target transformation/preservation contract covering all data
+and schema objects; (3) safe staging of a *real encrypted SQLCipher
+destination*, encrypted-file reopening and independent complete-content
+verification, using a **mandatory strong new password for every installation**
+(including fresh installs); (4) exclusive target creation and atomic publication,
+existing-target conflict handling, backups and recoverable rollback;
+(5) consented Minglefield application installation and authenticated
+local Host provisioning through Hosts, without weakening the bootstrap
+secret boundary. No migration or application execution is enabled by the
+current checkpoint.
+
+Do not interpret row-copy fidelity as a proof of future encrypted-file
+persistence or a completed migration.

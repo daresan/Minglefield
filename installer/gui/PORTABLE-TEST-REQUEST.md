@@ -1,63 +1,46 @@
-# Portable GUI milestone — complete Alpha field coverage, 2026-11-05
+# Portable GUI milestone — safe Git profile review and field-coverage panel, 2026-11-05
 
-This file is changed **only for significant manual test milestones** and
-triggers one portable build for Windows, Linux and macOS. Ordinary installer
-commits must never trigger portable packaging.
+This file intentionally requests **one** portable build on the active development
+branch. Ordinary feature commits must not trigger the packaging workflow.
 
-## Implemented for this milestone
+## Changes included
 
-- Same-directory migration preview: another, unused filename is permitted.
-  Reject the actual source filename, existing files, and source SQLite
-  `-wal`, `-shm`, `-journal` sidecar filenames.
-- Existing Alpha users **and agents**: display identities, owners, and disabled
-  flags; only disabled flags may be staged for migration.
-- Hosts: display the existing host owner plus allowlisted Comfy runtime
-  metadata (runtime ID, kind, endpoint, enabled, input folder). Raw runtime
-  configs, secrets and arbitrary JSON keys must remain unavailable.
-- Effects: stage description and enabled flag. No actual execution is enabled.
-- Jobs: keep request/job identity and execution state read-only.
-- Games: stage project name, repository root, job attachments root and output
-  root. Preserve project ID, host, owner, and settings revision.
-- A complete database rehearsal rereads and validates all mandatory Alpha
-  tables, inventories **every** existing table with row counts, simulates all
-  staged changes in an in-memory transaction, checks integrity and referential
-  constraints, and rolls back.
-- No source database writes; no SQLCipher destination creation; no real
-  installation or Host claim.
+- In the verified **Hosts** review, read existing `alpha_git_profiles` metadata:
+  host ID, profile ID, original owner, authentication method, Git executable,
+  label, author name and author email.
+- Allow staging only `label`, `author_name` and `author_email` with the
+  existing server's length constraints. Identifiers, owner, authentication method
+  and executable remain read-only. No credentials or Git commands are consumed.
+- Revalidate those proposed fields against a fresh SQLite/SQLCipher in-memory
+  source snapshot and original host/profile/owner, rejecting stale data. Rehearsal
+  changes are rolled back; the source and destination remain unchanged.
+- The new **Data Review / Schema coverage** panel summarizes each source table
+  with row count, staged-editable and protected column names. Both known and
+  unknown tables are included; missing or duplicated classifications fail closed.
+  No credential values or arbitrary JSON are displayed.
+- No migration execution, destination creation, installation, Host claim, optional
+  dependency installation, or game-installation policy changes.
 
-## Full schema-field inventory acceptance
+## Windows manual milestone acceptance (Shadow)
 
-The rehearsal JSON now includes `fieldCoverage` for **all** existing application
-tables, not only the tables displayed in the editor. Each entry contains
-`columns`, `stagedEditableColumns` and `protectedColumns`. Unknown tables
-and sensitive credential/session tables have no staged-editable fields. This
-report exposes **schema column names only**; no credential or record values.
+1. Run the portable Windows EXE without installing the Setup Manager.
+2. Select the existing Alpha database and inspect records. Verify the Git profile
+   appears under Hosts, without editable auth method or Git executable.
+3. Stage a Git profile label or author correction, perform the migration rehearsal
+   and verify `verifiedChanges` reflects each changed field. Original values
+   must remain intact.
+4. Expand the new per-table schema panel: for the provided real Alpha source,
+   confirm all 27 tables and 111 columns appear with no missing classifications.
+   If the schema is unchanged, the three newly supported Git fields bring the
+   staged-editable count from 8 to 11 (protected count from 103 to 100).
+5. Check that `alpha_passwords`, `alpha_sessions`, job execution states,
+   profile auth fields and owner identifiers remain protected. If the real schema
+   differs, trust the inspected values and report the difference, not hardcoded
+   expected counts.
+6. Confirm no destination file is created; the source values, workflows,
+   sessions and other records remain untouched; no installation or Host claim
+   is possible.
 
-Check that all 27 tables from the actual Alpha database appear both in
-`preservedTables` and `fieldCoverage`, and that each column is classified
-exactly once as editable or protected. In particular, `alpha_passwords`,
-`alpha_sessions`, job execution state and ownership/revision columns must be
-protected. The final wizard review shows total and protected column counts.
-
-No destination database is created; no source data or SQLCipher configuration
-is changed. This milestone is a schema coverage audit, not migration execution.
-
-## Manual Windows/Shadow acceptance
-
-1. Launch portable EXE; select the real Alpha database and verify the category
-   tabs show the extra agent, runtime, effect and Game path fields.
-2. Choose the **same directory** as the source and a **different unused
-   filename**, rehearse with zero changes; it must succeed.
-3. Stage an effect activation, agent disabled status and one Game directory
-   correction, then rehearse. The verified-changes count should match the
-   edits and the table inventory should still include all 27 tables.
-4. Try a changed source filename, an occupied target filename, and one source
-   sidecar filename as destination. The source's actual filename, existing
-   targets and sidecars must fail, with no overwrites.
-5. Check actual source values, sessions, passwords and stored workflows remain
-   unchanged; ensure the destination does not exist.
-6. Confirm that project owner and revision, credentials and job status cannot
-   be edited; migration and installation execution remain disabled.
-
-The generated artifacts are temporary test previews, **not Minglefield
-application installers** and do not perform any data migration.
+The packaging artifacts are **temporary portable test previews**, not finished
+application installers. Portable builds should be run again only at a new,
+meaningful acceptance milestone.

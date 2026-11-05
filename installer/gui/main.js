@@ -253,7 +253,9 @@ let inspectedAlphaJobs = null;
 let originalLegacyRecords = null;
 let editedLegacyRecords = null;
 let reviewLoadIssues = [];
+let reviewRequestSequence = 0;
 function resetAlphaUserReview() {
+  reviewRequestSequence += 1;
   originalAlphaUsers = null;
   editedAlphaUsers = null;
   inspectedAlphaJobs = null;

@@ -147,8 +147,13 @@ pub fn rehearse_encrypted_test_copy(
     }
     let bad_key = Connection::open_with_flags(&staged, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| "Cannot exercise encrypted wrong-key control")?;
+    let control_key = if new_password == "WrongControlPassword123!" {
+        "DifferentWrongControlPassword2!"
+    } else {
+        "WrongControlPassword123!"
+    };
     bad_key
-        .pragma_update(None, "key", "WrongControlPassword123!")
+        .pragma_update(None, "key", control_key)
         .map_err(|_| "Cannot set wrong-key control")?;
     let wrong_key_rejected = bad_key
         .query_row("SELECT count(*) FROM sqlite_schema", [], |r| {
@@ -254,4 +259,17 @@ mod tests {
         }
         fs::remove_file(path).unwrap();
     }
+    #[test]
+    fn temp_directory_drop_cleans_up_after_failure() {
+        let db = Connection::open_in_memory().unwrap();
+        let path;
+        {
+            let temp = PrivateTempDir::create(&db).unwrap();
+            path = temp.path.clone();
+            fs::write(path.join("temporary-encrypted.sqlite3"), b"test").unwrap();
+            assert!(path.exists());
+        }
+        assert!(!path.exists());
+    }
+
 }

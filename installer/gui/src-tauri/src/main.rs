@@ -237,6 +237,68 @@ async fn inspect_sqlite_database(
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AlphaUserReview {
+    user_id: String,
+    disabled: bool,
+}
+
+#[tauri::command]
+async fn inspect_alpha_users(
+    path: String,
+    password: String,
+) -> Result<Vec<AlphaUserReview>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use rusqlite::{Connection, OpenFlags};
+        use std::path::Path;
+        let source = Path::new(&path);
+        let inspection =
+            minglefield_installer_core::sqlite_inspection::inspect_sqlite_with_password(
+                source, &password,
+            )
+            .map_err(|error| format!("Database inspection rejected: {error:?}"))?;
+        if !inspection.integrity_ok || inspection.foreign_key_violations != 0 {
+            return Err("Database integrity validation failed".to_owned());
+        }
+        let users = inspection
+            .tables
+            .iter()
+            .find(|table| table.name == "alpha_users")
+            .ok_or_else(|| "Alpha users table not found".to_owned())?;
+        if !users.columns.contains(&"user_id".to_owned())
+            || !users.columns.contains(&"disabled".to_owned())
+        {
+            return Err("Alpha users schema is not compatible".to_owned());
+        }
+        let db = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|_| "Cannot open selected database".to_owned())?;
+        if !password.is_empty() {
+            db.pragma_update(None, "key", &password)
+                .map_err(|_| "Cannot unlock selected database".to_owned())?;
+        }
+        let mut stmt = db
+            .prepare("SELECT user_id, disabled FROM alpha_users ORDER BY user_id LIMIT 501")
+            .map_err(|_| "Cannot read Alpha users".to_owned())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(AlphaUserReview {
+                    user_id: row.get(0)?,
+                    disabled: row.get::<_, i64>(1)? != 0,
+                })
+            })
+            .map_err(|_| "Cannot query Alpha users".to_owned())?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|_| "Cannot decode Alpha users".to_owned())?;
+        if rows.len() > 500 {
+            return Err("More than 500 users: review pagination required".to_owned());
+        }
+        Ok(rows)
+    })
+    .await
+    .map_err(|_| "Alpha users inspection task failed".to_owned())?
+}
+
 #[tauri::command]
 fn default_configuration() -> Result<DefaultConfig, String> {
     let c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
@@ -390,6 +452,7 @@ fn main() {
             inspect_existing_data,
             inspect_default_user_data,
             inspect_sqlite_database,
+            inspect_alpha_users,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

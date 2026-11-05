@@ -63,18 +63,32 @@ export function createLegacyReview(records) {
 }
 
 export function stageLegacyText(records, category, key, field, value) {
-  const allowed = { effects: "description", games: "name" };
-  if (allowed[category] !== field || typeof value !== "string") {
-    throw new Error("Field is not editable");
+  if (!editableFields[category]?.includes(field) || field === "enabled" ||
+      typeof value !== "string") throw new Error("Field is not editable as text");
+  if (category === "effects" && value.length > 256) {
+    throw new Error("Description exceeds 256 characters");
   }
-  if (category === "effects" && value.length > 256) throw new Error("Description exceeds 256 characters");
-  if (category === "games" && (!value.trim() || value.trim().length > 120)) {
-    throw new Error("Game name must contain 1–120 characters");
+  if (category === "games") {
+    if (field === "name" && (!value.trim() || value.trim().length > 120))
+      throw new Error("Game name must contain 1–120 characters");
+    if (field !== "name" && !absolutePath(value))
+      throw new Error("Game path must be absolute, without parent traversals, and at most 1024 characters");
   }
   const next = createLegacyReview(records);
   const row = next[category].find(record => keyFor(category, record) === key);
   if (!row) throw new Error("Unknown record");
-  row[field] = category === "games" ? value.trim() : value;
+  row[field] = field === "name" ? value.trim() : value;
+  return next;
+}
+
+export function stageLegacyToggle(records, category, key, field, value) {
+  if (category !== "effects" || field !== "enabled" || typeof value !== "boolean") {
+    throw new Error("Field is not editable as a toggle");
+  }
+  const next = createLegacyReview(records);
+  const row = next.effects.find(record => keyFor("effects", record) === key);
+  if (!row) throw new Error("Unknown effect");
+  row.enabled = value;
   return next;
 }
 
@@ -92,14 +106,13 @@ export function legacyCorrections(original, edited) {
       const key = keyFor(category, current);
       const previous = originals.get(key);
       if (!previous) throw new Error("Record identity changed");
-      const field = category === "effects" ? "description" : category === "games" ? "name" : null;
+      const editable = editableFields[category] ?? [];
       for (const [name, value] of Object.entries(previous)) {
-        if (name !== field && current[name] !== value) {
+        if (current[name] === value) continue;
+        if (!editable.includes(name)) {
           throw new Error("Read-only field changed: " + name);
         }
-      }
-      if (field && current[field] !== previous[field]) {
-        changes.push({ category, key, field, previous: previous[field], next: current[field] });
+        changes.push({ category, key, field: name, previous: value, next: current[name] });
       }
     }
   }

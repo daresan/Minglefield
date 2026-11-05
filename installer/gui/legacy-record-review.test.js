@@ -81,7 +81,7 @@ test("stages all three project paths and effect activation without touching orig
 
 test("rejects relative paths, parent traversals, invalid toggles and malformed revision", () => {
   const original = sample();
-  for (const value of ["relative/directory", "/game/../escape", "", "/bad\\0path"]) {
+  for (const value of ["relative/directory", "/game/../escape", "", "/bad" + String.fromCharCode(0) + "path"]) {
     assert.throws(() => stageLegacyText(original, "games", "game-a", "repositoryRoot", value));
   }
   assert.throws(() => stageLegacyToggle(original, "effects", JSON.stringify(["host-a", "effect-a"]), "enabled", "true"), /not editable/);

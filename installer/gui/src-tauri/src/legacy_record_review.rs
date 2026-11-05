@@ -285,7 +285,7 @@ mod tests {
         {
             let db = Connection::open(&path).unwrap();
             db.execute_batch(
-                "CREATE TABLE alpha_agents(agent_id TEXT,user_id TEXT,disabled INTEGER);
+                r#"CREATE TABLE alpha_agents(agent_id TEXT,user_id TEXT,disabled INTEGER);
                  INSERT INTO alpha_agents VALUES('agent1','alice',0);
                  CREATE TABLE sec01_host_owners(host_id TEXT,owner_id TEXT);
                  INSERT INTO sec01_host_owners VALUES('h1','alice');
@@ -298,7 +298,7 @@ mod tests {
                  CREATE TABLE alpha_game_projects(project_id TEXT,host_id TEXT,owner_id TEXT,name TEXT,repository_root TEXT,job_attachments_root TEXT,output_root TEXT,settings_revision INTEGER);
                  INSERT INTO alpha_game_projects VALUES('g1','h1','alice','Demo','/games/demo','/games/attachments','/games/output',1);
                  CREATE TABLE alpha_passwords(user_id TEXT,password_hash BLOB);
-                 INSERT INTO alpha_passwords VALUES('alice',x'1234');",
+                 INSERT INTO alpha_passwords VALUES('alice',x'1234');"#,
             )
             .unwrap();
         }

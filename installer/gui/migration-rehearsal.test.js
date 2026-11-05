@@ -5,6 +5,7 @@ import { stagedMigrationChanges } from "./migration-rehearsal.js";
 const alpha = () => [{ userId: "alice", disabled: false }];
 const legacy = () => ({
   agents: [{ agentId: "agent1", userId: "alice", disabled: false }],
+  hostRuntimes: [{ hostId: "host1", runtimeId: "comfy1", runtimeType: "comfyui", endpoint: "http://127.0.0.1:8188", enabled: true, inputFolder: "/comfy/input" }],
   hosts: [{ hostId: "host1", ownerId: "alice" }],
   effects: [{ hostId: "host1", effectId: "effect1", description: "Old", enabled: false }],
   hostJobs: [{ jobId: "job1", hostId: "host1", effectId: "effect1", requestedBy: "alice", state: "queued" }],

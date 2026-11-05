@@ -172,6 +172,8 @@ document.querySelector("#preview").addEventListener("click", async () => {
         verifiedTemporaryEncryptedCopy: lastTemporaryEncryptedProof ? {
           status: lastTemporaryEncryptedProof.status,
           temporaryEncryptedCopyVerified: lastTemporaryEncryptedProof.temporaryEncryptedCopyVerified,
+          verifiedStagedChanges: lastTemporaryEncryptedProof.verifiedStagedChanges,
+          stagedValuesMatchCiphertext: lastTemporaryEncryptedProof.stagedValuesMatchCiphertext,
           ciphertextHeaderVerified: lastTemporaryEncryptedProof.ciphertextHeaderVerified,
           wrongKeyRejected: lastTemporaryEncryptedProof.wrongKeyRejected,
           checkedRows: lastTemporaryEncryptedProof.checkedRows,
@@ -973,7 +975,12 @@ function refreshReview() {
       "Dry-run verified for " + lastMigrationRehearsal.verifiedChanges +
       " staged correction(s), " + lastMigrationRehearsal.preservedTables.length +
       " tables and " + lastMigrationRehearsal.schemaObjectCount +
-      " schema objects. No destination file created. Migration execution remains disabled.";
+      " schema objects." +
+      (lastTemporaryEncryptedProof
+        ? " Temporary SQLCipher verified for " + lastTemporaryEncryptedProof.verifiedStagedChanges +
+          " staged correction(s), all temporary files removed."
+        : " Encrypted temporary copy has not been verified.") +
+      " No final destination file created. Migration execution remains disabled.";
   }
   document.querySelector("#review-security-summary").textContent =
     "SQLCipher is mandatory for fresh installs and legacy imports. Destination password: " +

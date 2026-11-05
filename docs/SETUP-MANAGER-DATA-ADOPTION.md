@@ -93,26 +93,31 @@ current checkpoint.
 Do not interpret row-copy fidelity as a proof of future encrypted-file
 persistence or a completed migration.
 
-## Ephemeral SQLCipher export / reopen proof — execution still disabled
+## Ephemeral SQLCipher export and corrected-record read-back
 
-A distinct, user-invoked *temporary disk proof* is implemented in the Rust
-installer core and GUI. This uses SQLCipher's supported
-`ATTACH ... KEY ?` / `sqlcipher_export` path, not the incompatible
-plaintext-to-encrypted `sqlite3_backup` path. It exports the already
-integrity-verified snapshot into an OS-temporary private directory with a
-strong one-use test key, rejects an unrelated key, reopens under the intended
-key, compares all row multisets and schema including app/user version
-metadata and deletes the temporary directory. Failure paths are
-non-publishing and attempt cleanup. No user's actual final destination,
-installation directory or existing Alpha records are written.
+The non-publishing, user-initiated SQLCipher disk-copy proof now takes the
+**exact allowlisted staged corrections** from the Data Review, first checks
+them in a separate in-memory rollback rehearsal and then applies them to
+a second verified RAM copy. The original user-selected database is never
+written. The corrected copy is exported via `sqlcipher_export` into a
+protected randomized temporary directory, rekeyed with the **existing
+new-database password from Step 3**, reopened independently and compared
+byte-for-byte at the typed cell level with the corrected RAM source.
 
-This proof handles **zero staged changes only**. User-staged corrections
-remain in the memory-only rehearsal and cannot yet be applied to the
-encrypted output. The result must not be marketed as an executed migration,
-installed Minglefield application, validated data adoption or completed Host
-claim. Binding decisions for a durable destination still include validated
-source schema mapping, backup/recovery plan, exclusive target publication,
-preflight race safeguards, durable reopening, a strongly validated confirmed
-new password for *every* install and authenticated local Host provisioning
-through existing Hosts. `encryptedDestinationVerified` and
-`executionEnabled` stay false.
+The operator is not asked for a second destination password. The password
+confirmation and strength checks apply at both the GUI and Rust boundaries;
+the key is not serialized into the installer plan. The final destination file
+is not created; the encrypted file used for the proof is removed (cleanup
+on failure is best-effort). Field counts, corrected row values, schema
+objects and the exact staged correction count must match. Authentication,
+owner binding, stale-value rejection and trigger checks reuse the existing
+migration_dry_run Rust policy instead of duplicating mutable rules.
+
+This is **NOT a completed migration**. No persistent SQLCipher output,
+Minglefield installation, recovery checkpoint, or local Host claim has been
+authorized or performed. All execution flags remain false. The remaining
+gates for a durable destination are a versioned recognized schema mapping
+covering the entire source, exclusive target publication with reliable
+rollback, conflict/race handling, persistent reopen verification, the
+already established strong-password requirement for every new
+installation, and the existing authenticated Hosts workflow.

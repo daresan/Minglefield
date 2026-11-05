@@ -199,42 +199,41 @@ The fidelity implementation currently refuses tables exceeding 1,000,000
 rows, tables exceeding 1024 columns, or individual encoded rows over 128 MiB,
 rather than silently checking only part of the data.
 
-## Temporary encrypted SQLCipher disk-copy acceptance (separate explicit action)
+## Temporary encrypted SQLCipher disk-copy acceptance (staged corrections included)
 
-After a **successful zero-change memory-only** migration rehearsal, the GUI
-offers **Test encrypted temporary disk copy (create, verify, delete)**. The
-user enters a strong, confirmed *test-only* SQLCipher key. The existing
-Alpha unlock password is entered separately; it is optional for plaintext
-SQLite. Neither password is stored in the installation review.
+After a successful in-memory migration rehearsal, the same vetted metadata
+corrections (if any) can be applied to an independently verified **second RAM
+copy** and exported to an encrypted, automatically deleted SQLCipher file.
+The existing host/user, effect, Git profile and Game review permissions are
+reused verbatim; stale original values, duplicate edits and triggers fail
+closed. The original Alpha file is never the writable target.
 
-The backend revalidates the source and destination preview, verifies the
-full in-memory source snapshot, generates an unguessable private OS-temporary
-directory (Unix mode 0700), and exports the snapshot to an actually encrypted
-on-disk SQLCipher file using bound parameters and `sqlcipher_export`.
-The SQLite backup API is not used for plaintext-to-encrypted conversion:
-SQLCipher explicitly disallows that transition through backup. The export
-restores application/user schema version metadata. The backend independently
-checks the encrypted file header, proves an unrelated key is rejected,
-reopens with the new key, and compares **all schema and row values** against
-the in-memory source. It closes its handles and deletes the entire temporary
-directory before returning success. Failure paths attempt best-effort cleanup
-and never write to the proposed final destination.
+**The GUI reuses the strong new database password and confirmation entered
+on Step 3.** It never asks for a separate test password on Data Review. The
+existing source-unlock key is distinct and remains optional for plaintext
+SQLite. Passwords are passed only to the explicitly invoked Tauri command,
+not written into the installation-plan JSON or persisted as settings. Any
+change to source, destination, corrections or credentials invalidates an
+earlier temporary encrypted-copy proof.
 
-The result is deliberately named `temporaryEncryptedCopyVerified` and
-`temporaryFilesRemoved`. It is a verification of **ephemeral ciphertext on
-disk**, not the final Minglefield migrated destination: the final preview
-still reports `encryptedDestinationVerified=false`,
-`destinationCreated=false`, `migrationEnabled=false` and
-`executionEnabled=false`. The temporary copy currently tests the
-**unchanged database only**; staged user/Agent/Git/Game changes continue
-to be verified separately by the memory rehearsal and cannot be included
-in this disk test. The real executor still requires a trusted schema
-mapping, source identity binding, an exclusive target with atomic
-publication, rollback/backups and an explicit user-approved destination
-password. No Host provisioning occurs.
+SQLCipher's `sqlcipher_export` copies the *corrected, isolated memory*
+database to a random private OS-temp directory (Unix mode 0700). The Rust
+core validates new key strength independently, preserves schema metadata,
+rejects a wrong key, reopens with the chosen key and compares **all tables,
+schema objects and typed row values** against the approved corrected RAM
+copy, including BLOBs, duplicate rows and original extension tables.
+Only on successful comparison and complete temporary-file cleanup may the
+GUI report `stagedValuesMatchCiphertext=true` and
+`verifiedStagedChanges` matching the memory rehearsal.
+The source remains unchanged, and no output is written to the requested
+permanent destination. Failures do not publish files; temp cleanup on error
+is best effort, with a regression test for automatic cleanup.
 
-Regression tests cover plaintext and encrypted sources, different keys,
-wrong-key rejection, byte-identical original source, integer schema version
-preservation, AUTOINCREMENT sequences, BLOB and duplicate rows, cleanup
-on failure and the GUI refusal to promote ephemeral success into live
-migration authorization. No encrypted-file bytes or keys are uploaded.
+The result `temporaryEncryptedCopyVerified` does **not** authorize or
+constitute a final migration. The unchanged security boundary continues to
+report `encryptedDestinationVerified=false`,
+`destinationCreated=false`, `migrationEnabled=false`,
+`executionEnabled=false`. A real destination still needs a recognized
+and versioned schema-preservation contract, backup/recovery plan, target
+exclusive creation, atomic publication, durable encryption read-back,
+explicit user approval and authenticated Host onboarding.

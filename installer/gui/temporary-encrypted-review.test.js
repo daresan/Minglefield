@@ -56,3 +56,12 @@ test("reuses the existing Step 3 password and never includes confirmation in the
     existingSourcePassword: "", rehearsalSourcePassword: ""
   }), /confirmation/);
 });
+
+test("GUI has exactly one new destination password and one confirmation on Step 3", async () => {
+  const { readFileSync } = await import("node:fs");
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  assert.equal((html.match(/id="new-db-password"/g) ?? []).length, 1);
+  assert.equal((html.match(/id="confirm-db-password"/g) ?? []).length, 1);
+  assert.equal(html.includes('id="temporary-sqlcipher-password"'), false);
+  assert.equal(html.includes('id="temporary-sqlcipher-confirm"'), false);
+});

@@ -222,7 +222,9 @@ mod tests {
             let db = Connection::open(&file).unwrap();
             db.execute("UPDATE records SET label='after'", []).unwrap();
         }
-        let value: String = snapshot.query_row("SELECT label FROM records", [], |r| r.get(0)).unwrap();
+        let value: String = snapshot
+            .query_row("SELECT label FROM records", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(value, "before");
         drop(snapshot);
         std::fs::remove_file(file).unwrap();

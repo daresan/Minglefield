@@ -126,3 +126,9 @@ The portable GUI build is reserved for **significant manual acceptance milestone
 
 **2026-11-05 field coverage milestone:** Runtime details are displayed as metadata, not edited. Game project directory paths and effect/Agent enablement can be staged and rehearsed against fresh original values. Nothing is applied to the source or to an installation. The same-directory destination allowance is checked in the shared Rust preflight, with exclusive-file creation and live SQLite sidecar exclusion reserved for the eventual executor.
 
+
+## Full schema-field inventory (next migration readiness milestone)
+
+The verified migration rehearsal now returns `fieldCoverage` for **every** application table in the inspected, consistent source snapshot, not just tables rendered in the editor. Each entry lists column **names only**, the explicitly allowlisted staged-editable columns and all remaining protected columns. No stored values, credential hashes, session tokens, arbitrary host JSON, or raw BLOBs are returned in this inventory. The final review includes total column and protected-column counts. An unknown table is never silently dropped from the inventory and all of its columns are protected by default.
+
+This is a **coverage and readiness report**, not proof that every column is understood or mapped to a future destination schema. No schema transformation, persistent export, SQLCipher destination creation, installation or Host claim is authorized. A subsequent migration implementation must account for all original tables and objects and prove that no data was discarded before execution is enabled.

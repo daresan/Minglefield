@@ -351,7 +351,6 @@ mod tests {
                 before: "Original game".into(),
                 after: "Updated game".into(),
             },
-
             ReviewCorrection::EffectDescription {
                 host_id: "h1".into(),
                 effect_id: "e1".into(),
@@ -421,5 +420,4 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), before);
         fs::remove_file(path).unwrap();
     }
-
 }

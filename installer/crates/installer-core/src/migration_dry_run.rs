@@ -23,6 +23,35 @@ pub enum ReviewCorrection {
         before: String,
         after: String,
     },
+    EffectEnabled {
+        host_id: String,
+        effect_id: String,
+        before: bool,
+        after: bool,
+    },
+    GamePath {
+        project_id: String,
+        field: GamePathField,
+        before: String,
+        after: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GamePathField {
+    RepositoryRoot,
+    JobAttachmentsRoot,
+    OutputRoot,
+}
+
+impl GamePathField {
+    fn column(self) -> &'static str {
+        match self {
+            Self::RepositoryRoot => "repository_root",
+            Self::JobAttachmentsRoot => "job_attachments_root",
+            Self::OutputRoot => "output_root",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +145,15 @@ fn valid_id(value: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || b"._-".contains(&ch))
 }
 
+fn valid_game_path(value: &str) -> bool {
+    let path = Path::new(value);
+    !value.is_empty()
+        && value.len() <= 1024
+        && !value.contains('\0')
+        && path.is_absolute()
+        && !path.components().any(|part| matches!(part, std::path::Component::ParentDir))
+}
+
 fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, String), String> {
     match correction {
         ReviewCorrection::UserDisabled {
@@ -163,6 +201,19 @@ fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, Strin
                 return Err("Invalid project review correction".to_owned());
             }
             Ok((2, project_id.clone(), String::new()))
+        }
+        ReviewCorrection::EffectEnabled { host_id, effect_id, before, after } => {
+            if !valid_id(host_id) || !valid_id(effect_id) || before == after {
+                return Err("Invalid effect activation correction".to_owned());
+            }
+            Ok((3, host_id.clone(), effect_id.clone()))
+        }
+        ReviewCorrection::GamePath { project_id, field, before, after } => {
+            if !valid_id(project_id) || before == after
+                || !valid_game_path(before) || !valid_game_path(after) {
+                return Err("Invalid game project path correction".to_owned());
+            }
+            Ok((4, project_id.clone(), field.column().to_owned()))
         }
     }
 }

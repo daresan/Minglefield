@@ -368,3 +368,39 @@ fn rehearses_git_metadata_but_never_authentication_or_owner() {
     }
     std::fs::remove_file(file).unwrap();
 }
+
+#[test]
+fn encrypted_alpha_source_is_verified_without_creating_output_or_changing_bytes() {
+    let file = std::env::temp_dir().join(format!(
+        "minglefield-fidelity-cipher-{}-{}.sqlite3",
+        std::process::id(),
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+    ));
+    {
+        let db = Connection::open(&file).unwrap();
+        db.pragma_update(None, "key", "ExistingSourcePassword9!").unwrap();
+        db.execute_batch(
+            "CREATE TABLE alpha_invites(invitation_hash TEXT,user_id TEXT,expires_at INTEGER,redeemed INTEGER,revoked INTEGER);
+             CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);
+             INSERT INTO alpha_users VALUES('alice',0);
+             CREATE TABLE alpha_agents(agent_id TEXT,user_id TEXT,disabled INTEGER);
+             CREATE TABLE alpha_sessions(token_hash TEXT,user_id TEXT,expires_at INTEGER,revoked INTEGER);
+             CREATE TABLE alpha_jobs(job_id TEXT,user_id TEXT,agent_id TEXT,idempotency_key TEXT,action TEXT);
+             CREATE TABLE alpha_passwords(user_id TEXT,salt BLOB,password_hash BLOB);
+             INSERT INTO alpha_passwords VALUES('alice',x'0001ff',x'eeff00');
+             CREATE TABLE alpha_agent_grants(agent_id TEXT,grantee_user_id TEXT,action TEXT,revoked INTEGER);
+             CREATE TABLE other_binary(blob BLOB);
+             INSERT INTO other_binary VALUES(x'000000ff');"
+        ).unwrap();
+    }
+    let source_bytes = std::fs::read(&file).unwrap();
+    assert_ne!(&source_bytes[..16], b"SQLite format 3\0");
+    let result = rehearse_migration(&file, "ExistingSourcePassword9!", &[]).unwrap();
+    assert!(result.fidelity.values_verified);
+    assert_eq!(result.fidelity.tables_checked, 8);
+    assert_eq!(result.fidelity.rows_checked, 3);
+    assert!(!result.destination_created);
+    assert_eq!(std::fs::read(&file).unwrap(), source_bytes);
+    assert!(rehearse_migration(&file, "incorrect-password", &[]).is_err());
+    std::fs::remove_file(file).unwrap();
+}

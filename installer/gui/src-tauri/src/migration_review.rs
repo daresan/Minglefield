@@ -14,6 +14,12 @@ pub enum StagedCorrection {
         before: bool,
         after: bool,
     },
+    AgentDisabled {
+        agent_id: String,
+        user_id: String,
+        before: bool,
+        after: bool,
+    },
     EffectDescription {
         host_id: String,
         effect_id: String,
@@ -69,6 +75,9 @@ impl From<StagedCorrection> for ReviewCorrection {
                 before,
                 after,
             },
+            StagedCorrection::AgentDisabled { agent_id, user_id, before, after } => {
+                Self::AgentDisabled { agent_id, user_id, before, after }
+            }
             StagedCorrection::EffectDescription {
                 host_id,
                 effect_id,

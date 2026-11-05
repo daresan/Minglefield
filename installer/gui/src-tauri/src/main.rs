@@ -299,6 +299,46 @@ async fn inspect_alpha_users(
     .map_err(|_| "Alpha users inspection task failed".to_owned())?
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AlphaJobReview {
+    job_id: String,
+    user_id: String,
+    agent_id: String,
+}
+
+#[tauri::command]
+async fn inspect_alpha_jobs(path: String, password: String) -> Result<Vec<AlphaJobReview>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use rusqlite::{Connection, OpenFlags};
+        let source = std::path::Path::new(&path);
+        let inspection = minglefield_installer_core::sqlite_inspection::inspect_sqlite_with_password(source, &password)
+            .map_err(|error| format!("Database inspection rejected: {error:?}"))?;
+        if !inspection.integrity_ok || inspection.foreign_key_violations != 0 {
+            return Err("Database integrity validation failed".to_owned());
+        }
+        let table = inspection.tables.iter().find(|table| table.name == "alpha_jobs")
+            .ok_or_else(|| "Alpha jobs table not found".to_owned())?;
+        if !["job_id", "user_id", "agent_id"].iter().all(|column| table.columns.iter().any(|c| c == column)) {
+            return Err("Alpha jobs schema is not compatible".to_owned());
+        }
+        let db = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|_| "Cannot open selected database".to_owned())?;
+        if !password.is_empty() {
+            db.pragma_update(None, "key", &password).map_err(|_| "Cannot unlock selected database".to_owned())?;
+        }
+        let mut stmt = db.prepare("SELECT job_id, user_id, agent_id FROM alpha_jobs ORDER BY job_id LIMIT 501")
+            .map_err(|_| "Cannot read Alpha jobs".to_owned())?;
+        let rows = stmt.query_map([], |row| Ok(AlphaJobReview {
+            job_id: row.get(0)?, user_id: row.get(1)?, agent_id: row.get(2)?,
+        })).map_err(|_| "Cannot query Alpha jobs".to_owned())?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|_| "Cannot decode Alpha jobs".to_owned())?;
+        if rows.len() > 500 { return Err("More than 500 jobs: review pagination required".to_owned()); }
+        Ok(rows)
+    }).await.map_err(|_| "Alpha jobs inspection task failed".to_owned())?
+}
+
 #[tauri::command]
 fn default_configuration() -> Result<DefaultConfig, String> {
     let c = InstallerConfig::defaults().map_err(|err| format!("{err:?}"))?;
@@ -453,6 +493,7 @@ fn main() {
             inspect_default_user_data,
             inspect_sqlite_database,
             inspect_alpha_users,
+            inspect_alpha_jobs,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

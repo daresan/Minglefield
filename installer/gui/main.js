@@ -5,6 +5,7 @@ import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js
 import { assessLegacyAlphaSchema } from "./legacy-schema.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
 import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } from "./alpha-user-review.js";
+import { createLegacyReview, stageLegacyText, legacyCorrections } from "./legacy-record-review.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -249,10 +250,19 @@ let lastDatabaseInspection = null;
 let originalAlphaUsers = null;
 let editedAlphaUsers = null;
 let inspectedAlphaJobs = null;
+let originalLegacyRecords = null;
+let editedLegacyRecords = null;
+let reviewLoadIssues = [];
 function resetAlphaUserReview() {
   originalAlphaUsers = null;
   editedAlphaUsers = null;
   inspectedAlphaJobs = null;
+  originalLegacyRecords = null;
+  editedLegacyRecords = null;
+  reviewLoadIssues = [];
+  for (const category of ["login", "hosts", "effects", "jobs", "games"]) {
+    document.querySelector("#data-fields-" + category).textContent = "No verified records loaded for this category.";
+  }
   document.querySelector("#data-fields-login").replaceChildren();
   updateReviewSummary();
 }

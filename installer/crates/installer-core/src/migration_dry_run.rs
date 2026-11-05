@@ -206,3 +206,6 @@ pub fn rehearse_migration(
         execution_enabled: false,
     })
 }
+
+#[cfg(test)]
+mod tests;

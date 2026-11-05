@@ -15,6 +15,7 @@ pub enum MigrationDestinationError {
     DestinationParentIsSymlink,
     SamePath,
     SameFileName,
+    ProtectedSourceSidecar,
     IoError,
 }
 
@@ -66,6 +67,18 @@ pub fn preview_migration_destination(
         .ok_or(MigrationDestinationError::DestinationParentUnavailable)?;
     if file_name == source.file_name().unwrap_or_default() {
         return Err(MigrationDestinationError::SameFileName);
+    }
+    // A same-directory destination must never claim one of SQLite's possible
+    // live sidecar filenames, even when that sidecar does not exist yet.
+    if parent == source.parent().unwrap_or_else(|| Path::new("")) {
+        let original = source.file_name().unwrap_or_default().to_string_lossy();
+        let candidate = file_name.to_string_lossy();
+        if ["-wal", "-shm", "-journal"]
+            .iter()
+            .any(|suffix| candidate.eq_ignore_ascii_case(&format!("{original}{suffix}")))
+        {
+            return Err(MigrationDestinationError::ProtectedSourceSidecar);
+        }
     }
     let destination = parent.join(file_name);
     if destination == source {
@@ -127,6 +140,15 @@ mod tests {
         assert_eq!(preview.destination, in_place);
         assert!(preview.preserves_source);
         assert!(!in_place.exists());
+        for suffix in ["-wal", "-shm", "-journal"] {
+            assert_eq!(
+                preview_migration_destination(
+                    &source,
+                    &source_dir.join(format!("alpha.sqlite3{suffix}"))
+                ),
+                Err(MigrationDestinationError::ProtectedSourceSidecar)
+            );
+        }
         assert_eq!(
             preview_migration_destination(&source, &target_dir.join("alpha.sqlite3")),
             Err(MigrationDestinationError::SameFileName)

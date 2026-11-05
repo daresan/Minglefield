@@ -293,6 +293,35 @@ fn apply_verified_change(db: &Connection, correction: &ReviewCorrection) -> Resu
                 return Err("Staged project was not updated in snapshot".to_owned());
             }
         }
+        ReviewCorrection::EffectEnabled { host_id, effect_id, before, after } => {
+            let actual: Option<i64> = db.query_row(
+                "SELECT enabled FROM sec01_host_effect_definitions WHERE host_id=?1 AND effect_id=?2",
+                params![host_id, effect_id], |r| r.get(0),
+            ).optional().map_err(|_| "Cannot verify staged effect activation")?;
+            if actual != Some(i64::from(*before)) {
+                return Err("Staged effect activation is stale or invalid".to_owned());
+            }
+            let changed = db.execute(
+                "UPDATE sec01_host_effect_definitions SET enabled=?1 WHERE host_id=?2 AND effect_id=?3 AND enabled=?4",
+                params![i64::from(*after), host_id, effect_id, i64::from(*before)],
+            ).map_err(|_| "Cannot simulate effect activation")?;
+            if changed != 1 { return Err("Staged effect activation update failed".to_owned()); }
+        }
+        ReviewCorrection::GamePath { project_id, field, before, after } => {
+            let column = field.column();
+            let sql = format!("SELECT {column} FROM alpha_game_projects WHERE project_id=?1");
+            let actual: Option<String> = db.query_row(&sql, [project_id], |r| r.get(0))
+                .optional().map_err(|_| "Cannot verify staged game path")?;
+            if actual.as_deref() != Some(before.as_str()) {
+                return Err("Staged game path is stale".to_owned());
+            }
+            let sql = format!(
+                "UPDATE alpha_game_projects SET {column}=?1 WHERE project_id=?2 AND {column}=?3"
+            );
+            let changed = db.execute(&sql, params![after, project_id, before])
+                .map_err(|_| "Cannot simulate staged game path")?;
+            if changed != 1 { return Err("Staged game path update failed".to_owned()); }
+        }
     }
     Ok(())
 }

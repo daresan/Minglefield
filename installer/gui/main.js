@@ -400,6 +400,20 @@ function renderLegacyRecords() {
     line.textContent = "Host " + host.hostId + " — Owner " + host.ownerId + " (read-only)";
     hosts.append(line);
   }
+  for (const runtime of data.hostRuntimes) {
+    const line = document.createElement("p");
+    line.textContent = "Host " + runtime.hostId + " — Runtime " + runtime.runtimeId +
+      " (" + runtime.runtimeType + ") — Endpoint " + runtime.endpoint +
+      " — Enabled " + String(runtime.enabled) +
+      " — Input folder " + (runtime.inputFolder || "(not configured)") +
+      " (read-only; configuration remains in Hosts)";
+    hosts.append(line);
+  }
+  if (data.unavailable.some(item => item.startsWith("sec01_host_runtimes:"))) {
+    const line = document.createElement("p");
+    line.textContent = "Host runtime configuration table is absent.";
+    hosts.append(line);
+  }
   for (const effect of data.effects) {
     const label = document.createElement("label");
     label.textContent = "Host " + effect.hostId + " / Effect " + effect.effectId +
@@ -543,6 +557,8 @@ function updateReviewSummary() {
     if (editedLegacyRecords) {
       const counts = document.createElement("p");
       counts.textContent = "Verified records: " + editedLegacyRecords.hosts.length + " hosts, " +
+        editedLegacyRecords.hostRuntimes.length + " runtimes, " +
+        editedLegacyRecords.agents.length + " agents, " +
         editedLegacyRecords.effects.length + " effects, " +
         editedLegacyRecords.hostJobs.length + " host jobs, " +
         editedLegacyRecords.games.length + " games; " +

@@ -81,7 +81,10 @@ fn staged_columns(table: &str) -> &'static [&'static str] {
         "alpha_users" | "alpha_agents" => &["disabled"],
         "sec01_host_effect_definitions" => &["description", "enabled"],
         "alpha_game_projects" => &[
-            "name", "repository_root", "job_attachments_root", "output_root",
+            "name",
+            "repository_root",
+            "job_attachments_root",
+            "output_root",
         ],
         _ => &[],
     }

@@ -5,9 +5,10 @@ import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js
 import { assessLegacyAlphaSchema } from "./legacy-schema.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
 import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } from "./alpha-user-review.js";
-import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections } from "./legacy-record-review.js";
+import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections, keyFor } from "./legacy-record-review.js";
 import { stagedMigrationChanges } from "./migration-rehearsal.js";
 import { assessFieldCoverage } from "./schema-coverage.js";
+import { appendReviewTable } from "./record-review-table.js";
 import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
@@ -331,272 +332,82 @@ function resetAlphaUserReview() {
     "No verified records loaded. Migration remains disabled.";
   updateReviewSummary();
 }
+function reviewError(error) {
+  document.querySelector("#data-editor-status").textContent = String(error);
+}
+
+function updateLegacyReview(category, row, field, value) {
+  const key = keyFor(category, row);
+  editedLegacyRecords = typeof value === "boolean"
+    ? stageLegacyToggle(editedLegacyRecords, category, key, field, value)
+    : stageLegacyText(editedLegacyRecords, category, key, field, value);
+  const actual = editedLegacyRecords[category].find(item => keyFor(category, item) === key);
+  if (!actual) throw new Error("Edited record is unavailable");
+  invalidateMigrationRehearsal();
+  updateReviewSummary();
+  return actual[field];
+}
+
 function renderAlphaUsers() {
   const root = document.querySelector("#data-fields-login");
   root.replaceChildren();
   if (!editedAlphaUsers) {
-    root.textContent = "Alpha user records unavailable for this database. See review warnings.";
+    root.textContent = "Alpha user records unavailable. See review warnings.";
     return;
   }
-  for (const record of editedAlphaUsers) {
-    const label = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.style.width = "auto";
-    checkbox.checked = record.disabled;
-    checkbox.addEventListener("change", () => {
-      editedAlphaUsers = updateAlphaUserReview(editedAlphaUsers, record.userId, checkbox.checked);
+  appendReviewTable(root, "users", editedAlphaUsers, {
+    onEdit: (row, field, disabled) => {
+      editedAlphaUsers = updateAlphaUserReview(editedAlphaUsers, row.userId, disabled);
       invalidateMigrationRehearsal();
       updateReviewSummary();
-    });
-    label.append(checkbox, document.createTextNode(" Disabled — " + record.userId));
-    root.append(label);
-  }
-  if (!editedAlphaUsers.length) root.textContent = "No Alpha user records in the selected database.";
+      return editedAlphaUsers.find(user => user.userId === row.userId)[field];
+    },
+    onError: reviewError
+  });
 }
-
-
 
 function renderAlphaAgents() {
   if (!editedLegacyRecords) return;
-  const root = document.querySelector("#data-fields-login");
-  const title = document.createElement("h4");
-  title.textContent = "Agents (" + editedLegacyRecords.agents.length + ")";
-  root.append(title);
-  for (const agent of editedLegacyRecords.agents) {
-    const label = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.style.width = "auto";
-    checkbox.checked = agent.disabled;
-    checkbox.addEventListener("change", () => {
-      try {
-        editedLegacyRecords = stageLegacyToggle(editedLegacyRecords, "agents",
-          agent.agentId, "disabled", checkbox.checked);
-        invalidateMigrationRehearsal();
-        updateReviewSummary();
-      } catch (error) {
-        checkbox.checked = editedLegacyRecords.agents.find(
-          item => item.agentId === agent.agentId).disabled;
-        document.querySelector("#data-editor-status").textContent = String(error);
-      }
+  appendReviewTable(document.querySelector("#data-fields-login"), "agents",
+    editedLegacyRecords.agents, {
+      onEdit: (row, field, value) => updateLegacyReview("agents", row, field, value),
+      onError: reviewError
     });
-    label.append(checkbox, document.createTextNode(
-      " Disabled — " + agent.agentId + " / Owner " + agent.userId
-    ));
-    root.append(label);
-  }
-  if (editedLegacyRecords.unavailable.some(
-    value => value.startsWith("alpha_agents:"))) {
-    const note = document.createElement("p");
-    note.textContent = "Alpha agent table is absent in this database.";
-    root.append(note);
-  }
 }
 
 function renderJobRecords() {
   const root = document.querySelector("#data-fields-jobs");
   root.replaceChildren();
-  if (inspectedAlphaJobs) {
-    const title = document.createElement("h4");
-    title.textContent = "Alpha jobs (" + inspectedAlphaJobs.length + ")";
-    root.append(title);
-    for (const job of inspectedAlphaJobs) {
-      const line = document.createElement("p");
-      line.textContent = "Job " + job.jobId + " — User " + job.userId + " — Agent " + job.agentId;
-      root.append(line);
-    }
-  }
-  if (editedLegacyRecords) {
-    const title = document.createElement("h4");
-    title.textContent = "Host jobs (" + editedLegacyRecords.hostJobs.length + ")";
-    root.append(title);
-    for (const job of editedLegacyRecords.hostJobs) {
-      const line = document.createElement("p");
-      line.textContent = "Job " + job.jobId + " — Host " + job.hostId + " — Effect " +
-        job.effectId + " — Requester " + job.requestedBy + " — State " + job.state;
-      root.append(line);
-    }
-    if (editedLegacyRecords.unavailable.some(item => item.startsWith("sec01_host_jobs:"))) {
-      const note = document.createElement("p");
-      note.textContent = "Host jobs table is absent in this database.";
-      root.append(note);
-    }
-  }
+  if (inspectedAlphaJobs) appendReviewTable(root, "alphaJobs", inspectedAlphaJobs);
+  if (editedLegacyRecords) appendReviewTable(root, "hostJobs", editedLegacyRecords.hostJobs);
   if (!root.childNodes.length) root.textContent = "No verified job records loaded.";
 }
 
 function renderLegacyRecords() {
   if (!editedLegacyRecords) return;
-  const data = editedLegacyRecords;
-  const hosts = document.querySelector("#data-fields-hosts");
-  const effects = document.querySelector("#data-fields-effects");
-  const games = document.querySelector("#data-fields-games");
-  for (const root of [hosts, effects, games]) root.replaceChildren();
-  for (const host of data.hosts) {
-    const line = document.createElement("p");
-    line.textContent = "Host " + host.hostId + " — Owner " + host.ownerId + " (read-only)";
-    hosts.append(line);
-  }
-  for (const runtime of data.hostRuntimes) {
-    const line = document.createElement("p");
-    line.textContent = "Host " + runtime.hostId + " — Runtime " + runtime.runtimeId +
-      " (" + runtime.runtimeType + ") — Endpoint " + runtime.endpoint +
-      " — Enabled " + String(runtime.enabled) +
-      " — Input folder " + (runtime.inputFolder || "(not configured)") +
-      " (read-only; configuration remains in Hosts)";
-    hosts.append(line);
-  }
-  if (data.unavailable.some(item => item.startsWith("sec01_host_runtimes:"))) {
-    const line = document.createElement("p");
-    line.textContent = "Host runtime configuration table is absent.";
-    hosts.append(line);
-  }
-  for (const profile of data.gitProfiles) {
-    const title = document.createElement("p");
-    title.textContent = "Git profile " + profile.profileId + " — Host " + profile.hostId +
-      " — Owner " + profile.ownerId + " — Auth " + profile.authMethod +
-      " — Git executable " + profile.gitExecutable +
-      " (identity, auth and executable read-only)";
-    hosts.append(title);
-    for (const [fieldName, labelText, maxLength] of [
-      ["label", "Profile label", 120],
-      ["authorName", "Git author name", 256],
-      ["authorEmail", "Git author email", 256]
-    ]) {
-      const label = document.createElement("label");
-      label.textContent = labelText + " — " + profile.profileId;
-      const field = document.createElement("input");
-      field.type = "text";
-      field.maxLength = maxLength;
-      field.value = profile[fieldName];
-      field.addEventListener("change", () => {
-        try {
-          editedLegacyRecords = stageLegacyText(editedLegacyRecords, "gitProfiles",
-            JSON.stringify([profile.hostId, profile.profileId]), fieldName, field.value);
-          invalidateMigrationRehearsal();
-          updateReviewSummary();
-        } catch (error) {
-          document.querySelector("#data-editor-status").textContent = String(error);
-        }
-        field.value = editedLegacyRecords.gitProfiles.find(item =>
-          item.hostId === profile.hostId && item.profileId === profile.profileId)[fieldName];
-      });
-      label.append(field);
-      hosts.append(label);
-    }
-  }
-  if (data.unavailable.some(item => item.startsWith("alpha_git_profiles:"))) {
-    const line = document.createElement("p");
-    line.textContent = "Git profile table is absent in this database.";
-    hosts.append(line);
-  }
-  for (const effect of data.effects) {
-    const label = document.createElement("label");
-    label.textContent = "Host " + effect.hostId + " / Effect " + effect.effectId +
-      " — Description:";
-    const field = document.createElement("input");
-    field.type = "text";
-    field.maxLength = 256;
-    field.value = effect.description;
-    field.addEventListener("change", () => {
-      try {
-        editedLegacyRecords = stageLegacyText(editedLegacyRecords, "effects",
-          JSON.stringify([effect.hostId, effect.effectId]), "description", field.value);
-        invalidateMigrationRehearsal();
-        updateReviewSummary();
-      } catch (error) {
-        field.value = editedLegacyRecords.effects.find(item =>
-          item.hostId === effect.hostId && item.effectId === effect.effectId).description;
-        document.querySelector("#data-editor-status").textContent = String(error);
-      }
-    });
-    label.append(field);
-    effects.append(label);
-    const toggleLabel = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.style.width = "auto";
-    checkbox.checked = effect.enabled;
-    checkbox.addEventListener("change", () => {
-      try {
-        editedLegacyRecords = stageLegacyToggle(editedLegacyRecords, "effects",
-          JSON.stringify([effect.hostId, effect.effectId]), "enabled", checkbox.checked);
-        invalidateMigrationRehearsal();
-        updateReviewSummary();
-      } catch (error) {
-        checkbox.checked = editedLegacyRecords.effects.find(item =>
-          item.hostId === effect.hostId && item.effectId === effect.effectId).enabled;
-        document.querySelector("#data-editor-status").textContent = String(error);
-      }
-    });
-    toggleLabel.append(checkbox, document.createTextNode(" Enabled — " + effect.effectId +
-      " (staged only; no runtime changes)"));
-    effects.append(toggleLabel);
-  }
-  for (const game of data.games) {
-    const label = document.createElement("label");
-    label.textContent = "Project " + game.projectId + " — Host " + game.hostId +
-      " — Owner " + game.ownerId + " (read-only). Name:";
-    const field = document.createElement("input");
-    field.type = "text";
-    field.maxLength = 120;
-    field.value = game.name;
-    field.addEventListener("change", () => {
-      try {
-        editedLegacyRecords = stageLegacyText(editedLegacyRecords, "games", game.projectId,
-          "name", field.value);
-        field.value = editedLegacyRecords.games.find(item => item.projectId === game.projectId).name;
-        invalidateMigrationRehearsal();
-        updateReviewSummary();
-      } catch (error) {
-        field.value = editedLegacyRecords.games.find(item => item.projectId === game.projectId).name;
-        document.querySelector("#data-editor-status").textContent = String(error);
-      }
-    });
-    label.append(field);
-    games.append(label);
-    const revision = document.createElement("p");
-    revision.textContent = "Settings revision: " + game.settingsRevision +
-      " (read-only; existing owner/host identity is preserved)";
-    games.append(revision);
-    for (const [fieldName, description] of [
-      ["repositoryRoot", "Repository directory"],
-      ["jobAttachmentsRoot", "Job attachments directory"],
-      ["outputRoot", "Output directory"]
-    ]) {
-      const pathLabel = document.createElement("label");
-      pathLabel.textContent = description + " — " + game.projectId;
-      const pathField = document.createElement("input");
-      pathField.type = "text";
-      pathField.maxLength = 1024;
-      pathField.value = game[fieldName];
-      pathField.addEventListener("change", () => {
-        try {
-          editedLegacyRecords = stageLegacyText(editedLegacyRecords, "games",
-            game.projectId, fieldName, pathField.value);
-          invalidateMigrationRehearsal();
-          updateReviewSummary();
-        } catch (error) {
-          document.querySelector("#data-editor-status").textContent = String(error);
-        }
-        pathField.value = editedLegacyRecords.games.find(
-          item => item.projectId === game.projectId)[fieldName];
-      });
-      pathLabel.append(pathField);
-      games.append(pathLabel);
-    }
-  }
-  for (const [root, table, description] of [
-    [hosts, "sec01_host_owners", "hosts"],
-    [effects, "sec01_host_effect_definitions", "effects"],
-    [games, "alpha_game_projects", "game projects"]
+  const roots = {
+    hosts: document.querySelector("#data-fields-hosts"),
+    effects: document.querySelector("#data-fields-effects"),
+    games: document.querySelector("#data-fields-games")
+  };
+  for (const root of Object.values(roots)) root.replaceChildren();
+  for (const [root, category] of [
+    [roots.hosts, "hosts"], [roots.hosts, "hostRuntimes"],
+    [roots.hosts, "gitProfiles"], [roots.effects, "effects"],
+    [roots.games, "games"]
   ]) {
-    if (data.unavailable.some(item => item.startsWith(table + ":"))) {
-      root.textContent = "The " + table + " table is absent in this database.";
-    } else if (!root.childNodes.length) {
-      root.textContent = "No " + description + " records in this database.";
-    }
+    const editable = ["gitProfiles", "effects", "games"].includes(category);
+    appendReviewTable(root, category, editedLegacyRecords[category], editable ? {
+      onEdit: (row, field, value) => updateLegacyReview(category, row, field, value),
+      onError: reviewError
+    } : {});
+  }
+  for (const issue of editedLegacyRecords.unavailable) {
+    const root = issue.startsWith("sec01_host_effect_definitions") ? roots.effects :
+      issue.startsWith("alpha_game_projects") ? roots.games : roots.hosts;
+    const p = document.createElement("p");
+    p.textContent = "Unavailable: " + issue;
+    root.append(p);
   }
   renderJobRecords();
 }

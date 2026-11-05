@@ -13,7 +13,7 @@ const editableFields = {
   games: ["name", "repositoryRoot", "jobAttachmentsRoot", "outputRoot"]
 };
 const categories = ["agents", "hosts", "hostRuntimes", "gitProfiles", "effects", "hostJobs", "games"];
-const keyFor = (category, item) => category === "agents" ? item.agentId
+export const keyFor = (category, item) => category === "agents" ? item.agentId
   : category === "hosts" ? item.hostId
   : category === "hostRuntimes" ? JSON.stringify([item.hostId, item.runtimeId])
   : category === "gitProfiles" ? JSON.stringify([item.hostId, item.profileId])

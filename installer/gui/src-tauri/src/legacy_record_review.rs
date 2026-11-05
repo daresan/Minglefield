@@ -240,5 +240,4 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), original_bytes);
         std::fs::remove_file(path).unwrap();
     }
-
 }

@@ -236,9 +236,8 @@ async fn inspect_sqlite_database(
     let (inspection, registered_mapping) = tauri::async_runtime::spawn_blocking(move || {
         use minglefield_installer_core::legacy_alpha_mapping::assess_registered_alpha_mapping;
         use minglefield_installer_core::sqlite_inspection::open_inspected_snapshot;
-        let (snapshot, inspected) = open_inspected_snapshot(
-            std::path::Path::new(&path), &password
-        ).map_err(|error| format!("SQLite inspection rejected: {error:?}"))?;
+        let (snapshot, inspected) = open_inspected_snapshot(std::path::Path::new(&path), &password)
+            .map_err(|error| format!("SQLite inspection rejected: {error:?}"))?;
         let mapping = assess_registered_alpha_mapping(&snapshot, &inspected)?;
         Ok::<_, String>((inspected, mapping))
     })

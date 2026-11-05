@@ -17,6 +17,8 @@ function verify(records) {
       const key = keyFor(category, row);
       if (!key || seen.has(key)) throw new Error("Duplicate " + category + " identity");
       seen.add(key);
+      const allowed = category === "hosts" ? ["hostId","ownerId"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot"];
+      if (Object.keys(row).sort().join("|") !== allowed.sort().join("|")) throw new Error("Unexpected record fields");
       const required = category === "hosts" ? ["hostId", "ownerId"]
         : category === "effects" ? ["hostId", "effectId"]
         : category === "hostJobs" ? ["jobId", "hostId", "effectId", "requestedBy"]

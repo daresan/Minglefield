@@ -11,3 +11,4 @@ else
   echo "AGENTS security check ERROR: Python interpreter not found" >&2
   exit 1
 fi
+python "$repo/scripts/check_documentation_security.py"

@@ -1,13 +1,13 @@
 import { validateDestinationPassword } from "./database-password-policy.js";
 
 export function selectTemporaryCopyCredentials({
-  newPassword, confirmation, existingSourcePassword, rehearsalSourcePassword
+  newPassword, confirmation, existingSourcePassword
 }) {
   const policy = validateDestinationPassword(newPassword, confirmation);
   if (!policy.valid) throw new Error("Step 3: " + policy.message);
   return {
     newPassword,
-    existingPassword: rehearsalSourcePassword || existingSourcePassword
+    existingPassword: existingSourcePassword
   };
 }
 

@@ -37,8 +37,6 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <label for="migration-destination-path">Proposed new encrypted database file (absolute path)</label>
 <input id="migration-destination-path" spellcheck="false" placeholder="Choose a new filename in this or another existing directory" />
 <button id="browse-migration-destination" type="button" class="secondary">Choose destination folder</button>
-<label for="migration-existing-password">Existing database password (enter again for the independent verification)</label>
-<input id="migration-existing-password" type="password" autocomplete="off" spellcheck="false" />
 <button id="preview-migration-rehearsal" type="button">Verify migration rehearsal (no writes)</button>
 <div id="migration-field-coverage" aria-label="Verified database column coverage" role="region"><p class="help">Column-level coverage appears here after a successful rehearsal. Only schema names, never row contents, are shown.</p></div>
 <pre id="migration-rehearsal-result" role="status" aria-live="polite">No migration rehearsal completed.</pre>

@@ -39,21 +39,16 @@ test("rejects unfinished cleanup, partial checks, stale source or a persistent d
 test("reuses the existing Step 3 password and never includes confirmation in the request", () => {
   const credentials = selectTemporaryCopyCredentials({
     newPassword: "NewDestination9!", confirmation: "NewDestination9!",
-    existingSourcePassword: "ExistingKey1!", rehearsalSourcePassword: ""
+    existingSourcePassword: "ExistingKey1!"
   });
   assert.deepEqual(credentials, { newPassword: "NewDestination9!", existingPassword: "ExistingKey1!" });
-  const replacement = selectTemporaryCopyCredentials({
-    newPassword: "NewDestination9!", confirmation: "NewDestination9!",
-    existingSourcePassword: "ExistingKey1!", rehearsalSourcePassword: "ReenteredKey1!"
-  });
-  assert.equal(replacement.existingPassword, "ReenteredKey1!");
   assert.throws(() => selectTemporaryCopyCredentials({
     newPassword: "weak", confirmation: "weak",
-    existingSourcePassword: "", rehearsalSourcePassword: ""
+    existingSourcePassword: ""
   }), /Step 3/);
   assert.throws(() => selectTemporaryCopyCredentials({
     newPassword: "NewDestination9!", confirmation: "Different9!",
-    existingSourcePassword: "", rehearsalSourcePassword: ""
+    existingSourcePassword: ""
   }), /confirmation/);
 });
 
@@ -62,6 +57,7 @@ test("GUI has exactly one new destination password and one confirmation on Step 
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   assert.equal((html.match(/id="new-db-password"/g) ?? []).length, 1);
   assert.equal((html.match(/id="confirm-db-password"/g) ?? []).length, 1);
+  assert.equal(html.includes('id="migration-existing-password"'), false);
   assert.equal(html.includes('id="temporary-sqlcipher-password"'), false);
   assert.equal(html.includes('id="temporary-sqlcipher-confirm"'), false);
 });

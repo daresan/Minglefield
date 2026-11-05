@@ -252,7 +252,9 @@ function updateNewDatabasePasswordStatus() {
 
 newDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
 confirmDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
+existingDbPassword.addEventListener("input", () => resetAlphaUserReview());
 window.addEventListener("pagehide", () => {
+  retainedSourceUnlockPassword = "";
   existingDbPassword.value = "";
   newDbPassword.value = "";
   confirmDbPassword.value = "";
@@ -287,6 +289,7 @@ document.querySelector("#browse-database").addEventListener("click", async () =>
 });
 let selectedDatabase = null;
 let lastDatabaseInspection = null;
+let retainedSourceUnlockPassword = "";
 let originalAlphaUsers = null;
 let editedAlphaUsers = null;
 let inspectedAlphaJobs = null;
@@ -313,6 +316,7 @@ function invalidateMigrationRehearsal() {
 }
 function resetAlphaUserReview() {
   reviewRequestSequence += 1;
+  retainedSourceUnlockPassword = "";
   invalidateMigrationRehearsal();
   originalAlphaUsers = null;
   editedAlphaUsers = null;
@@ -694,6 +698,7 @@ async function inspectSelectedSqlite() {
       invoke("inspect_legacy_records", { path, password: unlockPassword })
     ]);
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
+    retainedSourceUnlockPassword = unlockPassword;
     try {
       if (results[0].status === "fulfilled") {
         originalAlphaUsers = createAlphaUserReview(results[0].value);
@@ -732,6 +737,7 @@ async function inspectSelectedSqlite() {
       reviewLoadIssues.length + " warning(s). Migration and installation remain disabled.";
   } catch (error) {
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
+    retainedSourceUnlockPassword = "";
     output.textContent = "Database inspection could not be completed. Check the selected file and existing database unlock password. " + String(error);
   }
 }
@@ -764,7 +770,6 @@ function renderFieldCoverage(summary) {
 }
 
 const migrationDestinationInput = document.querySelector("#migration-destination-path");
-const migrationPasswordInput = document.querySelector("#migration-existing-password");
 const migrationResult = document.querySelector("#migration-rehearsal-result");
 
 migrationDestinationInput.addEventListener("input", invalidateMigrationRehearsal);
@@ -799,11 +804,10 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
     const corrections = stagedMigrationChanges(
       originalAlphaUsers, editedAlphaUsers, originalLegacyRecords, editedLegacyRecords, reviewLoadIssues
     );
-    const password = migrationPasswordInput.value;
+    const password = retainedSourceUnlockPassword;
     const request = invoke("preview_migration_rehearsal", {
       sourcePath: source, destinationPath, password, corrections
     });
-    migrationPasswordInput.value = "";
     const preview = await request;
     if (requestSequence !== rehearsalRequestSequence || selectedDatabase !== source) return;
     if (preview.executionEnabled || preview.destinationCreated ||
@@ -832,15 +836,13 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
     migrationResult.textContent = "Migration rehearsal rejected: " + String(error);
     document.querySelector("#review-migration-rehearsal-status").textContent =
       "Migration rehearsal rejected. Migration execution remains disabled.";
-  } finally {
-    migrationPasswordInput.value = "";
   }
 });
 
 const tempDiskResult = document.querySelector("#temporary-sqlcipher-result");
 // The two page-3 fields are the single source of the NEW destination password.
 // Changing either invalidates a previously verified temporary disk proof.
-for (const entry of [newDbPassword, confirmDbPassword, existingDbPassword, migrationPasswordInput]) {
+for (const entry of [newDbPassword, confirmDbPassword, existingDbPassword]) {
   entry.addEventListener("input", () => {
     temporaryEncryptedRequestSequence += 1;
     lastTemporaryEncryptedProof = null;
@@ -868,14 +870,12 @@ document.querySelector("#verify-temporary-sqlcipher").addEventListener("click", 
     const credentials = selectTemporaryCopyCredentials({
       newPassword: newDbPassword.value,
       confirmation: confirmDbPassword.value,
-      existingSourcePassword: existingDbPassword.value,
-      rehearsalSourcePassword: migrationPasswordInput.value
+      existingSourcePassword: retainedSourceUnlockPassword
     });
     const request = invoke("verify_temporary_encrypted_copy", {
       sourcePath: source, destinationPath,
       ...credentials, corrections
     });
-    migrationPasswordInput.value = "";
     const raw = await request;
     if (requestSequence !== temporaryEncryptedRequestSequence || selectedDatabase !== source) return;
     lastTemporaryEncryptedProof = assessTemporaryDiskCopy(raw, lastMigrationRehearsal);
@@ -883,8 +883,6 @@ document.querySelector("#verify-temporary-sqlcipher").addEventListener("click", 
   } catch (error) {
     if (requestSequence !== temporaryEncryptedRequestSequence) return;
     tempDiskResult.textContent = "Temporary encrypted disk-copy test rejected: " + String(error);
-  } finally {
-    migrationPasswordInput.value = "";
   }
 });
 

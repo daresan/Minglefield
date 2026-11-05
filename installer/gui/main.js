@@ -319,6 +319,43 @@ function renderAlphaUsers() {
 
 
 
+function renderAlphaAgents() {
+  if (!editedLegacyRecords) return;
+  const root = document.querySelector("#data-fields-login");
+  const title = document.createElement("h4");
+  title.textContent = "Agents (" + editedLegacyRecords.agents.length + ")";
+  root.append(title);
+  for (const agent of editedLegacyRecords.agents) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.style.width = "auto";
+    checkbox.checked = agent.disabled;
+    checkbox.addEventListener("change", () => {
+      try {
+        editedLegacyRecords = stageLegacyToggle(editedLegacyRecords, "agents",
+          agent.agentId, "disabled", checkbox.checked);
+        invalidateMigrationRehearsal();
+        updateReviewSummary();
+      } catch (error) {
+        checkbox.checked = editedLegacyRecords.agents.find(
+          item => item.agentId === agent.agentId).disabled;
+        document.querySelector("#data-editor-status").textContent = String(error);
+      }
+    });
+    label.append(checkbox, document.createTextNode(
+      " Disabled — " + agent.agentId + " / Owner " + agent.userId
+    ));
+    root.append(label);
+  }
+  if (editedLegacyRecords.unavailable.some(
+    value => value.startsWith("alpha_agents:"))) {
+    const note = document.createElement("p");
+    note.textContent = "Alpha agent table is absent in this database.";
+    root.append(note);
+  }
+}
+
 function renderJobRecords() {
   const root = document.querySelector("#data-fields-jobs");
   root.replaceChildren();
@@ -594,6 +631,7 @@ async function inspectSelectedSqlite() {
       reviewLoadIssues.push("Hosts / Effects / Jobs / Games: " + String(error));
     }
     renderAlphaUsers();
+    renderAlphaAgents();
     renderLegacyRecords();
     renderJobRecords();
     updateReviewSummary();

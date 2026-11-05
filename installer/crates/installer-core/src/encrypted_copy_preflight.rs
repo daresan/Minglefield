@@ -36,7 +36,10 @@ impl PrivateTempDir {
                 .query_row("SELECT lower(hex(randomblob(16)))", [], |r| r.get(0))
                 .map_err(|_| "Cannot choose private staging identifier")?;
             let path = std::env::temp_dir().join(format!("minglefield-stage-{id}"));
+            #[cfg(unix)]
             let mut builder = fs::DirBuilder::new();
+            #[cfg(not(unix))]
+            let builder = fs::DirBuilder::new();
             #[cfg(unix)]
             {
                 use std::os::unix::fs::DirBuilderExt;

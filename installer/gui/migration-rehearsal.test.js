@@ -7,7 +7,7 @@ const legacy = () => ({
   hosts: [{ hostId: "host1", ownerId: "alice" }],
   effects: [{ hostId: "host1", effectId: "effect1", description: "Old", enabled: false }],
   hostJobs: [{ jobId: "job1", hostId: "host1", effectId: "effect1", requestedBy: "alice", state: "queued" }],
-  games: [{ projectId: "game1", hostId: "host1", ownerId: "alice", name: "Old game", repositoryRoot: "/games/one" }],
+  games: [{ projectId: "game1", hostId: "host1", ownerId: "alice", name: "Old game", repositoryRoot: "/games/one", jobAttachmentsRoot: "/games/one/attachments", outputRoot: "/games/one/output", settingsRevision: 1 }],
   unavailable: []
 });
 
@@ -48,4 +48,20 @@ test("refuses incomplete reader state and any read-only field changes", () => {
 
 test("produces a valid no-change rehearsal on a complete review", () => {
   assert.deepEqual(stagedMigrationChanges(alpha(), alpha(), legacy(), legacy(), []), []);
+});
+
+test("maps additional safe fields to typed rehearsal changes", () => {
+  const before = legacy();
+  const after = legacy();
+  after.effects[0].enabled = true;
+  after.games[0].repositoryRoot = "/new/project";
+  after.games[0].jobAttachmentsRoot = "/new/attachments";
+  after.games[0].outputRoot = "/new/output";
+  const changes = stagedMigrationChanges(alpha(), alpha(), before, after, []);
+  assert.deepEqual(changes, [
+    {kind: "effect_enabled", host_id: "host1", effect_id: "effect1", before: false, after: true},
+    {kind: "game_path", project_id: "game1", field: "repository_root", before: "/games/one", after: "/new/project"},
+    {kind: "game_path", project_id: "game1", field: "job_attachments_root", before: "/games/one/attachments", after: "/new/attachments"},
+    {kind: "game_path", project_id: "game1", field: "output_root", before: "/games/one/output", after: "/new/output"}
+  ]);
 });

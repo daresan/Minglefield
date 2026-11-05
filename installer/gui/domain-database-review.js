@@ -57,7 +57,7 @@ export function renderDomainDatabaseReview(doc, getReview, onEdit, onError) {
       }
       renderFullDatabaseTable(content, table,
         (rowIndex, column, kind, value) => onEdit(table.name, rowIndex, column, kind, value),
-        onError);
+        onError, doc);
     });
     root.append(note, selectorLabel, content);
     selector.value = tables[0].name;
@@ -65,7 +65,7 @@ export function renderDomainDatabaseReview(doc, getReview, onEdit, onError) {
     const first = getReview()?.tables.find(item => item.name === selector.value);
     renderFullDatabaseTable(content, first,
       (rowIndex, column, kind, value) => onEdit(first.name, rowIndex, column, kind, value),
-      onError);
+      onError, doc);
   }
   if (groups && accounted !== review.tables.length) {
     throw new Error("Not all SQLite tables were assigned a review category");

@@ -16,6 +16,7 @@ pub mod publisher;
 pub mod release_source;
 pub mod schema_compatibility;
 pub mod schema_versions;
+pub mod snapshot_fidelity;
 pub mod sqlite_inspection;
 
 use std::path::{Component, Path};

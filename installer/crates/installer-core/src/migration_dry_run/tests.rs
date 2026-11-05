@@ -62,6 +62,9 @@ fn reviews_all_tables_and_rolls_back_every_staged_change() {
     let bytes = std::fs::read(&file).unwrap();
     let preview = rehearse_migration(&file, "", &changes()).unwrap();
     assert_eq!(preview.verified_changes, 3);
+    assert!(preview.fidelity.values_verified);
+    assert_eq!(preview.fidelity.tables_checked, 11);
+    assert_eq!(preview.fidelity.rows_checked, 7);
     assert_eq!(preview.tables.len(), 11);
     assert_eq!(preview.field_coverage.len(), preview.tables.len());
     let games = preview
@@ -208,6 +211,8 @@ fn permits_no_change_rehearsal_and_never_creates_destination() {
     let preview = rehearse_migration(&file, "", &[]).unwrap();
     assert_eq!(preview.verified_changes, 0);
     assert_eq!(preview.tables.len(), 11);
+    assert!(preview.fidelity.values_verified);
+    assert_eq!(preview.fidelity.internal_tables_checked, 0);
     assert!(!preview.execution_enabled);
     std::fs::remove_file(file).unwrap();
 }

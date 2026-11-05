@@ -204,6 +204,12 @@ pub struct MigrationRehearsalPreview {
     preserved_tables: Vec<TableCountPreview>,
     field_coverage: Vec<TableFieldCoveragePreview>,
     schema_object_count: usize,
+    full_data_copy_verified: bool,
+    verified_row_count: u64,
+    verified_table_count: usize,
+    verified_schema_entry_count: usize,
+    verified_internal_table_count: usize,
+    encrypted_destination_verified: bool,
     execution_enabled: bool,
 }
 
@@ -250,6 +256,12 @@ pub async fn preview_migration_rehearsal(
                 })
                 .collect(),
             schema_object_count: inspected.schema_objects,
+            full_data_copy_verified: inspected.fidelity.values_verified,
+            verified_row_count: inspected.fidelity.rows_checked,
+            verified_table_count: inspected.fidelity.tables_checked,
+            verified_schema_entry_count: inspected.fidelity.schema_entries_checked,
+            verified_internal_table_count: inspected.fidelity.internal_tables_checked,
+            encrypted_destination_verified: false,
             execution_enabled: false,
         })
     })

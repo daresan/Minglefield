@@ -1,6 +1,7 @@
 //! Verified, non-persistent migration rehearsal on a consistent SQLite snapshot.
 //! This never writes source records or creates the target SQLCipher database.
 use crate::sqlite_inspection::{open_inspected_snapshot, SqliteInspection};
+use crate::snapshot_fidelity::{create_verified_memory_copy, verify_snapshot_equality, SnapshotFidelity};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -149,6 +150,7 @@ pub struct MigrationDryRun {
     pub tables: Vec<TableRowCount>,
     pub field_coverage: Vec<TableFieldCoverage>,
     pub schema_objects: usize,
+    pub fidelity: SnapshotFidelity,
     pub verified_changes: usize,
     pub source_records_written: bool,
     pub destination_created: bool,
@@ -549,13 +551,14 @@ pub fn rehearse_migration(
     if corrections.len() > 1500 {
         return Err("Too many staged corrections".to_owned());
     }
-    let (mut snapshot_db, inspection) = open_inspected_snapshot(source, existing_password)
+    let (snapshot_db, inspection) = open_inspected_snapshot(source, existing_password)
         .map_err(|_| "Selected database could not be verified")?;
     if !inspection.integrity_ok || inspection.foreign_key_violations != 0 {
         return Err("Database integrity or foreign-key validation failed".to_owned());
     }
     validate_alpha_schema(&inspection)?;
     let original_counts = table_counts(&snapshot_db, &inspection)?;
+    let (mut rehearsal_db, before_fidelity) = create_verified_memory_copy(&snapshot_db)?;
     let mut identities = BTreeSet::new();
     for correction in corrections {
         let identity = verify_correction(correction)?;
@@ -572,7 +575,7 @@ pub fn rehearse_migration(
         return Err("Database triggers require individual migration review".to_owned());
     }
     if !corrections.is_empty() {
-        let transaction = snapshot_db
+        let transaction = rehearsal_db
             .transaction()
             .map_err(|_| "Cannot begin isolated migration rehearsal")?;
         for correction in corrections {
@@ -600,10 +603,15 @@ pub fn rehearse_migration(
             .rollback()
             .map_err(|_| "Rehearsal rollback failed")?;
     }
+    let fidelity = verify_snapshot_equality(&snapshot_db, &rehearsal_db)?;
+    if fidelity != before_fidelity {
+        return Err("Temporary migration rehearsal failed to restore all original data".to_owned());
+    }
     Ok(MigrationDryRun {
         tables: original_counts,
         field_coverage: field_coverage(&inspection),
         schema_objects: inspection.schema_objects.len(),
+        fidelity,
         verified_changes: corrections.len(),
         source_records_written: false,
         destination_created: false,

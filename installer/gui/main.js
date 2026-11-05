@@ -158,6 +158,11 @@ document.querySelector("#preview").addEventListener("click", async () => {
             (sum, entry) => sum + entry.protectedColumns.length, 0
           ),
           schemaObjectCount: lastMigrationRehearsal.schemaObjectCount,
+          fullDataCopyVerified: lastMigrationRehearsal.fullDataCopyVerified,
+          verifiedRowCount: lastMigrationRehearsal.verifiedRowCount,
+          verifiedTableCount: lastMigrationRehearsal.verifiedTableCount,
+          verifiedSchemaEntryCount: lastMigrationRehearsal.verifiedSchemaEntryCount,
+          encryptedDestinationVerified: false,
           proposedDestination: lastMigrationRehearsal.destinationPath,
           sourcePreserved: lastMigrationRehearsal.sourcePreserved,
           destinationCreated: false,
@@ -777,7 +782,10 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
     const preview = await request;
     if (requestSequence !== rehearsalRequestSequence || selectedDatabase !== source) return;
     if (preview.executionEnabled || preview.destinationCreated ||
-        !preview.sourcePreserved || !preview.sourceIntegrityVerified) {
+        !preview.sourcePreserved || !preview.sourceIntegrityVerified ||
+        preview.fullDataCopyVerified !== true || preview.encryptedDestinationVerified !== false ||
+        !Number.isSafeInteger(preview.verifiedRowCount) ||
+        preview.verifiedTableCount < preview.preservedTables.length) {
       throw new Error("Unexpected unsafe migration rehearsal result");
     }
     const coverage = assessFieldCoverage(preview.fieldCoverage, preview.preservedTables);
@@ -790,7 +798,9 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
       preview.fieldCoverage.reduce((sum, entry) => sum + entry.columns.length, 0) +
       " columns inventoried (" +
       preview.fieldCoverage.reduce((sum, entry) => sum + entry.protectedColumns.length, 0) +
-      " protected). Source preserved; no destination created. Migration execution disabled.";
+      " protected). Full in-memory copy verified for " + preview.verifiedRowCount +
+      " rows across " + preview.verifiedTableCount + " tables. No encrypted destination created. " +
+      "Migration execution disabled.";
   } catch (error) {
     if (requestSequence !== rehearsalRequestSequence) return;
     document.querySelector("#migration-field-coverage").replaceChildren();

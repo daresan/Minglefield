@@ -164,3 +164,37 @@ Regression suite: `cargo test --workspace --locked`,
 `cargo test --manifest-path gui/src-tauri/Cargo.toml --locked`,
 and `cd gui && node --test`. CI must pass on all three operating systems
 before triggering the milestone-only portable packaging workflow.
+
+## Complete in-memory data-fidelity gate (next milestone)
+
+After the existing SQLite integrity, Alpha-schema and per-column review, the
+installer now creates **a second independent, disposable in-memory copy**
+using SQLite's backup API. Its Rust fidelity gate checks:
+- source-versus-copy schema objects, indexed constraints, triggers and views,
+  plus application ID, user version and encoding;
+- every SQL table, **including sqlite_sequence and any extension tables**;
+- complete row values, including arbitrary BLOBs, with a typed SHA-256
+  fingerprint for each row and a multiplicity-sensitive multiset comparison
+  that detects changed duplicate records even if table row counts match;
+- source and staged-copy integrity and foreign-key constraints.
+No per-record fingerprints, BLOBs, passwords, session tokens or raw values are
+returned in the GUI response or logs.
+
+Only after this full equality check does the dry-run apply allowlisted staged
+corrections to the **second in-memory copy**. It checks table counts, integrity
+and foreign keys, rolls back the transaction, and repeats the complete
+content/schema comparison. The source snapshot itself is no longer used as
+the staging transaction target. Rehearsal errors do not create partial
+destination files. The GUI now includes full-data-copy verification and the
+checked row/table/schema counts in the final preview.
+
+This is a strong **in-memory data fidelity rehearsal**, not an encrypted SQLCipher
+output and not a production migration. The response explicitly sets
+`encryptedDestinationVerified=false`, `destinationCreated=false` and
+`executionEnabled=false`. The future encrypted executor still requires
+exclusive target creation, a strong confirmed password for **every new
+installation**, integrity and content checks after reopening the encrypted
+file, schema-version rules, failure cleanup/rollback, and operator acceptance.
+The fidelity implementation currently refuses tables exceeding 1,000,000
+rows, tables exceeding 1024 columns, or individual encoded rows over 128 MiB,
+rather than silently checking only part of the data.

@@ -67,3 +67,19 @@ test("maps additional safe fields to typed rehearsal changes", () => {
     {kind: "game_path", project_id: "game1", field: "output_root", before: "/games/one/output", after: "/new/output"}
   ]);
 });
+
+test("preserves agent ownership when staging disabled-state migration", () => {
+  const before = legacy();
+  const after = legacy();
+  after.agents[0].disabled = true;
+  assert.deepEqual(stagedMigrationChanges(alpha(), alpha(), before, after, []), [
+    {kind: "agent_disabled", agent_id: "agent1", user_id: "alice",
+      before: false, after: true}
+  ]);
+  const alteredOwner = legacy();
+  alteredOwner.agents[0].userId = "mallory";
+  assert.throws(
+    () => stagedMigrationChanges(alpha(), alpha(), before, alteredOwner, []),
+    /Read-only field changed/
+  );
+});

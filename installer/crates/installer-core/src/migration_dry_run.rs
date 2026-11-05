@@ -593,15 +593,21 @@ pub(crate) fn apply_staged_to_isolated_copy(
         return Err("Rehearsed database is not integral".to_owned());
     }
     let violations: i64 = transaction
-        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| row.get(0))
+        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })
         .map_err(|_| "Rehearsed foreign-key check failed")?;
     if violations != 0 {
         return Err("Rehearsed database has foreign-key violations".to_owned());
     }
     if commit_to_isolated_copy {
-        transaction.commit().map_err(|_| "Cannot retain edits in isolated memory copy".to_owned())?;
+        transaction
+            .commit()
+            .map_err(|_| "Cannot retain edits in isolated memory copy".to_owned())?;
     } else {
-        transaction.rollback().map_err(|_| "Rehearsal rollback failed".to_owned())?;
+        transaction
+            .rollback()
+            .map_err(|_| "Rehearsal rollback failed".to_owned())?;
     }
     Ok(())
 }
@@ -632,7 +638,11 @@ pub fn rehearse_migration(
     let (mut rehearsal_db, before_fidelity) =
         create_verified_memory_copy(&snapshot_db, snapshot_key)?;
     apply_staged_to_isolated_copy(
-        &mut rehearsal_db, &inspection, &original_counts, corrections, false,
+        &mut rehearsal_db,
+        &inspection,
+        &original_counts,
+        corrections,
+        false,
     )?;
     let fidelity = verify_snapshot_equality(&snapshot_db, &rehearsal_db)?;
     if fidelity != before_fidelity {

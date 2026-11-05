@@ -147,7 +147,11 @@ pub fn rehearse_encrypted_test_copy(
         // identity, trigger and row-count policy is applied exclusively to
         // our verified second RAM copy, then retained for the disk export.
         apply_staged_to_isolated_copy(
-            &mut corrected_memory, &inspection, &original_counts, corrections, true,
+            &mut corrected_memory,
+            &inspection,
+            &original_counts,
+            corrections,
+            true,
         )?;
     }
     let private = PrivateTempDir::create(&source)?;
@@ -262,7 +266,8 @@ mod tests {
     fn encrypted_source_rekeys_to_distinct_temporary_key() {
         let path = fixture(true);
         let original = fs::read(&path).unwrap();
-        let result = rehearse_encrypted_test_copy(&path, "ExistingKey9!", "NewKey123!", &[]).unwrap();
+        let result =
+            rehearse_encrypted_test_copy(&path, "ExistingKey9!", "NewKey123!", &[]).unwrap();
         assert!(result.full_disk_copy_verified);
         assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_file(path).unwrap();
@@ -325,20 +330,29 @@ mod tests {
         use crate::migration_dry_run::{GamePathField, GitProfileField};
         vec![
             ReviewCorrection::UserDisabled {
-                user_id: "alice".into(), before: false, after: true,
+                user_id: "alice".into(),
+                before: false,
+                after: true,
             },
             ReviewCorrection::EffectDescription {
-                host_id: "h1".into(), effect_id: "e1".into(),
-                before: "Original effect".into(), after: "Updated effect".into(),
+                host_id: "h1".into(),
+                effect_id: "e1".into(),
+                before: "Original effect".into(),
+                after: "Updated effect".into(),
             },
             ReviewCorrection::GamePath {
-                project_id: "g1".into(), field: GamePathField::RepositoryRoot,
-                before: "/tmp/game".into(), after: "/tmp/updated-game".into(),
+                project_id: "g1".into(),
+                field: GamePathField::RepositoryRoot,
+                before: "/tmp/game".into(),
+                after: "/tmp/updated-game".into(),
             },
             ReviewCorrection::GitProfileText {
-                host_id: "h1".into(), profile_id: "p1".into(), owner_id: "alice".into(),
+                host_id: "h1".into(),
+                profile_id: "p1".into(),
+                owner_id: "alice".into(),
                 field: GitProfileField::AuthorName,
-                before: "Alice".into(), after: "Alice Changed".into(),
+                before: "Alice".into(),
+                after: "Alice Changed".into(),
             },
         ]
     }
@@ -374,5 +388,4 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), before);
         fs::remove_file(path).unwrap();
     }
-
 }

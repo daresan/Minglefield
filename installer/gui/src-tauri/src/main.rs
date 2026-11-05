@@ -178,7 +178,38 @@ struct SqliteInspectionPreview {
     user_version: i64,
     tables: Vec<SqliteTablePreview>,
     schema_objects: Vec<SqliteSchemaObjectPreview>,
+    registered_mapping: RegisteredAlphaMappingPreview,
     migration_enabled: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RegisteredAlphaMappingPreview {
+    recognized: bool,
+    reason: &'static str,
+    matched_table_count: usize,
+    matched_column_count: usize,
+    missing_tables: Vec<String>,
+    incompatible_tables: Vec<String>,
+    extension_tables: Vec<String>,
+    migration_enabled: bool,
+}
+
+impl From<minglefield_installer_core::legacy_alpha_mapping::LegacyAlphaMapping>
+    for RegisteredAlphaMappingPreview
+{
+    fn from(value: minglefield_installer_core::legacy_alpha_mapping::LegacyAlphaMapping) -> Self {
+        Self {
+            recognized: value.recognized,
+            reason: value.reason,
+            matched_table_count: value.matched_table_count,
+            matched_column_count: value.matched_column_count,
+            missing_tables: value.missing_tables,
+            incompatible_tables: value.incompatible_tables,
+            extension_tables: value.extension_tables,
+            migration_enabled: false,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -202,17 +233,19 @@ async fn inspect_sqlite_database(
     path: String,
     password: String,
 ) -> Result<SqliteInspectionPreview, String> {
-    let inspection = tauri::async_runtime::spawn_blocking(move || {
-        minglefield_installer_core::sqlite_inspection::inspect_sqlite_with_password(
-            std::path::Path::new(&path),
-            &password,
-        )
+    let (inspection, registered_mapping) = tauri::async_runtime::spawn_blocking(move || {
+        use minglefield_installer_core::legacy_alpha_mapping::assess_registered_alpha_mapping;
+        use minglefield_installer_core::sqlite_inspection::open_inspected_snapshot;
+        let (snapshot, inspected) = open_inspected_snapshot(
+            std::path::Path::new(&path), &password
+        ).map_err(|error| format!("SQLite inspection rejected: {error:?}"))?;
+        let mapping = assess_registered_alpha_mapping(&snapshot, &inspected)?;
+        Ok::<_, String>((inspected, mapping))
     })
     .await
-    .map_err(|_| "SQLite inspection task failed".to_owned())?
-    .map_err(|error| format!("SQLite inspection rejected: {error:?}"))?;
+    .map_err(|_| "SQLite inspection task failed".to_owned())??;
     Ok(SqliteInspectionPreview {
-        status: "sqlite_integrity_verified_schema_unclassified",
+        status: "sqlite_integrity_verified_registered_alpha_mapping_checked",
         integrity_ok: inspection.integrity_ok,
         foreign_key_violations: inspection.foreign_key_violations,
         foreign_keys_ok: inspection.foreign_key_violations == 0,
@@ -237,6 +270,7 @@ async fn inspect_sqlite_database(
                 create_sql: item.create_sql,
             })
             .collect(),
+        registered_mapping: registered_mapping.into(),
         migration_enabled: false,
     })
 }

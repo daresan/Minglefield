@@ -33,8 +33,36 @@ export function assessLegacyAlphaSchema(inspection) {
     return { recognized: false, reason: "required_alpha_tables_missing", missing,
       migrationEnabled: false };
   }
-  // The presence of expected names alone is not a verified schema fingerprint:
-  // column signatures, constraints and object definitions must be checked in Rust.
-  return { recognized: false, reason: "alpha_table_family_detected_schema_mapping_pending",
-    matchedTableCount: ALPHA_REQUIRED_TABLES.length, migrationEnabled: false };
+  // Registered signatures are verified in Rust against SQLite PRAGMA
+  // table_xinfo on a consistent snapshot. Never infer them from table names.
+  const registered = inspection.registeredMapping;
+  if (!registered || registered.migrationEnabled !== false ||
+      typeof registered.reason !== "string" ||
+      !Number.isSafeInteger(registered.matchedTableCount) ||
+      !Number.isSafeInteger(registered.matchedColumnCount) ||
+      !Array.isArray(registered.missingTables) ||
+      !Array.isArray(registered.incompatibleTables) ||
+      !Array.isArray(registered.extensionTables)) {
+    return { recognized: false, reason: "registered_schema_mapping_unavailable",
+      migrationEnabled: false };
+  }
+  if (registered.recognized !== true ||
+      registered.matchedTableCount !== ALPHA_REQUIRED_TABLES.length ||
+      registered.matchedColumnCount !== 111 ||
+      registered.missingTables.length || registered.incompatibleTables.length ||
+      registered.extensionTables.length) {
+    return { recognized: false, reason: registered.reason,
+      matchedTableCount: registered.matchedTableCount,
+      matchedColumnCount: registered.matchedColumnCount,
+      missingTables: registered.missingTables,
+      incompatibleTables: registered.incompatibleTables,
+      extensionTables: registered.extensionTables, migrationEnabled: false };
+  }
+  // A structural contract is not yet a durable migration or operational
+  // SQLCipher runtime. This result must never set migrationEnabled=true.
+  return { recognized: true, reason: "registered_alpha_column_signatures_verified",
+    matchedTableCount: registered.matchedTableCount,
+    matchedColumnCount: registered.matchedColumnCount,
+    migrationEnabled: false };
+
 }

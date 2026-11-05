@@ -10,6 +10,7 @@ pub mod discovery;
 pub mod encrypted_copy_preflight;
 pub mod git_tools_v2;
 pub mod integrity;
+pub mod legacy_alpha_mapping;
 pub mod manifest;
 pub mod migration_destination;
 pub mod migration_dry_run;

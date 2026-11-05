@@ -288,6 +288,110 @@ function renderAlphaUsers() {
 
 
 
+function renderJobRecords() {
+  const root = document.querySelector("#data-fields-jobs");
+  root.replaceChildren();
+  if (inspectedAlphaJobs) {
+    const title = document.createElement("h4");
+    title.textContent = "Alpha jobs (" + inspectedAlphaJobs.length + ")";
+    root.append(title);
+    for (const job of inspectedAlphaJobs) {
+      const line = document.createElement("p");
+      line.textContent = "Job " + job.jobId + " — User " + job.userId + " — Agent " + job.agentId;
+      root.append(line);
+    }
+  }
+  if (editedLegacyRecords) {
+    const title = document.createElement("h4");
+    title.textContent = "Host jobs (" + editedLegacyRecords.hostJobs.length + ")";
+    root.append(title);
+    for (const job of editedLegacyRecords.hostJobs) {
+      const line = document.createElement("p");
+      line.textContent = "Job " + job.jobId + " — Host " + job.hostId + " — Effect " +
+        job.effectId + " — Requester " + job.requestedBy + " — State " + job.state;
+      root.append(line);
+    }
+    if (editedLegacyRecords.unavailable.some(item => item.startsWith("sec01_host_jobs:"))) {
+      const note = document.createElement("p");
+      note.textContent = "Host jobs table is absent in this database.";
+      root.append(note);
+    }
+  }
+  if (!root.childNodes.length) root.textContent = "No verified job records loaded.";
+}
+
+function renderLegacyRecords() {
+  if (!editedLegacyRecords) return;
+  const data = editedLegacyRecords;
+  const hosts = document.querySelector("#data-fields-hosts");
+  const effects = document.querySelector("#data-fields-effects");
+  const games = document.querySelector("#data-fields-games");
+  for (const root of [hosts, effects, games]) root.replaceChildren();
+  for (const host of data.hosts) {
+    const line = document.createElement("p");
+    line.textContent = "Host " + host.hostId + " — Owner " + host.ownerId + " (read-only)";
+    hosts.append(line);
+  }
+  for (const effect of data.effects) {
+    const label = document.createElement("label");
+    label.textContent = "Host " + effect.hostId + " / Effect " + effect.effectId +
+      " — Enabled " + String(effect.enabled) + " (read-only). Description:";
+    const field = document.createElement("input");
+    field.type = "text";
+    field.maxLength = 256;
+    field.value = effect.description;
+    field.addEventListener("change", () => {
+      try {
+        editedLegacyRecords = stageLegacyText(editedLegacyRecords, "effects",
+          JSON.stringify([effect.hostId, effect.effectId]), "description", field.value);
+        updateReviewSummary();
+      } catch (error) {
+        field.value = editedLegacyRecords.effects.find(item =>
+          item.hostId === effect.hostId && item.effectId === effect.effectId).description;
+        document.querySelector("#data-editor-status").textContent = String(error);
+      }
+    });
+    label.append(field);
+    effects.append(label);
+  }
+  for (const game of data.games) {
+    const label = document.createElement("label");
+    label.textContent = "Project " + game.projectId + " — Host " + game.hostId +
+      " — Owner " + game.ownerId + " (read-only). Name:";
+    const field = document.createElement("input");
+    field.type = "text";
+    field.maxLength = 120;
+    field.value = game.name;
+    field.addEventListener("change", () => {
+      try {
+        editedLegacyRecords = stageLegacyText(editedLegacyRecords, "games", game.projectId,
+          "name", field.value);
+        field.value = editedLegacyRecords.games.find(item => item.projectId === game.projectId).name;
+        updateReviewSummary();
+      } catch (error) {
+        field.value = editedLegacyRecords.games.find(item => item.projectId === game.projectId).name;
+        document.querySelector("#data-editor-status").textContent = String(error);
+      }
+    });
+    const path = document.createElement("small");
+    path.textContent = "Repository: " + game.repositoryRoot + " (read-only)";
+    label.append(field, path);
+    games.append(label);
+  }
+  for (const [root, table, description] of [
+    [hosts, "sec01_host_owners", "hosts"],
+    [effects, "sec01_host_effect_definitions", "effects"],
+    [games, "alpha_game_projects", "game projects"]
+  ]) {
+    if (data.unavailable.some(item => item.startsWith(table + ":"))) {
+      root.textContent = "The " + table + " table is absent in this database.";
+    } else if (!root.childNodes.length) {
+      root.textContent = "No " + description + " records in this database.";
+    }
+  }
+  renderJobRecords();
+}
+
 // Review only the supported user-disabled corrections. Other categories remain
 // explicitly unavailable until their real backend record readers exist.
 function updateReviewSummary() {

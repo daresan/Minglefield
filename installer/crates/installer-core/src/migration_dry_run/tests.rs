@@ -188,20 +188,28 @@ fn rehearses_effect_activation_and_all_game_paths_without_any_source_mutation() 
     let bytes = std::fs::read(&file).unwrap();
     let changes = vec![
         ReviewCorrection::EffectEnabled {
-            host_id: "host1".into(), effect_id: "effect1".into(),
-            before: false, after: true,
+            host_id: "host1".into(),
+            effect_id: "effect1".into(),
+            before: false,
+            after: true,
         },
         ReviewCorrection::GamePath {
-            project_id: "game1".into(), field: GamePathField::RepositoryRoot,
-            before: "/games/one".into(), after: "/new/game".into(),
+            project_id: "game1".into(),
+            field: GamePathField::RepositoryRoot,
+            before: "/games/one".into(),
+            after: "/new/game".into(),
         },
         ReviewCorrection::GamePath {
-            project_id: "game1".into(), field: GamePathField::JobAttachmentsRoot,
-            before: "/games/one/attachments".into(), after: "/new/attachments".into(),
+            project_id: "game1".into(),
+            field: GamePathField::JobAttachmentsRoot,
+            before: "/games/one/attachments".into(),
+            after: "/new/attachments".into(),
         },
         ReviewCorrection::GamePath {
-            project_id: "game1".into(), field: GamePathField::OutputRoot,
-            before: "/games/one/output".into(), after: "/new/output".into(),
+            project_id: "game1".into(),
+            field: GamePathField::OutputRoot,
+            before: "/games/one/output".into(),
+            after: "/new/output".into(),
         },
     ];
     let result = rehearse_migration(&file, "", &changes).unwrap();
@@ -215,16 +223,22 @@ fn rejects_invalid_and_stale_game_paths_and_effect_activation() {
     let file = fixture();
     for change in [
         ReviewCorrection::GamePath {
-            project_id: "game1".into(), field: GamePathField::RepositoryRoot,
-            before: "/games/one".into(), after: "relative".into(),
+            project_id: "game1".into(),
+            field: GamePathField::RepositoryRoot,
+            before: "/games/one".into(),
+            after: "relative".into(),
         },
         ReviewCorrection::GamePath {
-            project_id: "game1".into(), field: GamePathField::OutputRoot,
-            before: "/stale".into(), after: "/games/updated".into(),
+            project_id: "game1".into(),
+            field: GamePathField::OutputRoot,
+            before: "/stale".into(),
+            after: "/games/updated".into(),
         },
         ReviewCorrection::EffectEnabled {
-            host_id: "host1".into(), effect_id: "effect1".into(),
-            before: true, after: false,
+            host_id: "host1".into(),
+            effect_id: "effect1".into(),
+            before: true,
+            after: false,
         },
     ] {
         assert!(rehearse_migration(&file, "", &[change]).is_err());

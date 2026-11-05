@@ -305,9 +305,7 @@ pub async fn verify_temporary_encrypted_copy(
             .map_err(|error| format!("Migration destination rejected: {error:?}"))?;
         // Check Alpha schema and rows independently before any temporary write.
         let baseline = rehearse_migration(source, &existing_password, &[])?;
-        let proof = rehearse_encrypted_test_copy(
-            source, &existing_password, &new_password
-        )?;
+        let proof = rehearse_encrypted_test_copy(source, &existing_password, &new_password)?;
         if proof.rows_checked != baseline.fidelity.rows_checked
             || proof.tables_checked != baseline.fidelity.tables_checked
             || proof.schema_entries_checked != baseline.fidelity.schema_entries_checked

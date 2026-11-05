@@ -40,6 +40,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <label for="migration-existing-password">Existing database password (enter again for the independent verification)</label>
 <input id="migration-existing-password" type="password" autocomplete="off" spellcheck="false" />
 <button id="preview-migration-rehearsal" type="button">Verify migration rehearsal (no writes)</button>
+<div id="migration-field-coverage" aria-label="Verified database column coverage" role="region"><p class="help">Column-level coverage appears here after a successful rehearsal. Only schema names, never row contents, are shown.</p></div>
 <pre id="migration-rehearsal-result" role="status" aria-live="polite">No migration rehearsal completed.</pre>
 </fieldset>
 </section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">Review the effective paths, database and security settings, then validate the combined installation and migration plan. Execution remains unavailable until the migration core is verified.</p><div class="mode" role="group" aria-label="Review categories">

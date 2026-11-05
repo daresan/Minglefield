@@ -49,7 +49,7 @@ test("supports NULL, 64-bit integers and BLOBs without JS Number precision loss"
   verifyFullCell({kind:"blob",value:"00FF"});
   assert.throws(()=>verifyFullCell({kind:"blob",value:"001"}));
   verifyFullCell({kind:"null",value:null});
-  assert.throws(()=>verifyFullCell({kind:"null",value:""});
+  assert.throws(()=>verifyFullCell({kind:"null",value:""}));
   assert.deepEqual(fullRowCorrections(source(), source()),[]);
 });
 test("rejects unverified rows, schema change and altered row identities",()=>{

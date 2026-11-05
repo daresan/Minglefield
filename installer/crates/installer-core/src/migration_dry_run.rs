@@ -434,10 +434,11 @@ fn apply_verified_change(db: &Connection, correction: &ReviewCorrection) -> Resu
                 let mut stmt = db
                     .prepare("SELECT name FROM pragma_table_xinfo(?1) ORDER BY cid")
                     .map_err(|_| "Cannot inspect staged table columns")?;
-                stmt.query_map([table], |row| row.get(0))
+                let found = stmt.query_map([table], |row| row.get(0))
                     .map_err(|_| "Cannot inspect staged table layout")?
                     .collect::<rusqlite::Result<_>>()
-                    .map_err(|_| "Cannot read staged table layout")?
+                    .map_err(|_| "Cannot read staged table layout")?;
+                found
             };
             if &expected != columns {
                 return Err("Source table schema changed since review".to_owned());

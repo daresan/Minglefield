@@ -305,19 +305,29 @@ fn rehearses_git_metadata_but_never_authentication_or_owner() {
     let before_bytes = std::fs::read(&file).unwrap();
     let corrections = vec![
         ReviewCorrection::GitProfileText {
-            host_id: "host1".into(), profile_id: "profile1".into(),
-            owner_id: "alice".into(), field: GitProfileField::Label,
-            before: "Personal".into(), after: "Updated".into(),
+            host_id: "host1".into(),
+            profile_id: "profile1".into(),
+            owner_id: "alice".into(),
+            field: GitProfileField::Label,
+            before: "Personal".into(),
+            after: "Updated".into(),
         },
         ReviewCorrection::GitProfileText {
-            host_id: "host1".into(), profile_id: "profile1".into(),
-            owner_id: "alice".into(), field: GitProfileField::AuthorEmail,
-            before: "alice@example.test".into(), after: "alice@new.example".into(),
+            host_id: "host1".into(),
+            profile_id: "profile1".into(),
+            owner_id: "alice".into(),
+            field: GitProfileField::AuthorEmail,
+            before: "alice@example.test".into(),
+            after: "alice@new.example".into(),
         },
     ];
     let preview = rehearse_migration(&file, "", &corrections).unwrap();
     assert_eq!(preview.verified_changes, 2);
-    let git = preview.field_coverage.iter().find(|entry| entry.table == "alpha_git_profiles").unwrap();
+    let git = preview
+        .field_coverage
+        .iter()
+        .find(|entry| entry.table == "alpha_git_profiles")
+        .unwrap();
     assert_eq!(git.staged_editable_columns.len(), 3);
     assert!(git.protected_columns.contains(&"auth_method".to_owned()));
     assert!(git.protected_columns.contains(&"git_executable".to_owned()));
@@ -325,19 +335,28 @@ fn rehearses_git_metadata_but_never_authentication_or_owner() {
     assert_eq!(std::fs::read(&file).unwrap(), before_bytes);
     for bad in [
         ReviewCorrection::GitProfileText {
-            host_id: "host1".into(), profile_id: "profile1".into(),
-            owner_id: "mallory".into(), field: GitProfileField::Label,
-            before: "Personal".into(), after: "Updated".into(),
+            host_id: "host1".into(),
+            profile_id: "profile1".into(),
+            owner_id: "mallory".into(),
+            field: GitProfileField::Label,
+            before: "Personal".into(),
+            after: "Updated".into(),
         },
         ReviewCorrection::GitProfileText {
-            host_id: "host1".into(), profile_id: "profile1".into(),
-            owner_id: "alice".into(), field: GitProfileField::AuthorName,
-            before: "stale".into(), after: "Updated".into(),
+            host_id: "host1".into(),
+            profile_id: "profile1".into(),
+            owner_id: "alice".into(),
+            field: GitProfileField::AuthorName,
+            before: "stale".into(),
+            after: "Updated".into(),
         },
         ReviewCorrection::GitProfileText {
-            host_id: "host1".into(), profile_id: "profile1".into(),
-            owner_id: "alice".into(), field: GitProfileField::Label,
-            before: "Personal".into(), after: "".into(),
+            host_id: "host1".into(),
+            profile_id: "profile1".into(),
+            owner_id: "alice".into(),
+            field: GitProfileField::Label,
+            before: "Personal".into(),
+            after: "".into(),
         },
     ] {
         assert!(rehearse_migration(&file, "", &[bad]).is_err());

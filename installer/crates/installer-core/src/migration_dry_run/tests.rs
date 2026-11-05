@@ -2,7 +2,10 @@ use super::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn fixture() -> std::path::PathBuf {
-    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let file = std::env::temp_dir().join(format!(
         "minglefield-rehearsal-{}-{stamp}.sqlite3",
         std::process::id()
@@ -58,7 +61,12 @@ fn reviews_all_tables_and_rolls_back_every_staged_change() {
     assert_eq!(preview.verified_changes, 3);
     assert_eq!(preview.tables.len(), 10);
     assert_eq!(
-        preview.tables.iter().find(|item| item.table == "extension_data").unwrap().rows,
+        preview
+            .tables
+            .iter()
+            .find(|item| item.table == "extension_data")
+            .unwrap()
+            .rows,
         1
     );
     assert!(!preview.execution_enabled);
@@ -66,11 +74,19 @@ fn reviews_all_tables_and_rolls_back_every_staged_change() {
     assert!(!preview.source_records_written);
     assert_eq!(std::fs::read(&file).unwrap(), bytes);
     let db = Connection::open(&file).unwrap();
-    let disabled: i64 = db.query_row("SELECT disabled FROM alpha_users", [], |r| r.get(0)).unwrap();
-    let description: String = db.query_row(
-        "SELECT description FROM sec01_host_effect_definitions", [], |r| r.get(0),
-    ).unwrap();
-    let game: String = db.query_row("SELECT name FROM alpha_game_projects", [], |r| r.get(0)).unwrap();
+    let disabled: i64 = db
+        .query_row("SELECT disabled FROM alpha_users", [], |r| r.get(0))
+        .unwrap();
+    let description: String = db
+        .query_row(
+            "SELECT description FROM sec01_host_effect_definitions",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let game: String = db
+        .query_row("SELECT name FROM alpha_game_projects", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(disabled, 0);
     assert_eq!(description, "Old description");
     assert_eq!(game, "Old game");
@@ -83,8 +99,16 @@ fn rejects_stale_user_and_game_values_without_source_edits() {
     let file = fixture();
     let bytes = std::fs::read(&file).unwrap();
     for correction in [
-        ReviewCorrection::UserDisabled { user_id: "alice".into(), before: true, after: false },
-        ReviewCorrection::GameName { project_id: "game1".into(), before: "Old".into(), after: "New".into() },
+        ReviewCorrection::UserDisabled {
+            user_id: "alice".into(),
+            before: true,
+            after: false,
+        },
+        ReviewCorrection::GameName {
+            project_id: "game1".into(),
+            before: "Old".into(),
+            after: "New".into(),
+        },
     ] {
         assert!(rehearse_migration(&file, "", &[correction]).is_err());
     }
@@ -97,12 +121,26 @@ fn rejects_duplicates_and_malformed_identity_or_name() {
     let file = fixture();
     let all = changes();
     assert!(rehearse_migration(&file, "", &[all[0].clone(), all[0].clone()]).is_err());
-    assert!(rehearse_migration(&file, "", &[ReviewCorrection::UserDisabled {
-        user_id: "../alice".into(), before: false, after: true,
-    }]).is_err());
-    assert!(rehearse_migration(&file, "", &[ReviewCorrection::GameName {
-        project_id: "game1".into(), before: "Old game".into(), after: " ".into(),
-    }]).is_err());
+    assert!(rehearse_migration(
+        &file,
+        "",
+        &[ReviewCorrection::UserDisabled {
+            user_id: "../alice".into(),
+            before: false,
+            after: true,
+        }]
+    )
+    .is_err());
+    assert!(rehearse_migration(
+        &file,
+        "",
+        &[ReviewCorrection::GameName {
+            project_id: "game1".into(),
+            before: "Old game".into(),
+            after: " ".into(),
+        }]
+    )
+    .is_err());
     std::fs::remove_file(file).unwrap();
 }
 
@@ -125,8 +163,9 @@ fn blocks_unreviewed_triggers_before_applying_changes() {
         let db = Connection::open(&file).unwrap();
         db.execute_batch(
             "CREATE TRIGGER unexpected AFTER UPDATE ON alpha_users
-             BEGIN UPDATE alpha_passwords SET salt=x'ff'; END;"
-        ).unwrap();
+             BEGIN UPDATE alpha_passwords SET salt=x'ff'; END;",
+        )
+        .unwrap();
     }
     let error = rehearse_migration(&file, "", &changes()).unwrap_err();
     assert!(error.contains("triggers"));

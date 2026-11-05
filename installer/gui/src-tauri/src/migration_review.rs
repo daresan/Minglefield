@@ -1,6 +1,8 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::migration_destination::preview_migration_destination;
-use minglefield_installer_core::migration_dry_run::{rehearse_migration, GamePathField, ReviewCorrection};
+use minglefield_installer_core::migration_dry_run::{
+    rehearse_migration, GamePathField, ReviewCorrection,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -87,12 +89,28 @@ impl From<StagedCorrection> for ReviewCorrection {
                 before,
                 after,
             },
-            StagedCorrection::EffectEnabled { host_id, effect_id, before, after } => {
-                Self::EffectEnabled { host_id, effect_id, before, after }
-            }
-            StagedCorrection::GamePath { project_id, field, before, after } => {
-                Self::GamePath { project_id, field: field.into(), before, after }
-            }
+            StagedCorrection::EffectEnabled {
+                host_id,
+                effect_id,
+                before,
+                after,
+            } => Self::EffectEnabled {
+                host_id,
+                effect_id,
+                before,
+                after,
+            },
+            StagedCorrection::GamePath {
+                project_id,
+                field,
+                before,
+                after,
+            } => Self::GamePath {
+                project_id,
+                field: field.into(),
+                before,
+                after,
+            },
         }
     }
 }

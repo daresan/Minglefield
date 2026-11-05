@@ -265,13 +265,17 @@ function resetAlphaUserReview() {
   for (const category of ["login", "hosts", "effects", "jobs", "games"]) {
     document.querySelector("#data-fields-" + category).textContent = "No verified records loaded for this category.";
   }
-  document.querySelector("#data-fields-login").replaceChildren();
+  document.querySelector("#data-editor-status").textContent =
+    "No verified records loaded. Migration remains disabled.";
   updateReviewSummary();
 }
 function renderAlphaUsers() {
   const root = document.querySelector("#data-fields-login");
   root.replaceChildren();
-  if (!editedAlphaUsers) return;
+  if (!editedAlphaUsers) {
+    root.textContent = "Alpha user records unavailable for this database. See review warnings.";
+    return;
+  }
   for (const record of editedAlphaUsers) {
     const label = document.createElement("label");
     const checkbox = document.createElement("input");

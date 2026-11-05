@@ -55,6 +55,17 @@ pub fn inspect_sqlite_with_password(
     path: &Path,
     password: &str,
 ) -> Result<SqliteInspection, InspectionError> {
+    let (_, inspection) = open_inspected_snapshot(path, password)?;
+    Ok(inspection)
+}
+
+/// Return the same transactionally consistent, integrity-checked in-memory
+/// snapshot used to inspect the schema. Callers must read records from this
+/// connection, never reopen the mutable source after validating it.
+pub fn open_inspected_snapshot(
+    path: &Path,
+    password: &str,
+) -> Result<(Connection, SqliteInspection), InspectionError> {
     let metadata = std::fs::symlink_metadata(path).map_err(|_| InspectionError::NotRegularFile)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(InspectionError::NotRegularFile);
@@ -179,14 +190,15 @@ pub fn inspect_sqlite_with_password(
         .map_err(|_| InspectionError::DatabaseError)?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|_| InspectionError::DatabaseError)?;
-    Ok(SqliteInspection {
+    drop(objects_stmt);
+    Ok((snapshot, SqliteInspection {
         application_id,
         user_version,
         tables,
         schema_objects,
         integrity_ok: true,
         foreign_key_violations,
-    })
+    }))
 }
 
 #[cfg(test)]

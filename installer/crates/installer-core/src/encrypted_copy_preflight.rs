@@ -1,5 +1,8 @@
 //! Isolated on-disk SQLCipher export rehearsal. No final destination writes.
 use crate::database_password::validate_new_database_password;
+use crate::migration_dry_run::{
+    apply_staged_to_isolated_copy, table_counts, validate_alpha_schema, ReviewCorrection,
+};
 use crate::snapshot_fidelity::{create_verified_memory_copy, verify_snapshot_equality};
 use crate::sqlite_inspection::open_inspected_snapshot;
 use rusqlite::{params, Connection, OpenFlags};
@@ -15,6 +18,8 @@ pub struct EncryptedTestCopy {
     pub ciphertext_header_verified: bool,
     pub wrong_key_rejected: bool,
     pub full_disk_copy_verified: bool,
+    pub staged_changes_verified: usize,
+    pub staged_values_match_ciphertext: bool,
     pub rows_checked: u64,
     pub tables_checked: usize,
     pub schema_entries_checked: usize,
@@ -114,6 +119,7 @@ pub fn rehearse_encrypted_test_copy(
     source_path: &Path,
     existing_password: &str,
     new_password: &str,
+    corrections: &[ReviewCorrection],
 ) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
         .map_err(|_| "A strong new SQLCipher password is required")?;
@@ -130,13 +136,23 @@ pub fn rehearse_encrypted_test_copy(
     } else {
         ""
     };
-    let (_, source_proof) = create_verified_memory_copy(&source, source_key)?;
+    let (mut corrected_memory, source_proof) = create_verified_memory_copy(&source, source_key)?;
     if !source_proof.values_verified {
         return Err("Original memory copy did not verify".into());
     }
+    if !corrections.is_empty() {
+        validate_alpha_schema(&inspection)?;
+        let original_counts = table_counts(&source, &inspection)?;
+        // Keep the source snapshot immutable. The shared stale-value,
+        // identity, trigger and row-count policy is applied exclusively to
+        // our verified second RAM copy, then retained for the disk export.
+        apply_staged_to_isolated_copy(
+            &mut corrected_memory, &inspection, &original_counts, corrections, true,
+        )?;
+    }
     let private = PrivateTempDir::create(&source)?;
     let staged = private.path.join("temporary-encrypted.sqlite3");
-    export(&source, &staged, new_password)?;
+    export(&corrected_memory, &staged, new_password)?;
     let mut header = [0_u8; 16];
     fs::File::open(&staged)
         .map_err(|_| "Cannot reopen encrypted file header")?
@@ -169,8 +185,12 @@ pub fn rehearse_encrypted_test_copy(
     reopened
         .pragma_update(None, "key", new_password)
         .map_err(|_| "Cannot unlock temporary encrypted SQLCipher file")?;
-    let fidelity = verify_snapshot_equality(&source, &reopened)?;
+    // Any changed field must survive the encryption round-trip exactly.
+    // Comparison against the unchanged source would reject legitimate edits;
+    // the independently checked corrected RAM copy is the expected target.
+    let fidelity = verify_snapshot_equality(&corrected_memory, &reopened)?;
     drop(reopened);
+    drop(corrected_memory);
     drop(source);
     private.remove()?;
     Ok(EncryptedTestCopy {
@@ -178,6 +198,8 @@ pub fn rehearse_encrypted_test_copy(
         ciphertext_header_verified: true,
         wrong_key_rejected,
         full_disk_copy_verified: fidelity.values_verified,
+        staged_changes_verified: corrections.len(),
+        staged_values_match_ciphertext: fidelity.values_verified,
         rows_checked: fidelity.rows_checked,
         tables_checked: fidelity.tables_checked,
         schema_entries_checked: fidelity.schema_entries_checked,
@@ -227,7 +249,7 @@ mod tests {
     fn plaintext_source_exports_to_encrypted_file_and_cleans() {
         let path = fixture(false);
         let original = fs::read(&path).unwrap();
-        let proof = rehearse_encrypted_test_copy(&path, "", "NewKey123!").unwrap();
+        let proof = rehearse_encrypted_test_copy(&path, "", "NewKey123!", &[]).unwrap();
         assert!(proof.full_disk_copy_verified && proof.wrong_key_rejected);
         assert!(proof.ciphertext_header_verified && proof.temporary_files_removed);
         assert_eq!(proof.tables_checked, 3);
@@ -240,7 +262,7 @@ mod tests {
     fn encrypted_source_rekeys_to_distinct_temporary_key() {
         let path = fixture(true);
         let original = fs::read(&path).unwrap();
-        let result = rehearse_encrypted_test_copy(&path, "ExistingKey9!", "NewKey123!").unwrap();
+        let result = rehearse_encrypted_test_copy(&path, "ExistingKey9!", "NewKey123!", &[]).unwrap();
         assert!(result.full_disk_copy_verified);
         assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_file(path).unwrap();
@@ -254,7 +276,7 @@ mod tests {
             ("bad-source-key", "NewKey123!"),
             ("ExistingKey9!", "ExistingKey9!"),
         ] {
-            assert!(rehearse_encrypted_test_copy(&path, existing, next).is_err());
+            assert!(rehearse_encrypted_test_copy(&path, existing, next, &[]).is_err());
             assert_eq!(fs::read(&path).unwrap(), original);
         }
         fs::remove_file(path).unwrap();

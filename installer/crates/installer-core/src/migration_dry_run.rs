@@ -174,7 +174,12 @@ fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, Strin
             }
             Ok((0, user_id.clone(), String::new()))
         }
-        ReviewCorrection::AgentDisabled { agent_id, user_id, before, after } => {
+        ReviewCorrection::AgentDisabled {
+            agent_id,
+            user_id,
+            before,
+            after,
+        } => {
             if !valid_id(agent_id) || !valid_id(user_id) || before == after {
                 return Err("Invalid Alpha agent correction".to_owned());
             }
@@ -273,11 +278,20 @@ fn apply_verified_change(db: &Connection, correction: &ReviewCorrection) -> Resu
                 return Err("Staged user was not updated in snapshot".to_owned());
             }
         }
-        ReviewCorrection::AgentDisabled { agent_id, user_id, before, after } => {
-            let actual: Option<i64> = db.query_row(
-                "SELECT disabled FROM alpha_agents WHERE agent_id=?1 AND user_id=?2",
-                params![agent_id, user_id], |r| r.get(0),
-            ).optional().map_err(|_| "Cannot verify staged Alpha agent")?;
+        ReviewCorrection::AgentDisabled {
+            agent_id,
+            user_id,
+            before,
+            after,
+        } => {
+            let actual: Option<i64> = db
+                .query_row(
+                    "SELECT disabled FROM alpha_agents WHERE agent_id=?1 AND user_id=?2",
+                    params![agent_id, user_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(|_| "Cannot verify staged Alpha agent")?;
             if actual != Some(i64::from(*before)) {
                 return Err("Staged Alpha agent status or owner is stale".to_owned());
             }
@@ -285,7 +299,9 @@ fn apply_verified_change(db: &Connection, correction: &ReviewCorrection) -> Resu
                 "UPDATE alpha_agents SET disabled=?1 WHERE agent_id=?2 AND user_id=?3 AND disabled=?4",
                 params![i64::from(*after), agent_id, user_id, i64::from(*before)],
             ).map_err(|_| "Cannot rehearse Alpha agent status")?;
-            if changed != 1 { return Err("Alpha agent rehearsal update failed".to_owned()); }
+            if changed != 1 {
+                return Err("Alpha agent rehearsal update failed".to_owned());
+            }
         }
         ReviewCorrection::EffectDescription {
             host_id,

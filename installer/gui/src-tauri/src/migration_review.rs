@@ -48,17 +48,20 @@ pub enum StagedCorrection {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StagedGamePathField {
-    RepositoryRoot,
-    JobAttachmentsRoot,
-    OutputRoot,
+    #[serde(rename = "repository_root")]
+    Repository,
+    #[serde(rename = "job_attachments_root")]
+    JobAttachments,
+    #[serde(rename = "output_root")]
+    Output,
 }
 
 impl From<StagedGamePathField> for GamePathField {
     fn from(value: StagedGamePathField) -> Self {
         match value {
-            StagedGamePathField::RepositoryRoot => Self::RepositoryRoot,
-            StagedGamePathField::JobAttachmentsRoot => Self::JobAttachmentsRoot,
-            StagedGamePathField::OutputRoot => Self::OutputRoot,
+            StagedGamePathField::Repository => Self::RepositoryRoot,
+            StagedGamePathField::JobAttachments => Self::JobAttachmentsRoot,
+            StagedGamePathField::Output => Self::OutputRoot,
         }
     }
 }

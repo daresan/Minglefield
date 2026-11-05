@@ -280,6 +280,8 @@ pub struct TemporaryEncryptedCopyPreview {
     ciphertext_header_verified: bool,
     wrong_key_rejected: bool,
     full_disk_copy_verified: bool,
+    verified_staged_changes: usize,
+    staged_values_match_ciphertext: bool,
     checked_rows: u64,
     checked_tables: usize,
     checked_schema_entries: usize,
@@ -297,16 +299,27 @@ pub async fn verify_temporary_encrypted_copy(
     destination_path: String,
     existing_password: String,
     new_password: String,
+    corrections: Vec<StagedCorrection>,
 ) -> Result<TemporaryEncryptedCopyPreview, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let source = Path::new(&source_path);
         let destination = Path::new(&destination_path);
         preview_migration_destination(source, destination)
             .map_err(|error| format!("Migration destination rejected: {error:?}"))?;
-        // Check Alpha schema and rows independently before any temporary write.
-        let baseline = rehearse_migration(source, &existing_password, &[])?;
-        let proof = rehearse_encrypted_test_copy(source, &existing_password, &new_password)?;
-        if proof.rows_checked != baseline.fidelity.rows_checked
+        // Validate the user's exact staged changes in an independent memory
+        // rehearsal before authorizing *temporary* encrypted file creation.
+        let changes: Vec<ReviewCorrection> = corrections
+            .into_iter()
+            .map(ReviewCorrection::from)
+            .collect();
+        let baseline = rehearse_migration(source, &existing_password, &changes)?;
+        let proof = rehearse_encrypted_test_copy(
+            source, &existing_password, &new_password, &changes,
+        )?;
+        if proof.staged_changes_verified != changes.len()
+            || proof.staged_changes_verified != baseline.verified_changes
+            || !proof.staged_values_match_ciphertext
+            || proof.rows_checked != baseline.fidelity.rows_checked
             || proof.tables_checked != baseline.fidelity.tables_checked
             || proof.schema_entries_checked != baseline.fidelity.schema_entries_checked
             || !proof.temporary_files_removed
@@ -324,6 +337,8 @@ pub async fn verify_temporary_encrypted_copy(
             ciphertext_header_verified: proof.ciphertext_header_verified,
             wrong_key_rejected: proof.wrong_key_rejected,
             full_disk_copy_verified: proof.full_disk_copy_verified,
+            verified_staged_changes: proof.staged_changes_verified,
+            staged_values_match_ciphertext: proof.staged_values_match_ciphertext,
             checked_rows: proof.rows_checked,
             checked_tables: proof.tables_checked,
             checked_schema_entries: proof.schema_entries_checked,

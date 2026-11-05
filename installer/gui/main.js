@@ -4,13 +4,10 @@ import { validateDestinationPassword } from "./database-password-policy.js";
 import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js";
 import { assessLegacyAlphaSchema } from "./legacy-schema.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
-import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } from "./alpha-user-review.js";
-import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections, keyFor } from "./legacy-record-review.js";
-import { stagedMigrationChanges } from "./migration-rehearsal.js";
 import { assessFieldCoverage } from "./schema-coverage.js";
-import { appendReviewTable } from "./record-review-table.js";
 import { createFullReview, stageFullCell, fullRowCorrections, fullReviewSummary } from "./full-database-review.js";
-import { renderFullDatabaseTable } from "./full-database-table.js";
+import { renderDomainDatabaseReview } from "./domain-database-review.js";
+import { groupReviewedTables } from "./database-review-categories.js";
 import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
@@ -147,10 +144,10 @@ document.querySelector("#preview").addEventListener("click", async () => {
         sourceInspected: Boolean(lastDatabaseInspection),
         schemaAssessment: lastDatabaseInspection ? assessLegacyAlphaSchema(lastDatabaseInspection) : null,
         destinationEncryptionRequired: true,
-        stagedAlphaUserCorrections: originalAlphaUsers && editedAlphaUsers
-          ? alphaUserCorrections(originalAlphaUsers, editedAlphaUsers) : [],
-        stagedEffectAndGameCorrections: originalLegacyRecords && editedLegacyRecords
-          ? legacyCorrections(originalLegacyRecords, editedLegacyRecords) : [],
+        // The five domain tabs now share the same full-row editor. Legacy
+        // correction arrays remain in the plan shape for older consumers.
+        stagedAlphaUserCorrections: [],
+        stagedEffectAndGameCorrections: [],
         stagedFullDatabaseChanges: originalFullDb && editedFullDb
           ? fullReviewSummary(stagedFullDatabaseCorrections()) : [],
         verifiedMigrationRehearsal: lastMigrationRehearsal ? {
@@ -223,7 +220,7 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
     selection.replaceChildren();
     selectedDatabase = null;
     lastDatabaseInspection = null;
-    resetAlphaUserReview();
+    resetDatabaseReview();
     for (const item of databases) {
       const label = document.createElement("label");
       const radio = document.createElement("input");
@@ -234,7 +231,7 @@ document.querySelector("#inspect-data").addEventListener("click", async () => {
       radio.addEventListener("change", () => {
         selectedDatabase = radio.value;
         lastDatabaseInspection = null;
-        resetAlphaUserReview();
+        resetDatabaseReview();
       });
       label.append(radio, document.createTextNode(" " + radio.value + " — " + item.status));
       selection.append(label);
@@ -257,7 +254,7 @@ function updateNewDatabasePasswordStatus() {
 
 newDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
 confirmDbPassword.addEventListener("input", updateNewDatabasePasswordStatus);
-existingDbPassword.addEventListener("input", () => resetAlphaUserReview());
+existingDbPassword.addEventListener("input", () => resetDatabaseReview());
 window.addEventListener("pagehide", () => {
   retainedSourceUnlockPassword = "";
   existingDbPassword.value = "";
@@ -284,7 +281,7 @@ document.querySelector("#browse-database").addEventListener("click", async () =>
     if (path) {
       selectedDatabase = path;
       lastDatabaseInspection = null;
-      resetAlphaUserReview();
+      resetDatabaseReview();
       document.querySelector("#data-result").textContent =
         "Selected database: " + path + ". Use inspection to validate it; migration remains disabled.";
     }
@@ -295,14 +292,8 @@ document.querySelector("#browse-database").addEventListener("click", async () =>
 let selectedDatabase = null;
 let lastDatabaseInspection = null;
 let retainedSourceUnlockPassword = "";
-let originalAlphaUsers = null;
-let editedAlphaUsers = null;
-let inspectedAlphaJobs = null;
-let originalLegacyRecords = null;
-let editedLegacyRecords = null;
 let originalFullDb = null;
 let editedFullDb = null;
-let reviewLoadIssues = [];
 let reviewRequestSequence = 0;
 let lastMigrationRehearsal = null;
 let rehearsalRequestSequence = 0;
@@ -321,107 +312,27 @@ function invalidateMigrationRehearsal() {
   document.querySelector("#review-migration-rehearsal-status").textContent =
     "No current verified migration rehearsal. Execution remains disabled.";
 }
-function resetAlphaUserReview() {
+function resetDatabaseReview() {
   reviewRequestSequence += 1;
   retainedSourceUnlockPassword = "";
   invalidateMigrationRehearsal();
-  originalAlphaUsers = null;
-  editedAlphaUsers = null;
-  inspectedAlphaJobs = null;
-  originalLegacyRecords = null;
-  editedLegacyRecords = null;
   originalFullDb = null;
   editedFullDb = null;
-  document.querySelector("#full-db-table-select").replaceChildren();
-  document.querySelector("#full-db-table").replaceChildren();
-  reviewLoadIssues = [];
-  for (const category of ["login", "hosts", "effects", "jobs", "games"]) {
-    document.querySelector("#data-fields-" + category).textContent = "No verified records loaded for this category.";
-  }
+  renderDomainDatabaseReview(document, () => editedFullDb, editDatabaseCell, reviewError);
   document.querySelector("#data-editor-status").textContent =
-    "No verified records loaded. Migration remains disabled.";
+    "No verified database records loaded. Migration remains disabled.";
   updateReviewSummary();
 }
+
 function reviewError(error) {
   document.querySelector("#data-editor-status").textContent = String(error);
 }
 
-function updateLegacyReview(category, row, field, value) {
-  const key = keyFor(category, row);
-  editedLegacyRecords = typeof value === "boolean"
-    ? stageLegacyToggle(editedLegacyRecords, category, key, field, value)
-    : stageLegacyText(editedLegacyRecords, category, key, field, value);
-  const actual = editedLegacyRecords[category].find(item => keyFor(category, item) === key);
-  if (!actual) throw new Error("Edited record is unavailable");
+function editDatabaseCell(table, rowIndex, field, kind, value) {
+  editedFullDb = stageFullCell(editedFullDb, table, rowIndex, field, kind, value);
   invalidateMigrationRehearsal();
   updateReviewSummary();
-  return actual[field];
 }
-
-function renderAlphaUsers() {
-  const root = document.querySelector("#data-fields-login");
-  root.replaceChildren();
-  if (!editedAlphaUsers) {
-    root.textContent = "Alpha user records unavailable. See review warnings.";
-    return;
-  }
-  appendReviewTable(root, "users", editedAlphaUsers, {
-    onEdit: (row, field, disabled) => {
-      editedAlphaUsers = updateAlphaUserReview(editedAlphaUsers, row.userId, disabled);
-      invalidateMigrationRehearsal();
-      updateReviewSummary();
-      return editedAlphaUsers.find(user => user.userId === row.userId)[field];
-    },
-    onError: reviewError
-  });
-}
-
-function renderAlphaAgents() {
-  if (!editedLegacyRecords) return;
-  appendReviewTable(document.querySelector("#data-fields-login"), "agents",
-    editedLegacyRecords.agents, {
-      onEdit: (row, field, value) => updateLegacyReview("agents", row, field, value),
-      onError: reviewError
-    });
-}
-
-function renderJobRecords() {
-  const root = document.querySelector("#data-fields-jobs");
-  root.replaceChildren();
-  if (inspectedAlphaJobs) appendReviewTable(root, "alphaJobs", inspectedAlphaJobs);
-  if (editedLegacyRecords) appendReviewTable(root, "hostJobs", editedLegacyRecords.hostJobs);
-  if (!root.childNodes.length) root.textContent = "No verified job records loaded.";
-}
-
-function renderLegacyRecords() {
-  if (!editedLegacyRecords) return;
-  const roots = {
-    hosts: document.querySelector("#data-fields-hosts"),
-    effects: document.querySelector("#data-fields-effects"),
-    games: document.querySelector("#data-fields-games")
-  };
-  for (const root of Object.values(roots)) root.replaceChildren();
-  for (const [root, category] of [
-    [roots.hosts, "hosts"], [roots.hosts, "hostRuntimes"],
-    [roots.hosts, "gitProfiles"], [roots.effects, "effects"],
-    [roots.games, "games"]
-  ]) {
-    const editable = ["gitProfiles", "effects", "games"].includes(category);
-    appendReviewTable(root, category, editedLegacyRecords[category], editable ? {
-      onEdit: (row, field, value) => updateLegacyReview(category, row, field, value),
-      onError: reviewError
-    } : {});
-  }
-  for (const issue of editedLegacyRecords.unavailable) {
-    const root = issue.startsWith("sec01_host_effect_definitions") ? roots.effects :
-      issue.startsWith("alpha_game_projects") ? roots.games : roots.hosts;
-    const p = document.createElement("p");
-    p.textContent = "Unavailable: " + issue;
-    root.append(p);
-  }
-  renderJobRecords();
-}
-
 
 function stagedFullDatabaseCorrections() {
   if (!originalFullDb || !editedFullDb) {
@@ -431,119 +342,51 @@ function stagedFullDatabaseCorrections() {
 }
 
 function allStagedMigrationChanges() {
-  return [
-    ...stagedMigrationChanges(
-      originalAlphaUsers, editedAlphaUsers,
-      originalLegacyRecords, editedLegacyRecords, reviewLoadIssues
-    ),
-    ...stagedFullDatabaseCorrections()
-  ];
+  return stagedFullDatabaseCorrections();
 }
 
-function renderSelectedFullTable() {
-  const selector = document.querySelector("#full-db-table-select");
-  const table = editedFullDb?.tables.find(t => t.name === selector.value);
-  renderFullDatabaseTable(document.querySelector("#full-db-table"), table,
-    (rowIndex, columnName, kind, value) => {
-      editedFullDb = stageFullCell(editedFullDb, selector.value, rowIndex, columnName, kind, value);
-      invalidateMigrationRehearsal();
-      updateReviewSummary();
-    }, reviewError);
+function renderGroupedDatabase() {
+  renderDomainDatabaseReview(document, () => editedFullDb, editDatabaseCell, reviewError);
 }
 
-function renderFullDatabase() {
-  const selector = document.querySelector("#full-db-table-select");
-  const previous = selector.value;
-  selector.replaceChildren();
-  if (!editedFullDb) {
-    document.querySelector("#full-db-table").textContent = "No full database review loaded.";
-    return;
-  }
-  for (const table of editedFullDb.tables) {
-    const option = document.createElement("option");
-    option.value = table.name;
-    option.textContent = table.name + " (" + table.rows.length + " rows)";
-    selector.append(option);
-  }
-  const selected = editedFullDb.tables.find(t => t.name === previous);
-  selector.value = selected ? previous :
-    editedFullDb.tables.find(t => t.name === "sec01_host_comfy_workflows")?.name ??
-    editedFullDb.tables[0]?.name ?? "";
-  renderSelectedFullTable();
-}
-
-document.querySelector("#full-db-table-select").addEventListener("change", renderSelectedFullTable);
-
-// Final review reports both original values and staged values; never writes the source.
+// The summary intentionally contains only table names, rowids and changed
+// column names, never password hashes, tokens or raw workflow JSON.
 function updateReviewSummary() {
   const summary = document.querySelector("#review-data-corrections");
   const status = document.querySelector("#data-editor-status");
-  if (!originalAlphaUsers && !originalLegacyRecords && !originalFullDb) {
+  if (!originalFullDb || !editedFullDb) {
     summary.textContent = "No verified application records loaded for review. No changes staged.";
     return;
   }
   try {
-    const alphaChanges = originalAlphaUsers && editedAlphaUsers
-      ? alphaUserCorrections(originalAlphaUsers, editedAlphaUsers) : [];
-    const legacyChanges = originalLegacyRecords && editedLegacyRecords
-      ? legacyCorrections(originalLegacyRecords, editedLegacyRecords) : [];
-    const rawChanges = originalFullDb && editedFullDb
-      ? fullReviewSummary(stagedFullDatabaseCorrections()) : [];
-    const changes = [
-      ...alphaChanges.map(change => ({
-        label: "User " + change.userId + " / Disabled",
-        previous: originalAlphaUsers.find(item => item.userId === change.userId).disabled,
-        next: change.disabled
-      })),
-      ...legacyChanges.map(change => ({
-        label: ({
-          agents: "Agent ", effects: "Effect ", games: "Game ",
-          gitProfiles: "Git profile "
-        }[change.category] ?? "Record ") +
-          change.key + " / " + change.field,
-        previous: change.previous,
-        next: change.next
-      }))
-    ];
+    const changed = fullReviewSummary(stagedFullDatabaseCorrections());
+    const grouped = groupReviewedTables(editedFullDb);
     summary.replaceChildren();
     const heading = document.createElement("p");
-    heading.textContent = changes.length + " correction(s) staged in memory. No source data changed.";
+    heading.textContent = changed.length +
+      " row correction(s) staged across " + editedFullDb.tables.length +
+      " verified source table(s). No source data changed.";
     summary.append(heading);
-    if (editedLegacyRecords) {
-      const counts = document.createElement("p");
-      counts.textContent = "Verified records: " + editedLegacyRecords.hosts.length + " hosts, " +
-        editedLegacyRecords.hostRuntimes.length + " runtimes, " +
-        editedLegacyRecords.gitProfiles.length + " Git profiles, " +
-        editedLegacyRecords.agents.length + " agents, " +
-        editedLegacyRecords.effects.length + " effects, " +
-        editedLegacyRecords.hostJobs.length + " host jobs, " +
-        editedLegacyRecords.games.length + " games; " +
-        (inspectedAlphaJobs?.length ?? 0) + " Alpha jobs; " +
-        (editedAlphaUsers?.length ?? 0) + " Alpha users.";
-      summary.append(counts);
-    }
-    for (const change of changes) {
+    const count = document.createElement("p");
+    count.textContent = [
+      "Anmeldung", "Hosts", "Effekte", "Jobs", "Games", "Sonstige"
+    ].map((name, i) =>
+      name + ": " + grouped[["login","hosts","effects","jobs","games","all"][i]].length
+      + " Tabelle(n)").join(" · ");
+    summary.append(count);
+    for (const entry of changed) {
       const line = document.createElement("p");
-      line.textContent = change.label + ": " + String(change.previous) + " → " + String(change.next);
+      line.textContent = entry.table + " / rowid " + (entry.rowId ?? "(none)") +
+        ": " + entry.changedColumns.join(", ");
       summary.append(line);
     }
-    for (const change of rawChanges) {
-      const line = document.createElement("p");
-      line.textContent = "Database " + change.table + " / SQLite row " +
-        (change.rowId ?? "(without rowid)") + ": " + change.changedColumns.join(", ") +
-        " (typed values are not copied into the installation plan)";
-      summary.append(line);
-    }
-    for (const issue of [...(originalLegacyRecords?.unavailable ?? []), ...reviewLoadIssues]) {
-      const line = document.createElement("p");
-      line.textContent = "Not included: " + issue;
-      summary.append(line);
-    }
-    const limitation = document.createElement("p");
-    limitation.textContent = "Unchanged/read-only: host owners, agent/job identities, job states, game project revisions, credentials and authentication sessions. Activations and paths are only staged; no execution is authorized. No migration or installation is authorized.";
-    summary.append(limitation);
-    status.textContent = (changes.length + rawChanges.length) + " supported correction(s) staged in memory. " +
-      reviewLoadIssues.length + " record reader warning(s). Migration remains disabled.";
+    const note = document.createElement("p");
+    note.textContent = "Every stored value may be staged. SQLite constraints, " +
+      "foreign keys and full-copy verification still apply; no database " +
+      "migration or installation execution is enabled.";
+    summary.append(note);
+    status.textContent = changed.length + " staged row change(s); " +
+      editedFullDb.tables.length + " verified source table(s).";
   } catch (error) {
     summary.textContent = "Review validation failed: " + String(error);
     status.textContent = "Review validation failed: " + String(error);
@@ -557,82 +400,48 @@ async function inspectSelectedSqlite() {
     return;
   }
   const path = selectedDatabase;
-  resetAlphaUserReview();
+  resetDatabaseReview();
   const requestSequence = reviewRequestSequence;
   lastDatabaseInspection = null;
-  output.textContent = "Inspecting a read-only SQLite snapshot…";
+  output.textContent = "Inspecting a read-only SQLite snapshot and all stored tables…";
   try {
     const unlockPassword = existingDbPassword.value;
-    const request = invoke("inspect_sqlite_database", { path, password: unlockPassword });
+    const request = invoke("inspect_sqlite_database", {path, password: unlockPassword});
     existingDbPassword.value = "";
     const preview = await request;
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
-    lastDatabaseInspection = preview;
     if (!preview.integrityOk || !preview.foreignKeysOk) {
-      document.querySelector("#data-editor-status").textContent =
-        "Database integrity verification failed. Editing is unavailable.";
-      output.textContent = "Database integrity or foreign-key verification failed. Migration cannot proceed.";
-      return;
+      throw new Error("Database integrity or foreign-key verification failed.");
     }
-    const results = await Promise.allSettled([
-      invoke("inspect_alpha_users", { path, password: unlockPassword }),
-      invoke("inspect_alpha_jobs", { path, password: unlockPassword }),
-      invoke("inspect_legacy_records", { path, password: unlockPassword }),
-      invoke("inspect_full_database", { path, password: unlockPassword })
-    ]);
+    const records = createFullReview(await invoke("inspect_full_database", {
+      path, password: unlockPassword
+    }));
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
+    const schemaTables = new Map(preview.tables.map(t => [t.name, t.columns]));
+    if (schemaTables.size !== preview.tables.length ||
+        records.tables.length !== schemaTables.size ||
+        records.tables.some(t => JSON.stringify(t.columns) !==
+          JSON.stringify(schemaTables.get(t.name)))) {
+      throw new Error("The typed table inventory differs from the verified source schema.");
+    }
+    originalFullDb = records;
+    editedFullDb = createFullReview(records);
+    lastDatabaseInspection = preview;
     retainedSourceUnlockPassword = unlockPassword;
-    try {
-      if (results[0].status === "fulfilled") {
-        originalAlphaUsers = createAlphaUserReview(results[0].value);
-        editedAlphaUsers = createAlphaUserReview(results[0].value);
-      } else {
-        reviewLoadIssues.push("Alpha users: " + String(results[0].reason));
-      }
-    } catch (error) {
-      reviewLoadIssues.push("Alpha users: " + String(error));
-    }
-    try {
-      if (results[1].status === "fulfilled") {
-        inspectedAlphaJobs = results[1].value;
-      } else {
-        reviewLoadIssues.push("Alpha jobs: " + String(results[1].reason));
-      }
-    } catch (error) {
-      reviewLoadIssues.push("Alpha jobs: " + String(error));
-    }
-    try {
-      if (results[2].status === "fulfilled") {
-        originalLegacyRecords = createLegacyReview(results[2].value);
-        editedLegacyRecords = createLegacyReview(results[2].value);
-      } else {
-        reviewLoadIssues.push("Hosts / Effects / Jobs / Games: " + String(results[2].reason));
-      }
-    } catch (error) {
-      reviewLoadIssues.push("Hosts / Effects / Jobs / Games: " + String(error));
-    }
-    try {
-      if (results[3].status === "fulfilled") {
-        originalFullDb = createFullReview(results[3].value);
-        editedFullDb = createFullReview(results[3].value);
-      } else {
-        reviewLoadIssues.push("Full SQLite table review: " + String(results[3].reason));
-      }
-    } catch (error) {
-      reviewLoadIssues.push("Full SQLite table review: " + String(error));
-    }
-    renderFullDatabase();
-    renderAlphaUsers();
-    renderAlphaAgents();
-    renderLegacyRecords();
-    renderJobRecords();
+    renderGroupedDatabase();
     updateReviewSummary();
-    output.textContent = "Database integrity verified. Read-only record review completed with " +
-      reviewLoadIssues.length + " warning(s). Migration and installation remain disabled.";
+    output.textContent = "Database integrity verified. " +
+      records.tables.length + " complete SQLite table(s) loaded in the five review areas." +
+      " Unrecognized extensions are listed separately. Migration remains disabled.";
   } catch (error) {
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
     retainedSourceUnlockPassword = "";
-    output.textContent = "Database inspection could not be completed. Check the selected file and existing database unlock password. " + String(error);
+    lastDatabaseInspection = null;
+    originalFullDb = null;
+    editedFullDb = null;
+    renderGroupedDatabase();
+    updateReviewSummary();
+    output.textContent = "Database inspection rejected: " + String(error);
   }
 }
 
@@ -785,7 +594,7 @@ async function inspectDefaultUserData() {
   selection.replaceChildren();
   selectedDatabase = null;
   lastDatabaseInspection = null;
-  resetAlphaUserReview();
+  resetDatabaseReview();
   try {
     const items = await invoke("inspect_default_user_data");
     const databases = items.filter((item) => item.kind === "sqlite_database");
@@ -803,7 +612,7 @@ async function inspectDefaultUserData() {
         radio.name = "selected-database";
         radio.value = item.sourceDirectory + "/" + item.relativePath;
         radio.style.width = "auto";
-        radio.addEventListener("change", () => { selectedDatabase = radio.value; lastDatabaseInspection = null; resetAlphaUserReview(); });
+        radio.addEventListener("change", () => { selectedDatabase = radio.value; lastDatabaseInspection = null; resetDatabaseReview(); });
         label.append(radio, document.createTextNode(" " + item.sourceDirectory + "/" + item.relativePath + " — " + item.status));
         selection.append(label);
       }
@@ -935,12 +744,11 @@ function showWizardPage(index) {
   if (!Number.isInteger(index) || index < 0 || index >= wizardPages.length) return;
   wizardIndex = index;
   if (wizardPages[index].dataset.wizardPage === "data-review") {
-    document.querySelector("#data-editor-status").textContent = editedAlphaUsers
-      ? "Loaded " + editedAlphaUsers.length + " Alpha user record(s). " +
-        alphaUserCorrections(originalAlphaUsers, editedAlphaUsers).length +
-        " change(s) staged; encrypted migration execution is not yet available."
+    document.querySelector("#data-editor-status").textContent = editedFullDb
+      ? "Loaded " + editedFullDb.tables.length +
+        " complete SQLite table(s) for domain-based editing. Migration execution remains disabled."
       : selectedDatabase
-        ? "Inspect the selected database on page 4 to load editable application values. Migration remains blocked."
+        ? "Inspect the selected database to load all application values. Migration remains blocked."
         : "Fresh installation: application defaults and encrypted database creation are not yet implemented.";
   }
   if (wizardPages[index].dataset.wizardPage === "review") refreshFinalConfiguration();

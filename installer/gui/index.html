@@ -21,25 +21,23 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 </section><section class="wizard-page" data-wizard-page="data-review" hidden>
 <h2>Data Review — application database records</h2>
 <p class="help">Loaded application values can be corrected here before migration. The source database remains unchanged. Record transfer is not yet enabled.</p>
-<p class="help">Edit the application data before migration. Existing values must be loaded from the selected database; credentials, password hashes, sessions, and audit records are not editable.</p>
+<p class="help">Die Daten der geprüften SQLite-Tabellen sind den fünf Fachbereichen zugeordnet und vollständig typisiert bearbeitbar. Änderungen werden nur vorgemerkt. Bitte vertrauliche Werte nicht in Screenshots oder Logs aufnehmen; die isolierten Migrationsprüfungen erzwingen Datenbankkonsistenz.</p>
 <div class="mode" role="group" aria-label="Application data categories">
 <button type="button" class="secondary" id="data-tab-login">Anmeldung</button>
 <button type="button" class="secondary" id="data-tab-hosts">Hosts</button>
 <button type="button" class="secondary" id="data-tab-effects">Effekte</button>
 <button type="button" class="secondary" id="data-tab-jobs">Jobs</button>
 <button type="button" class="secondary" id="data-tab-games">Games</button>
-<button type="button" class="secondary" id="data-tab-all">Alle DB-Tabellen</button>
+<button type="button" class="secondary" id="data-tab-all" hidden>Sonstige DB-Tabellen</button>
 </div>
 <section id="data-editor-login"><h3>Anmeldung</h3><div id="data-fields-login"></div></section>
 <section id="data-editor-hosts" hidden><h3>Hosts</h3><div id="data-fields-hosts"></div></section>
 <section id="data-editor-effects" hidden><h3>Effekte</h3><div id="data-fields-effects"></div></section>
 <section id="data-editor-jobs" hidden><h3>Jobs</h3><div id="data-fields-jobs"></div></section>
 <section id="data-editor-games" hidden><h3>Games</h3><div id="data-fields-games"></div></section>
-<section id="data-editor-all" hidden><h3>Alle SQLite-Tabellen und Werte</h3>
-<p class="help">Hier sind alle geladenen Tabellen einschließlich Comfy-Workflows, Host-Regeln und Einstellungen erreichbar. Jeder gespeicherte Zellwert kann typgerecht für eine isolierte Migration vorgemerkt werden. Änderungen an IDs, Schlüsseln oder JSON können Beziehungen und Anwendungsfunktionen beeinträchtigen; die Prüfungen lehnen inkonsistente Ergebnisse ab. Kein Schreiben in die Originaldatenbank.</p>
-<label for="full-db-table-select">Datenbanktabelle auswählen</label>
-<select id="full-db-table-select" aria-label="SQLite-Tabelle"></select>
-<div id="full-db-table"></div></section>
+<section id="data-editor-all" hidden><h3>Sonstige DB-Tabellen</h3>
+<p class="help">Nur Tabellen, die keinem der fünf Fachbereiche zugeordnet werden können, erscheinen hier. Auch Erweiterungstabellen verwenden denselben geprüften Bearbeitungs- und Migrationspfad.</p>
+<div id="data-fields-all"></div></section>
 <p id="data-editor-status" class="help" role="status">No verified records loaded. Migration remains disabled.</p>
 <fieldset><legend>Migration rehearsal (no installation or data writes)</legend>
 <p class="help">Recheck the complete existing Alpha schema and all table row counts. Simulate staged changes on an in-memory snapshot, then roll them back. An existing destination directory is required; it may be the same directory as the source when the new filename differs. Existing files and SQLite sidecar names are rejected; no destination file is created.</p>

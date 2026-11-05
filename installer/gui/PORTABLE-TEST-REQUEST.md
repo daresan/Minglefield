@@ -1,95 +1,83 @@
-# Portable GUI milestone — five-domain full SQLite review
+# Portable GUI milestone — registered unversioned Alpha schema audit
 
-**2026-11-05 — owner-requested one-time portable milestone test build** on
-`feat/game-integration-updates`. This file is the existing, explicitly
-authorized packaging trigger. Ordinary code commits must not package
-portable installers automatically.
+**2026-11-05 — next explicitly requested one-time test build** on
+`feat/game-integration-updates`. This marker is the designated
+portable-packaging trigger; routine commits do not package.
 
-## Scope and invariant
+## Changes to verify
 
-- Step 4 uses five owner-facing tab areas: **Anmeldung**, **Hosts**,
-  **Effekte**, **Jobs**, **Games**. All 27 currently known Alpha SQLite
-  tables are mapped to exactly one area, including the two persisted Comfy
-  tables (`sec01_host_comfy_workflows` and
-  `sec01_host_effect_definitions`) under **Effekte** and
-  `sec01_host_rules`, `sec01_host_settings`,
-  `sec01_host_runtimes` under **Hosts**.
-- **Sonstige DB-Tabellen** is visible only when the inspected database
-  contains tables not included in the known Alpha table-family map.
-  Every such table remains accessible. No stored column is silently
-  omitted on the basis of its name or sensitivity.
-- A single typed, full-row correction path serves every domain tab.
-  The obsolete partial-field editors are not used in the live UI,
-  avoiding duplicate independent edits to one record.
-- The existing Comfy workflow JSON is stored in the SQLite
-  `sec01_host_comfy_workflows.workflow` TEXT column, not as an inferred
-  or separately located workflow file. No workflow file is created.
-  The `metadata` TEXT column contains persisted import bindings.
-- The schema-aware editor supports SQLite NULL, signed 64-bit INTEGER,
-  REAL, TEXT (including JSON) and hexadecimal BLOB values.
-  Changes to identities/keys may be staged by the owner. Database-level
-  constraints, foreign keys, schema consistency, stale-row rejection
-  and snapshot fidelity must still pass for a migration rehearsal.
-- The installation-plan JSON reports only table, original rowid and
-  changed column names for these typed corrections, without copying
-  sensitive cell contents into the plan or a diagnostic log.
-- The source database is never modified. The migration rehearsal is
-  in-memory, and the temporary SQLCipher copy is verified and
-  destroyed. No final encrypted destination is created.
-  `destinationCreated`, `encryptedDestinationVerified`,
-  `migrationEnabled` and `executionEnabled` remain **false**.
-- Step 3 is the only credential-entry page: both the existing source
-  key (if any) and new destination SQLCipher key are reused on Step 4.
-  Neither value is included in the plan. The existing source-key
-  re-entry regression remains covered.
-- Import limits remain: at most 5000 rows per table, 32 MiB of
-  reviewed cell content, and typed value limits. Larger databases
-  are rejected explicitly until paginated review is implemented.
-- Sensitive account, session and credential fields may now be viewed
-  and staged, so do not capture these values in logs/screenshots
-  or use the production database to test dangerous identity changes.
+- The installer identifies the current unversioned local Alpha schema
+  with a **registered Rust contract** for all 27 known tables and 111
+  columns. The contract is grounded in the actual server CREATE TABLE
+  declarations. It verifies exact column order, SQLite declared type,
+  NOT NULL, primary-key position and absence of hidden/generated columns.
+- The Rust inspector evaluates the contract on the same
+  integrity-checked, read-only in-memory SQLite snapshot used for the
+  rest of the inspection. Unknown or modified known tables,
+  unregistered extensions, unexpected source headers and triggers
+  remain structurally **unrecognized**.
+- The plan's `database.schemaAssessment` now distinguishes
+  name-only Alpha discovery from a verified matching structure.
+  For a compatible 27-table/111-column Alpha database, expect:
 
-## Required CI evidence
+```json
+{
+  "recognized": true,
+  "reason": "registered_alpha_column_signatures_verified",
+  "matchedTableCount": 27,
+  "matchedColumnCount": 111,
+  "migrationEnabled": false
+}
+```
 
-- Installer Rust `fmt`, `cargo check`, `cargo clippy -D warnings`,
-  and `cargo test` on Windows, Linux and macOS.
-- GUI Node suite on all three OSes including domain mapping and
-  type-editor tests, frontend Vite build and Tauri Rust backend checks.
-- AGENTS guard passes. Game-install security CI is distinct from
-  platform-installer CI.
-- Portable Windows EXE, Linux AppImage and macOS application bundles
-  are uploaded as separate workflow artifacts. Unavailable runners
-  must not be described as passing.
+- This is a **structural recognition** milestone, not the final
+  durable-encrypted destination migration or operational runtime.
+  `migrationEnabled`, `executionEnabled`,
+  `destinationCreated` and `encryptedDestinationVerified`
+  must all remain **false**.
+- The five existing full-value database domains remain **Anmeldung**,
+  **Hosts**, **Effekte**, **Jobs** and **Games**. Unknown source tables,
+  if any, remain in the Sonstige fallback, not silently ignored.
+  Comfy workflows continue to be saved as JSON text in SQLite.
+- Step 3 remains the only password-entry page. No copied password,
+  record body, token, BLOB or hash appears in mapping diagnostics or
+  installation-plan output. The source database is never modified.
 
-## Shadow manual acceptance
+## Required CI
 
-1. Download the **new** `tauri-portable-windows-exe` artifact for
-   this marker commit, unpack and launch the EXE (no setup-manager install).
-2. Use Step 3 to inspect the existing `alpha.sqlite3` database
-   and enter the destination key once. No second password on Step 4.
-3. Check Step 4: all 27 verified tables should be selectable inside
-   the **five** domain tabs. In **Effekte**, select
-   `sec01_host_comfy_workflows`, confirm the actual `workflow` API-JSON
-   and `metadata` values appear. In **Hosts**, select
-   `sec01_host_rules`, `sec01_host_settings` and
-   `sec01_host_runtimes`. When there are no unknown tables,
-   **Sonstige DB-Tabellen** must remain hidden.
-4. Stage one reversible, nonsensitive TEXT/JSON change in Hosts or
-   Effekte. Navigate away and back to verify the edited value is
-   preserved. The plan should show the table/rowid/column, without
-   embedding its old/new contents or passwords.
-5. Run the in-memory migration rehearsal and the temporary encrypted
-   SQLCipher copy test. Verify `verifiedChanges` equals
-   `verifiedStagedChanges`, `stagedValuesMatchCiphertext` is true,
-   `wrongKeyRejected` is true and `temporaryFilesRemoved` is true.
-6. Edit another field or change the credentials: the previous
-   verification must be invalidated. The source file and final
-   destination remain untouched and all execution flags false.
-7. If an unknown extension table exists, verify the **Sonstige**
-   fallback shows that table, without duplicating it in the five tabs.
-   Avoid sharing sensitive data in screenshots or pasted plan output.
+- Windows/Linux/macOS: core Rust format, check, Clippy and tests.
+- Windows/Linux/macOS: Tauri GUI Node suite, Vite frontend build,
+  Tauri Rust check/lint/test.
+- Dedicated Rust tests for correct 27/111 recognition and for
+  missing, extra, changed, or unregistered schemas and source headers.
+- Dedicated JS tests ensure table-name-only discovery never promotes
+  the backend mapping and that migration execution remains disabled.
+- Only the portable Windows EXE, Linux AppImage and macOS app
+  artifacts from **this marker commit** are eligible for acceptance.
 
-These are temporary portable **test** builds. This milestone does not
-authorize durable destination publication, source deletion, installer
-execution, or an authenticated local Host claim. Those steps require
-their own reviewed implementation, CI and owner acceptance.
+## Manual Shadow test
+
+1. Download the portable `tauri-portable-windows-exe` ZIP, unpack it
+   and launch the EXE without installing the setup manager.
+2. Select the existing `alpha.sqlite3` on Step 3 and run **Inspect**
+   once. Confirm there is no Step-4 password re-entry.
+3. Preview the installation plan and inspect
+   `database.schemaAssessment`. If the database has the known
+   27-table/111-column layout, the expected output is
+   `recognized: true`, reason
+   `registered_alpha_column_signatures_verified`, the two matching
+   counts, and `migrationEnabled: false`. If it fails, report
+   **only** the structural assessment and any reported table names,
+   not sensitive database values.
+4. Confirm that the five domain-tab editors still load the real
+   records; in Effekte inspect `sec01_host_comfy_workflows.workflow`,
+   and in Hosts inspect `sec01_host_rules.config`.
+5. Stage one reversible nonsensitive edit. Rerun memory rehearsal
+   and temporary encrypted copy. Verify equal edit counts, all
+   row/schema proofs, wrong-key rejection and temporary cleanup.
+6. Ensure the source is unchanged, no durable destination is created,
+   and every execution flag is false.
+
+These are pre-release portable **test builds**. The additional
+preconditions for durable publication and first-run Host onboarding
+are documented in `installer/REGISTERED-ALPHA-SCHEMA.md`.

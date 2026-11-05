@@ -6,6 +6,7 @@ import { assessLegacyAlphaSchema } from "./legacy-schema.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
 import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } from "./alpha-user-review.js";
 import { createLegacyReview, stageLegacyText, legacyCorrections } from "./legacy-record-review.js";
+import { stagedMigrationChanges } from "./migration-rehearsal.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -254,8 +255,19 @@ let originalLegacyRecords = null;
 let editedLegacyRecords = null;
 let reviewLoadIssues = [];
 let reviewRequestSequence = 0;
+let lastMigrationRehearsal = null;
+let rehearsalRequestSequence = 0;
+function invalidateMigrationRehearsal() {
+  rehearsalRequestSequence += 1;
+  lastMigrationRehearsal = null;
+  document.querySelector("#migration-rehearsal-result").textContent =
+    "Migration rehearsal requires a new verification after data or destination changes.";
+  document.querySelector("#review-migration-rehearsal-status").textContent =
+    "No current verified migration rehearsal. Execution remains disabled.";
+}
 function resetAlphaUserReview() {
   reviewRequestSequence += 1;
+  invalidateMigrationRehearsal();
   originalAlphaUsers = null;
   editedAlphaUsers = null;
   inspectedAlphaJobs = null;

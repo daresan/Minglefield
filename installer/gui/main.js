@@ -420,6 +420,45 @@ function renderLegacyRecords() {
     line.textContent = "Host runtime configuration table is absent.";
     hosts.append(line);
   }
+  for (const profile of data.gitProfiles) {
+    const title = document.createElement("p");
+    title.textContent = "Git profile " + profile.profileId + " — Host " + profile.hostId +
+      " — Owner " + profile.ownerId + " — Auth " + profile.authMethod +
+      " — Git executable " + profile.gitExecutable +
+      " (identity, auth and executable read-only)";
+    hosts.append(title);
+    for (const [fieldName, labelText, maxLength] of [
+      ["label", "Profile label", 120],
+      ["authorName", "Git author name", 256],
+      ["authorEmail", "Git author email", 256]
+    ]) {
+      const label = document.createElement("label");
+      label.textContent = labelText + " — " + profile.profileId;
+      const field = document.createElement("input");
+      field.type = "text";
+      field.maxLength = maxLength;
+      field.value = profile[fieldName];
+      field.addEventListener("change", () => {
+        try {
+          editedLegacyRecords = stageLegacyText(editedLegacyRecords, "gitProfiles",
+            JSON.stringify([profile.hostId, profile.profileId]), fieldName, field.value);
+          invalidateMigrationRehearsal();
+          updateReviewSummary();
+        } catch (error) {
+          document.querySelector("#data-editor-status").textContent = String(error);
+        }
+        field.value = editedLegacyRecords.gitProfiles.find(item =>
+          item.hostId === profile.hostId && item.profileId === profile.profileId)[fieldName];
+      });
+      label.append(field);
+      hosts.append(label);
+    }
+  }
+  if (data.unavailable.some(item => item.startsWith("alpha_git_profiles:"))) {
+    const line = document.createElement("p");
+    line.textContent = "Git profile table is absent in this database.";
+    hosts.append(line);
+  }
   for (const effect of data.effects) {
     const label = document.createElement("label");
     label.textContent = "Host " + effect.hostId + " / Effect " + effect.effectId +
@@ -550,7 +589,10 @@ function updateReviewSummary() {
         next: change.disabled
       })),
       ...legacyChanges.map(change => ({
-        label: (change.category === "effects" ? "Effect " : "Game ") +
+        label: ({
+          agents: "Agent ", effects: "Effect ", games: "Game ",
+          gitProfiles: "Git profile "
+        }[change.category] ?? "Record ") +
           change.key + " / " + change.field,
         previous: change.previous,
         next: change.next
@@ -564,6 +606,7 @@ function updateReviewSummary() {
       const counts = document.createElement("p");
       counts.textContent = "Verified records: " + editedLegacyRecords.hosts.length + " hosts, " +
         editedLegacyRecords.hostRuntimes.length + " runtimes, " +
+        editedLegacyRecords.gitProfiles.length + " Git profiles, " +
         editedLegacyRecords.agents.length + " agents, " +
         editedLegacyRecords.effects.length + " effects, " +
         editedLegacyRecords.hostJobs.length + " host jobs, " +

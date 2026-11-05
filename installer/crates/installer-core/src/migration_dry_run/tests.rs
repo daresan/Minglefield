@@ -252,15 +252,19 @@ fn rehearses_agent_disabled_without_changing_source() {
     let file = fixture();
     let original = std::fs::read(&file).unwrap();
     let change = ReviewCorrection::AgentDisabled {
-        agent_id: "agent1".to_owned(), user_id: "alice".to_owned(),
-        before: false, after: true,
+        agent_id: "agent1".to_owned(),
+        user_id: "alice".to_owned(),
+        before: false,
+        after: true,
     };
     let preview = rehearse_migration(&file, "", &[change]).unwrap();
     assert_eq!(preview.verified_changes, 1);
     assert_eq!(std::fs::read(&file).unwrap(), original);
     let stale = ReviewCorrection::AgentDisabled {
-        agent_id: "agent1".to_owned(), user_id: "mallory".to_owned(),
-        before: false, after: true,
+        agent_id: "agent1".to_owned(),
+        user_id: "mallory".to_owned(),
+        before: false,
+        after: true,
     };
     assert!(rehearse_migration(&file, "", &[stale]).is_err());
     std::fs::remove_file(file).unwrap();

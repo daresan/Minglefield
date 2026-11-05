@@ -5,7 +5,7 @@ import { effectiveReviewPaths, replaceVersionedPath } from "./review-settings.js
 import { assessLegacyAlphaSchema } from "./legacy-schema.js";
 import { optionalSelection, optionalPlanArguments } from "./optional-components.js";
 import { createAlphaUserReview, updateAlphaUserReview, alphaUserCorrections } from "./alpha-user-review.js";
-import { createLegacyReview, stageLegacyText, legacyCorrections } from "./legacy-record-review.js";
+import { createLegacyReview, stageLegacyText, stageLegacyToggle, legacyCorrections } from "./legacy-record-review.js";
 import { stagedMigrationChanges } from "./migration-rehearsal.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
@@ -366,7 +366,7 @@ function renderLegacyRecords() {
   for (const effect of data.effects) {
     const label = document.createElement("label");
     label.textContent = "Host " + effect.hostId + " / Effect " + effect.effectId +
-      " — Enabled " + String(effect.enabled) + " (read-only). Description:";
+      " — Description:";
     const field = document.createElement("input");
     field.type = "text";
     field.maxLength = 256;
@@ -385,6 +385,26 @@ function renderLegacyRecords() {
     });
     label.append(field);
     effects.append(label);
+    const toggleLabel = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.style.width = "auto";
+    checkbox.checked = effect.enabled;
+    checkbox.addEventListener("change", () => {
+      try {
+        editedLegacyRecords = stageLegacyToggle(editedLegacyRecords, "effects",
+          JSON.stringify([effect.hostId, effect.effectId]), "enabled", checkbox.checked);
+        invalidateMigrationRehearsal();
+        updateReviewSummary();
+      } catch (error) {
+        checkbox.checked = editedLegacyRecords.effects.find(item =>
+          item.hostId === effect.hostId && item.effectId === effect.effectId).enabled;
+        document.querySelector("#data-editor-status").textContent = String(error);
+      }
+    });
+    toggleLabel.append(checkbox, document.createTextNode(" Enabled — " + effect.effectId +
+      " (staged only; no runtime changes)"));
+    effects.append(toggleLabel);
   }
   for (const game of data.games) {
     const label = document.createElement("label");

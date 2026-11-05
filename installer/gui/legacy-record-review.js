@@ -8,13 +8,15 @@ const absolutePath = value => typeof value === "string" && value.length > 0 &&
   !/(^|[\\/])\.\.([\\/]|$)/.test(value);
 const editableFields = {
   agents: ["disabled"],
+  gitProfiles: ["label", "authorName", "authorEmail"],
   effects: ["description", "enabled"],
   games: ["name", "repositoryRoot", "jobAttachmentsRoot", "outputRoot"]
 };
-const categories = ["agents", "hosts", "hostRuntimes", "effects", "hostJobs", "games"];
+const categories = ["agents", "hosts", "hostRuntimes", "gitProfiles", "effects", "hostJobs", "games"];
 const keyFor = (category, item) => category === "agents" ? item.agentId
   : category === "hosts" ? item.hostId
   : category === "hostRuntimes" ? JSON.stringify([item.hostId, item.runtimeId])
+  : category === "gitProfiles" ? JSON.stringify([item.hostId, item.profileId])
   : category === "effects" ? JSON.stringify([item.hostId, item.effectId])
   : category === "hostJobs" ? item.jobId : item.projectId;
 
@@ -31,17 +33,30 @@ function verify(records) {
       seen.add(key);
       const allowed = category === "agents" ? ["agentId","userId","disabled"]
         : category === "hosts" ? ["hostId","ownerId"]
-        : category === "hostRuntimes" ? ["hostId","runtimeId","runtimeType","endpoint","enabled","inputFolder"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot","jobAttachmentsRoot","outputRoot","settingsRevision"];
+        : category === "hostRuntimes" ? ["hostId","runtimeId","runtimeType","endpoint","enabled","inputFolder"]
+        : category === "gitProfiles" ? ["hostId","profileId","ownerId","label","authMethod","gitExecutable","authorName","authorEmail"] : category === "effects" ? ["hostId","effectId","description","enabled"] : category === "hostJobs" ? ["jobId","hostId","effectId","requestedBy","state"] : ["projectId","hostId","ownerId","name","repositoryRoot","jobAttachmentsRoot","outputRoot","settingsRevision"];
       if (Object.keys(row).sort().join("|") !== allowed.sort().join("|")) throw new Error("Unexpected record fields");
       const required = category === "agents" ? ["agentId", "userId"]
         : category === "hosts" ? ["hostId", "ownerId"]
         : category === "hostRuntimes" ? ["hostId", "runtimeId"]
+        : category === "gitProfiles" ? ["hostId", "profileId", "ownerId"]
         : category === "effects" ? ["hostId", "effectId"]
         : category === "hostJobs" ? ["jobId", "hostId", "effectId", "requestedBy"]
         : ["projectId", "hostId", "ownerId"];
       if (!required.every(field => id(row[field]))) throw new Error("Invalid " + category + " identity");
       if (category === "agents" && typeof row.disabled !== "boolean") {
         throw new Error("Invalid Alpha agent disabled flag");
+      }
+      if (category === "gitProfiles" && (
+          typeof row.label !== "string" || !row.label.trim() ||
+          row.label.trim() !== row.label || row.label.length > 120 ||
+          typeof row.authMethod !== "string" ||
+          !["local", "ssh", "credential_manager", "github_cli"].includes(row.authMethod) ||
+          typeof row.gitExecutable !== "string" ||
+          !row.gitExecutable.trim() || row.gitExecutable.length > 256 ||
+          typeof row.authorName !== "string" || row.authorName.length > 256 ||
+          typeof row.authorEmail !== "string" || row.authorEmail.length > 256)) {
+        throw new Error("Invalid Git profile metadata");
       }
       if (category === "hostRuntimes" && (typeof row.runtimeType !== "string" ||
           !row.runtimeType || row.runtimeType.length > 32 ||
@@ -80,10 +95,18 @@ export function createLegacyReview(records) {
 }
 
 export function stageLegacyText(records, category, key, field, value) {
-  if (!editableFields[category]?.includes(field) || field === "enabled" ||
+  if (!editableFields[category]?.includes(field) || field === "enabled" || field === "disabled" ||
       typeof value !== "string") throw new Error("Field is not editable as text");
   if (category === "effects" && value.length > 256) {
     throw new Error("Description exceeds 256 characters");
+  }
+  if (category === "gitProfiles") {
+    if (field === "label" && (!value.trim() || value.trim().length > 120)) {
+      throw new Error("Git label must contain 1–120 characters");
+    }
+    if (field !== "label" && value.length > 256) {
+      throw new Error("Git author field exceeds 256 characters");
+    }
   }
   if (category === "games") {
     if (field === "name" && (!value.trim() || value.trim().length > 120))
@@ -94,7 +117,7 @@ export function stageLegacyText(records, category, key, field, value) {
   const next = createLegacyReview(records);
   const row = next[category].find(record => keyFor(category, record) === key);
   if (!row) throw new Error("Unknown record");
-  row[field] = field === "name" ? value.trim() : value;
+  row[field] = field === "name" || field === "label" ? value.trim() : value;
   return next;
 }
 

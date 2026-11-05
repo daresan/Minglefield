@@ -137,7 +137,10 @@ mod tests {
         fs::write(&source, b"fixture").unwrap();
         let in_place = source_dir.join("new.sqlite3");
         let preview = preview_migration_destination(&source, &in_place).unwrap();
-        assert_eq!(preview.destination, fs::canonicalize(&source_dir).unwrap().join("new.sqlite3"));
+        assert_eq!(
+            preview.destination,
+            fs::canonicalize(&source_dir).unwrap().join("new.sqlite3")
+        );
         assert!(preview.preserves_source);
         assert!(!in_place.exists());
         for suffix in ["-wal", "-shm", "-journal"] {

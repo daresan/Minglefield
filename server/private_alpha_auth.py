@@ -12,11 +12,12 @@ import time
 from contextlib import closing
 from dataclasses import dataclass
 
-try:
-    from server.alpha_sqlcipher_runtime import open_alpha_database, integrity_error_type
-except ModuleNotFoundError as exc:
-    if exc.name != "server":
-        raise
+# Preserve one module identity for both supported import forms. Importing the
+# same runtime as "server.alpha_sqlcipher_runtime" and "alpha_sqlcipher_runtime"
+# would create distinct exception classes and break fail-closed error handling.
+if __package__:
+    from .alpha_sqlcipher_runtime import open_alpha_database, integrity_error_type
+else:
     from alpha_sqlcipher_runtime import open_alpha_database, integrity_error_type
 
 def digest(token):

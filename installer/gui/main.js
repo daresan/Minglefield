@@ -231,6 +231,7 @@ function resetAlphaUserReview() {
   originalAlphaUsers = null;
   editedAlphaUsers = null;
   document.querySelector("#data-fields-login").replaceChildren();
+  updateReviewSummary();
 }
 function renderAlphaUsers() {
   const root = document.querySelector("#data-fields-login");
@@ -244,9 +245,7 @@ function renderAlphaUsers() {
     checkbox.checked = record.disabled;
     checkbox.addEventListener("change", () => {
       editedAlphaUsers = updateAlphaUserReview(editedAlphaUsers, record.userId, checkbox.checked);
-      document.querySelector("#data-editor-status").textContent =
-        alphaUserCorrections(originalAlphaUsers, editedAlphaUsers).length +
-        " Alpha user setting(s) changed. Changes are staged in memory only; migration execution is not yet available.";
+      updateReviewSummary();
     });
     label.append(checkbox, document.createTextNode(" Disabled — " + record.userId));
     root.append(label);
@@ -254,6 +253,42 @@ function renderAlphaUsers() {
   if (!editedAlphaUsers.length) root.textContent = "No Alpha user records in the selected database.";
 }
 
+
+
+// Review only the supported user-disabled corrections. Other categories remain
+// explicitly unavailable until their real backend record readers exist.
+function updateReviewSummary() {
+  const summary = document.querySelector("#review-data-corrections");
+  const status = document.querySelector("#data-editor-status");
+  const categories = ["hosts", "effects", "jobs", "games"];
+  for (const category of categories) {
+    document.querySelector("#data-fields-" + category).textContent =
+      "Record review not implemented for this category. No values have been loaded or staged.";
+  }
+  if (!originalAlphaUsers || !editedAlphaUsers) {
+    summary.textContent = "No verified application records loaded for review. No changes staged.";
+    return;
+  }
+  try {
+    const changes = alphaUserCorrections(originalAlphaUsers, editedAlphaUsers);
+    const before = new Map(originalAlphaUsers.map(record => [record.userId, record]));
+    summary.replaceChildren();
+    const heading = document.createElement("p");
+    heading.textContent = changes.length + " supported Alpha user correction(s) staged in memory. No source data changed.";
+    summary.append(heading);
+    for (const change of changes) {
+      const line = document.createElement("p");
+      line.textContent = "User " + change.userId + ": Disabled " +
+        String(before.get(change.userId).disabled) + " → " + String(change.disabled);
+      summary.append(line);
+    }
+    status.textContent = changes.length + " Alpha user correction(s) staged in memory only. " +
+      "Hosts, Effects, Jobs and Games are not yet editable. Migration remains disabled.";
+  } catch (error) {
+    summary.textContent = "Review validation failed: " + String(error);
+    status.textContent = "Review validation failed: " + String(error);
+  }
+}
 
 async function inspectSelectedSqlite() {
   const output = document.querySelector("#data-result");
@@ -274,6 +309,7 @@ async function inspectSelectedSqlite() {
       originalAlphaUsers = createAlphaUserReview(users);
       editedAlphaUsers = createAlphaUserReview(users);
       renderAlphaUsers();
+      updateReviewSummary();
     } catch (reviewError) {
       document.querySelector("#data-editor-status").textContent =
         "Application data could not be loaded for editing: " + String(reviewError);
@@ -367,6 +403,7 @@ function refreshReview() {
         schemaAssessment: assessLegacyAlphaSchema(lastDatabaseInspection)
       }, null, 2)
     : "No database inspected. Fresh installation still requires encrypted SQLCipher.";
+  updateReviewSummary();
   document.querySelector("#review-security-summary").textContent =
     "SQLCipher is mandatory for fresh installs and legacy imports. Destination password: " +
     validateDestinationPassword(newDbPassword.value, confirmDbPassword.value).message +

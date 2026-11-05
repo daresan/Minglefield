@@ -46,6 +46,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
+      - name: Reuse cached Tauri Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "installer/gui/src-tauri -> target"
+          shared-key: installer-gui
       - uses: actions/setup-node@v7
         with:
           node-version: "22"

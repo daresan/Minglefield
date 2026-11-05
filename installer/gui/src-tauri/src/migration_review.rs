@@ -118,7 +118,13 @@ impl From<StagedGamePathField> for GamePathField {
 impl From<StagedCorrection> for ReviewCorrection {
     fn from(value: StagedCorrection) -> Self {
         match value {
-            StagedCorrection::FullRow { table, row_id, columns, before, after } => Self::FullRow {
+            StagedCorrection::FullRow {
+                table,
+                row_id,
+                columns,
+                before,
+                after,
+            } => Self::FullRow {
                 table,
                 row_id,
                 columns,

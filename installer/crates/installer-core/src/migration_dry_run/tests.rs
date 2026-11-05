@@ -79,7 +79,9 @@ fn reviews_all_tables_and_rolls_back_every_staged_change() {
         .iter()
         .find(|entry| entry.table == "alpha_passwords")
         .unwrap();
-    assert!(passwords.staged_editable_columns.contains(&"password_hash".to_owned()));
+    assert!(passwords
+        .staged_editable_columns
+        .contains(&"password_hash".to_owned()));
     assert!(passwords.protected_columns.is_empty());
     let extension = preview
         .field_coverage
@@ -418,7 +420,6 @@ fn plaintext_alpha_with_optional_password_keeps_second_copy_unencrypted() {
     std::fs::remove_file(file).unwrap();
 }
 
-
 fn full_cell(kind: &str, value: Option<&str>) -> RawCell {
     RawCell {
         kind: kind.to_owned(),
@@ -446,26 +447,44 @@ fn rehearses_workflow_host_rules_and_binary_cell_changes_without_source_writes()
             table: "sec01_host_rules".into(),
             row_id: Some("1".into()),
             columns: vec!["host_id".into(), "rule_id".into(), "config".into()],
-            before: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
-                full_cell("text", Some(r#"{"parallel":2}"#))],
-            after: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
-                full_cell("text", Some(r#"{"parallel":3}"#))],
+            before: vec![
+                full_cell("text", Some("h1")),
+                full_cell("text", Some("rule1")),
+                full_cell("text", Some(r#"{"parallel":2}"#)),
+            ],
+            after: vec![
+                full_cell("text", Some("h1")),
+                full_cell("text", Some("rule1")),
+                full_cell("text", Some(r#"{"parallel":3}"#)),
+            ],
         },
         ReviewCorrection::FullRow {
             table: "sec01_host_comfy_workflows".into(),
             row_id: Some("1".into()),
             columns: vec!["host_id".into(), "workflow_id".into(), "definition".into()],
-            before: vec![full_cell("text", Some("h1")), full_cell("text", Some("rig")),
-                full_cell("blob", Some("00ff"))],
-            after: vec![full_cell("text", Some("h1")), full_cell("text", Some("rig")),
-                full_cell("blob", Some("12ab"))],
+            before: vec![
+                full_cell("text", Some("h1")),
+                full_cell("text", Some("rig")),
+                full_cell("blob", Some("00ff")),
+            ],
+            after: vec![
+                full_cell("text", Some("h1")),
+                full_cell("text", Some("rig")),
+                full_cell("blob", Some("12ab")),
+            ],
         },
         ReviewCorrection::FullRow {
             table: "extra_no_rowid".into(),
             row_id: None,
             columns: vec!["k".into(), "note".into()],
-            before: vec![full_cell("text", Some("key")), full_cell("text", Some("old"))],
-            after: vec![full_cell("text", Some("key")), full_cell("text", Some("new"))],
+            before: vec![
+                full_cell("text", Some("key")),
+                full_cell("text", Some("old")),
+            ],
+            after: vec![
+                full_cell("text", Some("key")),
+                full_cell("text", Some("new")),
+            ],
         },
     ];
     let result = rehearse_migration(&file, "", &changes).unwrap();
@@ -477,10 +496,16 @@ fn rehearses_workflow_host_rules_and_binary_cell_changes_without_source_writes()
         table: "sec01_host_rules".into(),
         row_id: Some("1".into()),
         columns: vec!["host_id".into(), "rule_id".into(), "config".into()],
-        before: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
-            full_cell("text", Some("stale"))],
-        after: vec![full_cell("text", Some("h1")), full_cell("text", Some("rule1")),
-            full_cell("text", Some("new"))],
+        before: vec![
+            full_cell("text", Some("h1")),
+            full_cell("text", Some("rule1")),
+            full_cell("text", Some("stale")),
+        ],
+        after: vec![
+            full_cell("text", Some("h1")),
+            full_cell("text", Some("rule1")),
+            full_cell("text", Some("new")),
+        ],
     }];
     assert!(rehearse_migration(&file, "", &stale).is_err());
     assert_eq!(std::fs::read(&file).unwrap(), before_bytes);

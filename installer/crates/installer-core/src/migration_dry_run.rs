@@ -152,14 +152,17 @@ fn valid_id(value: &str) -> bool {
 }
 
 fn valid_game_path(value: &str) -> bool {
-    let path = Path::new(value);
+    let bytes = value.as_bytes();
+    let drive_absolute = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/');
+    let portable_absolute = value.starts_with('/') || value.starts_with("\\\\") || drive_absolute;
     !value.is_empty()
         && value.len() <= 1024
         && !value.contains('\0')
-        && path.is_absolute()
-        && !path
-            .components()
-            .any(|part| matches!(part, std::path::Component::ParentDir))
+        && portable_absolute
+        && !value.split(['/', '\\']).any(|part| part == "..")
 }
 
 fn verify_correction(correction: &ReviewCorrection) -> Result<(u8, String, String), String> {

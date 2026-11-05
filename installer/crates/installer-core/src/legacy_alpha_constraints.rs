@@ -7,102 +7,183 @@ use rusqlite::Connection;
 use std::collections::BTreeMap;
 
 const REGISTERED_SOURCE_SQL: &[(&str, &str)] = &[
-    ("alpha_invites", r#"CREATE TABLE IF NOT EXISTS alpha_invites(
+    (
+        "alpha_invites",
+        r#"CREATE TABLE IF NOT EXISTS alpha_invites(
                 invitation_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE,
                 expires_at INTEGER NOT NULL, redeemed INTEGER NOT NULL DEFAULT 0,
-                revoked INTEGER NOT NULL DEFAULT 0)"#),
-    ("alpha_users", r#"CREATE TABLE IF NOT EXISTS alpha_users(
-                user_id TEXT PRIMARY KEY, disabled INTEGER NOT NULL DEFAULT 0)"#),
-    ("alpha_agents", r#"CREATE TABLE IF NOT EXISTS alpha_agents(
+                revoked INTEGER NOT NULL DEFAULT 0)"#,
+    ),
+    (
+        "alpha_users",
+        r#"CREATE TABLE IF NOT EXISTS alpha_users(
+                user_id TEXT PRIMARY KEY, disabled INTEGER NOT NULL DEFAULT 0)"#,
+    ),
+    (
+        "alpha_agents",
+        r#"CREATE TABLE IF NOT EXISTS alpha_agents(
                 agent_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
-                disabled INTEGER NOT NULL DEFAULT 0)"#),
-    ("alpha_sessions", r#"CREATE TABLE IF NOT EXISTS alpha_sessions(
+                disabled INTEGER NOT NULL DEFAULT 0)"#,
+    ),
+    (
+        "alpha_sessions",
+        r#"CREATE TABLE IF NOT EXISTS alpha_sessions(
                 token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL,
-                expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)"#),
-    ("alpha_jobs", r#"CREATE TABLE IF NOT EXISTS alpha_jobs(
+                expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)"#,
+    ),
+    (
+        "alpha_jobs",
+        r#"CREATE TABLE IF NOT EXISTS alpha_jobs(
                 job_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, agent_id TEXT NOT NULL,
                 idempotency_key TEXT NOT NULL, action TEXT NOT NULL,
-                UNIQUE(user_id,idempotency_key))"#),
-    ("alpha_passwords", r#"CREATE TABLE IF NOT EXISTS alpha_passwords(
-                user_id TEXT PRIMARY KEY, salt BLOB NOT NULL, password_hash BLOB NOT NULL)"#),
-    ("alpha_agent_grants", r#"CREATE TABLE IF NOT EXISTS alpha_agent_grants(
+                UNIQUE(user_id,idempotency_key))"#,
+    ),
+    (
+        "alpha_passwords",
+        r#"CREATE TABLE IF NOT EXISTS alpha_passwords(
+                user_id TEXT PRIMARY KEY, salt BLOB NOT NULL, password_hash BLOB NOT NULL)"#,
+    ),
+    (
+        "alpha_agent_grants",
+        r#"CREATE TABLE IF NOT EXISTS alpha_agent_grants(
                 agent_id TEXT NOT NULL, grantee_user_id TEXT NOT NULL,
                 action TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY(agent_id,grantee_user_id,action))"#),
-    ("alpha_executor_hosts", r#"CREATE TABLE IF NOT EXISTS alpha_executor_hosts(
+                PRIMARY KEY(agent_id,grantee_user_id,action))"#,
+    ),
+    (
+        "alpha_executor_hosts",
+        r#"CREATE TABLE IF NOT EXISTS alpha_executor_hosts(
                 host_id TEXT PRIMARY KEY, operator_id TEXT NOT NULL,
-                active INTEGER NOT NULL CHECK(active IN (0,1)))"#),
-    ("alpha_agent_host_assignments", r#"CREATE TABLE IF NOT EXISTS alpha_agent_host_assignments(
+                active INTEGER NOT NULL CHECK(active IN (0,1)))"#,
+    ),
+    (
+        "alpha_agent_host_assignments",
+        r#"CREATE TABLE IF NOT EXISTS alpha_agent_host_assignments(
                 agent_id TEXT NOT NULL, host_id TEXT NOT NULL,
                 enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
-                PRIMARY KEY(agent_id,host_id))"#),
-    ("alpha_sec01_admissions", r#"CREATE TABLE IF NOT EXISTS alpha_sec01_admissions(
-                effect_key TEXT PRIMARY KEY, binding TEXT NOT NULL)"#),
-    ("sec01_host_comfy_workflows", r#"CREATE TABLE IF NOT EXISTS sec01_host_comfy_workflows(
+                PRIMARY KEY(agent_id,host_id))"#,
+    ),
+    (
+        "alpha_sec01_admissions",
+        r#"CREATE TABLE IF NOT EXISTS alpha_sec01_admissions(
+                effect_key TEXT PRIMARY KEY, binding TEXT NOT NULL)"#,
+    ),
+    (
+        "sec01_host_comfy_workflows",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_comfy_workflows(
                 host_id TEXT NOT NULL, effect_id TEXT NOT NULL,
                 runtime_id TEXT NOT NULL, workflow TEXT NOT NULL,
-                metadata TEXT NOT NULL, PRIMARY KEY(host_id,effect_id))"#),
-    ("sec01_host_job_parameters", r#"CREATE TABLE IF NOT EXISTS sec01_host_job_parameters(
+                metadata TEXT NOT NULL, PRIMARY KEY(host_id,effect_id))"#,
+    ),
+    (
+        "sec01_host_job_parameters",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_job_parameters(
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 effect_id TEXT NOT NULL, workflow_sha256 TEXT NOT NULL,
-                parameters TEXT NOT NULL)"#),
-    ("alpha_git_profiles", r#"CREATE TABLE IF NOT EXISTS alpha_git_profiles(
+                parameters TEXT NOT NULL)"#,
+    ),
+    (
+        "alpha_git_profiles",
+        r#"CREATE TABLE IF NOT EXISTS alpha_git_profiles(
                 host_id TEXT NOT NULL, profile_id TEXT NOT NULL, owner_id TEXT NOT NULL,
                 auth_method TEXT NOT NULL, label TEXT NOT NULL,
                 git_executable TEXT NOT NULL, author_name TEXT NOT NULL,
-                author_email TEXT NOT NULL, PRIMARY KEY(host_id,profile_id))"#),
-    ("alpha_game_installation_evidence", r#"CREATE TABLE IF NOT EXISTS alpha_game_installation_evidence(
+                author_email TEXT NOT NULL, PRIMARY KEY(host_id,profile_id))"#,
+    ),
+    (
+        "alpha_game_installation_evidence",
+        r#"CREATE TABLE IF NOT EXISTS alpha_game_installation_evidence(
                 host_id TEXT NOT NULL, project_id TEXT NOT NULL,
                 integration_id TEXT NOT NULL, installer_run_id TEXT NOT NULL,
                 evidence_json TEXT NOT NULL, recorded_at TEXT NOT NULL,
                 PRIMARY KEY(host_id,project_id,integration_id,installer_run_id),
-                FOREIGN KEY(project_id) REFERENCES alpha_game_projects(project_id))"#),
-    ("alpha_game_projects", r#"CREATE TABLE IF NOT EXISTS alpha_game_projects(
+                FOREIGN KEY(project_id) REFERENCES alpha_game_projects(project_id))"#,
+    ),
+    (
+        "alpha_game_projects",
+        r#"CREATE TABLE IF NOT EXISTS alpha_game_projects(
                 project_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 owner_id TEXT NOT NULL, name TEXT NOT NULL,
                 repository_root TEXT NOT NULL, job_attachments_root TEXT NOT NULL,
                 output_root TEXT NOT NULL, settings_revision INTEGER NOT NULL DEFAULT 1,
-                UNIQUE(host_id,project_id))"#),
-    ("sec01_game_install_journal", r#"CREATE TABLE IF NOT EXISTS sec01_game_install_journal(
+                UNIQUE(host_id,project_id))"#,
+    ),
+    (
+        "sec01_game_install_journal",
+        r#"CREATE TABLE IF NOT EXISTS sec01_game_install_journal(
                 operation_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 owner_id TEXT NOT NULL, project_id TEXT NOT NULL,
                 state TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"#),
-    ("sec01_host_settings", r#"CREATE TABLE IF NOT EXISTS sec01_host_settings(
-                host_id TEXT PRIMARY KEY, settings TEXT NOT NULL)"#),
-    ("sec01_host_runtimes", r#"CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"#,
+    ),
+    (
+        "sec01_host_settings",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_settings(
+                host_id TEXT PRIMARY KEY, settings TEXT NOT NULL)"#,
+    ),
+    (
+        "sec01_host_runtimes",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_runtimes(
                 host_id TEXT NOT NULL, runtime_id TEXT NOT NULL,
-                config TEXT NOT NULL, PRIMARY KEY(host_id,runtime_id))"#),
-    ("sec01_host_owners", r#"CREATE TABLE IF NOT EXISTS sec01_host_owners(
-                host_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL)"#),
-    ("sec01_host_effect_definitions", r#"CREATE TABLE IF NOT EXISTS sec01_host_effect_definitions(
+                config TEXT NOT NULL, PRIMARY KEY(host_id,runtime_id))"#,
+    ),
+    (
+        "sec01_host_owners",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_owners(
+                host_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL)"#,
+    ),
+    (
+        "sec01_host_effect_definitions",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_effect_definitions(
                 host_id TEXT NOT NULL, effect_id TEXT NOT NULL,
                 description TEXT NOT NULL, enabled INTEGER NOT NULL,
-                PRIMARY KEY(host_id,effect_id))"#),
-    ("sec01_host_jobs", r#"CREATE TABLE IF NOT EXISTS sec01_host_jobs(
+                PRIMARY KEY(host_id,effect_id))"#,
+    ),
+    (
+        "sec01_host_jobs",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_jobs(
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
                 effect_id TEXT NOT NULL, requested_by TEXT NOT NULL,
                 state TEXT NOT NULL, created_at TEXT NOT NULL,
-                UNIQUE(host_id,job_id))"#),
-    ("sec01_host_admins", r#"CREATE TABLE IF NOT EXISTS sec01_host_admins(
+                UNIQUE(host_id,job_id))"#,
+    ),
+    (
+        "sec01_host_admins",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_admins(
                 host_id TEXT NOT NULL, admin_id TEXT NOT NULL,
-                PRIMARY KEY(host_id,admin_id))"#),
-    ("sec01_host_rules", r#"CREATE TABLE IF NOT EXISTS sec01_host_rules(
+                PRIMARY KEY(host_id,admin_id))"#,
+    ),
+    (
+        "sec01_host_rules",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_rules(
                 host_id TEXT NOT NULL, rule_id TEXT NOT NULL,
                 priority INTEGER NOT NULL, enabled INTEGER NOT NULL,
-                config TEXT NOT NULL, PRIMARY KEY(host_id,rule_id))"#),
-    ("sec01_host_approvals", r#"CREATE TABLE IF NOT EXISTS sec01_host_approvals(
+                config TEXT NOT NULL, PRIMARY KEY(host_id,rule_id))"#,
+    ),
+    (
+        "sec01_host_approvals",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_approvals(
                 host_id TEXT NOT NULL, effect_key TEXT NOT NULL,
-                approved_by TEXT NOT NULL, PRIMARY KEY(host_id,effect_key))"#),
-    ("sec01_host_commits", r#"CREATE TABLE IF NOT EXISTS sec01_host_commits(
+                approved_by TEXT NOT NULL, PRIMARY KEY(host_id,effect_key))"#,
+    ),
+    (
+        "sec01_host_commits",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_commits(
                 effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL,
-                binding TEXT NOT NULL, rule_id TEXT NOT NULL)"#),
-    ("sec01_host_active_slots", r#"CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
-                effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)"#),
-    ("sec01_host_comfy_executions", r#"CREATE TABLE IF NOT EXISTS sec01_host_comfy_executions(
+                binding TEXT NOT NULL, rule_id TEXT NOT NULL)"#,
+    ),
+    (
+        "sec01_host_active_slots",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_active_slots(
+                effect_key TEXT PRIMARY KEY, host_id TEXT NOT NULL)"#,
+    ),
+    (
+        "sec01_host_comfy_executions",
+        r#"CREATE TABLE IF NOT EXISTS sec01_host_comfy_executions(
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
-                prompt_id TEXT, error TEXT)"#),
+                prompt_id TEXT, error TEXT)"#,
+    ),
 ];
 const ACTIVE_GAME_INDEX: &str = r#"CREATE UNIQUE INDEX IF NOT EXISTS uq_game_install_one_active_project ON sec01_game_install_journal(host_id,project_id) WHERE state NOT IN ('cancelled','committed','rolled_back')"#;
 
@@ -149,19 +230,21 @@ fn canonical_sql(sql: &str) -> String {
 }
 
 fn schema_objects(db: &Connection) -> Result<BTreeMap<String, ObjectRow>, String> {
-    let mut stmt = db.prepare(
-        "SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name,tbl_name"
-    ).map_err(|_| "Cannot prepare complete Alpha schema audit")?;
-    let rows = stmt.query_map([], |row| {
-        Ok(ObjectRow {
-            kind: row.get(0)?,
-            name: row.get(1)?,
-            table: row.get(2)?,
-            sql: row.get::<_, Option<String>>(3)?.map(|s| canonical_sql(&s)),
+    let mut stmt = db
+        .prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name,tbl_name")
+        .map_err(|_| "Cannot prepare complete Alpha schema audit")?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ObjectRow {
+                kind: row.get(0)?,
+                name: row.get(1)?,
+                table: row.get(2)?,
+                sql: row.get::<_, Option<String>>(3)?.map(|s| canonical_sql(&s)),
+            })
         })
-    }).map_err(|_| "Cannot enumerate complete Alpha schema objects")?
-      .collect::<rusqlite::Result<Vec<_>>>()
-      .map_err(|_| "Cannot decode complete Alpha schema objects")?;
+        .map_err(|_| "Cannot enumerate complete Alpha schema objects")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|_| "Cannot decode complete Alpha schema objects")?;
     if rows.len() > 8192 {
         return Err("Alpha source exceeds safe schema object limit".to_owned());
     }
@@ -178,7 +261,8 @@ fn known_reference() -> Result<Connection, String> {
     let db = Connection::open_in_memory()
         .map_err(|_| "Cannot allocate registered Alpha schema reference")?;
     for &(name, sql) in REGISTERED_SOURCE_SQL {
-        db.execute_batch(sql).map_err(|_| format!("Registered Alpha DDL invalid: {name}"))?;
+        db.execute_batch(sql)
+            .map_err(|_| format!("Registered Alpha DDL invalid: {name}"))?;
     }
     db.execute_batch(ACTIVE_GAME_INDEX)
         .map_err(|_| "Registered Alpha active-game index invalid")?;
@@ -192,7 +276,8 @@ fn known_reference() -> Result<Connection, String> {
 /// Canonicalization is conservative: unsupported variations fail closed.
 /// A positive audit does not prove an operational SQLCipher database runtime.
 pub fn audit_registered_alpha_schema_objects(
-    inspected_db: &Connection, inspection: &SqliteInspection,
+    inspected_db: &Connection,
+    inspection: &SqliteInspection,
 ) -> Result<AlphaSchemaObjectAudit, String> {
     let reference = known_reference()?;
     let expected = schema_objects(&reference)?;
@@ -223,9 +308,11 @@ pub fn audit_registered_alpha_schema_objects(
             None => report.missing_objects.push(name.clone()),
         }
     }
-    report.extra_objects = actual.keys()
+    report.extra_objects = actual
+        .keys()
         .filter(|name| !expected.contains_key(*name))
-        .cloned().collect();
+        .cloned()
+        .collect();
     if report.missing_objects.is_empty()
         && report.extra_objects.is_empty()
         && report.incompatible_objects.is_empty()
@@ -252,18 +339,27 @@ mod tests {
             application_id: 0,
             user_version: 0,
             source_encrypted: false,
-            tables: schema.values().filter(|item| item.kind == "table" && !item.name.starts_with("sqlite_"))
+            tables: schema
+                .values()
+                .filter(|item| item.kind == "table" && !item.name.starts_with("sqlite_"))
                 .map(|item| InspectedTable {
                     name: item.name.clone(),
                     columns: Vec::new(),
                     create_sql: item.sql.clone(),
-                }).collect(),
-            schema_objects: schema.values().filter(|item| item.kind != "table")
+                })
+                .collect(),
+            schema_objects: schema
+                .values()
+                .filter(|item| item.kind != "table")
                 .map(|item| SchemaObject {
-                    object_type: item.kind.clone(), name: item.name.clone(),
-                    table_name: item.table.clone(), create_sql: item.sql.clone(),
-                }).collect(),
-            integrity_ok: true, foreign_key_violations: 0,
+                    object_type: item.kind.clone(),
+                    name: item.name.clone(),
+                    table_name: item.table.clone(),
+                    create_sql: item.sql.clone(),
+                })
+                .collect(),
+            integrity_ok: true,
+            foreign_key_violations: 0,
         }
     }
 
@@ -273,7 +369,10 @@ mod tests {
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(report.verified);
         assert_eq!(REGISTERED_SOURCE_SQL.len(), 27);
-        assert_eq!(report.expected_schema_entry_count, report.matched_schema_entry_count);
+        assert_eq!(
+            report.expected_schema_entry_count,
+            report.matched_schema_entry_count
+        );
         assert!(report.expected_index_count >= 27);
         assert_eq!(report.reason, "registered_alpha_schema_objects_verified");
         assert!(!report.migration_enabled);
@@ -282,16 +381,21 @@ mod tests {
     #[test]
     fn rejects_missing_or_changed_unique_partial_index() {
         let db = known_reference().unwrap();
-        db.execute_batch("DROP INDEX uq_game_install_one_active_project").unwrap();
+        db.execute_batch("DROP INDEX uq_game_install_one_active_project")
+            .unwrap();
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(!report.verified);
-        assert!(report.missing_objects.contains(&"uq_game_install_one_active_project".to_owned()));
+        assert!(report
+            .missing_objects
+            .contains(&"uq_game_install_one_active_project".to_owned()));
         db.execute_batch(
             "CREATE UNIQUE INDEX uq_game_install_one_active_project ON sec01_game_install_journal(host_id,project_id) WHERE state IN ('cancelled','committed','rolled_back')"
         ).unwrap();
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(!report.verified);
-        assert!(report.incompatible_objects.contains(&"uq_game_install_one_active_project".to_owned()));
+        assert!(report
+            .incompatible_objects
+            .contains(&"uq_game_install_one_active_project".to_owned()));
     }
 
     #[test]
@@ -300,8 +404,9 @@ mod tests {
         db.execute_batch(
             "CREATE VIEW extra_view AS SELECT * FROM alpha_users;
              CREATE TRIGGER extra_trigger AFTER UPDATE ON alpha_users BEGIN SELECT 1; END;
-             CREATE INDEX rogue_index ON sec01_host_rules(priority);"
-        ).unwrap();
+             CREATE INDEX rogue_index ON sec01_host_rules(priority);",
+        )
+        .unwrap();
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(!report.verified);
         for name in ["extra_view", "extra_trigger", "rogue_index"] {
@@ -323,26 +428,40 @@ mod tests {
     #[test]
     fn rejects_missing_unique_check_fk_and_modified_default_even_with_same_columns() {
         for (table, replacement) in [
-            ("alpha_invites", r#"CREATE TABLE IF NOT EXISTS alpha_invites(
+            (
+                "alpha_invites",
+                r#"CREATE TABLE IF NOT EXISTS alpha_invites(
                 invitation_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL,
                 expires_at INTEGER NOT NULL, redeemed INTEGER NOT NULL DEFAULT 0,
-                revoked INTEGER NOT NULL DEFAULT 0)"#),
-            ("alpha_executor_hosts", r#"CREATE TABLE IF NOT EXISTS alpha_executor_hosts(
+                revoked INTEGER NOT NULL DEFAULT 0)"#,
+            ),
+            (
+                "alpha_executor_hosts",
+                r#"CREATE TABLE IF NOT EXISTS alpha_executor_hosts(
                 host_id TEXT PRIMARY KEY, operator_id TEXT NOT NULL,
-                active INTEGER NOT NULL)"#),
-            ("alpha_game_installation_evidence",
-              r#"CREATE TABLE IF NOT EXISTS alpha_game_installation_evidence(
+                active INTEGER NOT NULL)"#,
+            ),
+            (
+                "alpha_game_installation_evidence",
+                r#"CREATE TABLE IF NOT EXISTS alpha_game_installation_evidence(
                 host_id TEXT NOT NULL, project_id TEXT NOT NULL,
                 integration_id TEXT NOT NULL, installer_run_id TEXT NOT NULL,
                 evidence_json TEXT NOT NULL, recorded_at TEXT NOT NULL,
-                PRIMARY KEY(host_id,project_id,integration_id,installer_run_id))"#),
-            ("alpha_users", r#"CREATE TABLE IF NOT EXISTS alpha_users(
-                user_id TEXT PRIMARY KEY, disabled INTEGER NOT NULL DEFAULT 1)"#),
+                PRIMARY KEY(host_id,project_id,integration_id,installer_run_id))"#,
+            ),
+            (
+                "alpha_users",
+                r#"CREATE TABLE IF NOT EXISTS alpha_users(
+                user_id TEXT PRIMARY KEY, disabled INTEGER NOT NULL DEFAULT 1)"#,
+            ),
         ] {
             let db = with_replaced_ddl(table, replacement);
             let audit = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
             assert!(!audit.verified, "{table}");
-            assert!(audit.incompatible_objects.contains(&table.to_owned()), "{table}");
+            assert!(
+                audit.incompatible_objects.contains(&table.to_owned()),
+                "{table}"
+            );
         }
     }
 
@@ -351,8 +470,9 @@ mod tests {
         let db = known_reference().unwrap();
         db.execute_batch(
             "ALTER TABLE alpha_game_projects RENAME COLUMN job_attachments_root TO staging_root;
-             ALTER TABLE alpha_game_projects RENAME COLUMN staging_root TO job_attachments_root;"
-        ).unwrap();
+             ALTER TABLE alpha_game_projects RENAME COLUMN staging_root TO job_attachments_root;",
+        )
+        .unwrap();
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(report.verified, "{report:?}");
     }
@@ -363,11 +483,17 @@ mod tests {
         let mut inspected = inspect(&db);
         inspected.application_id = 12345;
         assert_eq!(
-            audit_registered_alpha_schema_objects(&db, &inspected).unwrap().reason,
+            audit_registered_alpha_schema_objects(&db, &inspected)
+                .unwrap()
+                .reason,
             "not_unversioned_alpha"
         );
         inspected.application_id = 0;
         inspected.foreign_key_violations = 1;
-        assert!(!audit_registered_alpha_schema_objects(&db, &inspected).unwrap().verified);
+        assert!(
+            !audit_registered_alpha_schema_objects(&db, &inspected)
+                .unwrap()
+                .verified
+        );
     }
 }

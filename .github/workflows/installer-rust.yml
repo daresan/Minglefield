@@ -46,18 +46,6 @@ jobs:
         run: python scripts/audit_alpha_runtime_imports.py --json
       - name: Inspect Git and gh executable invocation sites (read-only)
         run: python scripts/audit_external_executables.py --json
-      - name: Set up Python 3.11 for real SQLCipher runtime checks
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-      - name: Install pinned SQLCipher runtime wheel
-        run: python -m pip install --only-binary=:all: --no-deps sqlcipher3==0.6.4
-      - name: Test operational SQLCipher driver and real Alpha/Host transactions
-        run: python -B -m unittest discover -s ../tests/conformance -p "test_alpha_sqlcipher_runtime.py" -v
-      - name: Preserve existing Alpha auth and Host policy behavior
-        run: |
-          python -B -m unittest discover -s ../tests/conformance -p "test_private_alpha_auth.py" -v
-          python -B -m unittest discover -s ../tests/conformance -p "test_sec01_host_commit_policy.py" -v
 
   tauri-gui:
     name: Tauri GUI / ${{ matrix.os }}

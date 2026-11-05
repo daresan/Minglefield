@@ -45,8 +45,8 @@ launcher flag, or duplicate database.
 
 ## Cross-platform verification
 
-The `operational-sqlcipher` matrix in the existing
-`.github/workflows/installer-rust.yml` installs a pinned
+The existing Windows/Linux/macOS Python conformance workflow
+`.github/workflows/game-installation-security.yml` installs a pinned
 `sqlcipher3==0.6.4` **binary wheel** on Python 3.11 for Windows, Linux
 and macOS, then runs actual encrypted connection/reopen, wrong-key,
 password quoting, live Alpha authentication and Host project uniqueness
@@ -67,3 +67,7 @@ claim boundary must not be bypassed.
 No durable migration execution has been enabled. All previous
 source-preservation, original password handling and five database
 review areas remain intact.
+
+The runtime test file is `tests/conformance/test_game_integration_install_alpha_sqlcipher_runtime.py`.
+The existing conformance test matcher runs it without adding another workflow.
+The package in `requirements-ci.txt` is CI-only, not yet a packaged Minglefield runtime dependency.

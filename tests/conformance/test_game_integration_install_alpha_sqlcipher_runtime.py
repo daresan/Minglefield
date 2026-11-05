@@ -1,8 +1,8 @@
 """Runtime SQLCipher DB-API conformance for the existing Alpha store.
 
 Real-driver cases intentionally run against disposable temporary databases.
-The dedicated cross-platform CI installs sqlcipher3 (binary wheel) for these
-tests; ordinary developer environments without it skip only real-driver cases.
+The existing cross-platform installation-conformance CI installs a pinned
+SQLCipher binary wheel; local environments without it skip only real-driver cases.
 """
 import importlib.util
 import sqlite3

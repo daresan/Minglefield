@@ -2,3 +2,5 @@
 # Install on clean environments: python -m pip install -r requirements-ci.txt
 jsonschema>=4.18,<5
 packaging>=24,<27
+# CI-only encrypted Alpha DB-API compatibility (Windows/Linux/macOS Python 3.11)
+sqlcipher3==0.6.4

@@ -545,6 +545,65 @@ async function inspectSelectedSqlite() {
   }
 }
 
+const migrationDestinationInput = document.querySelector("#migration-destination-path");
+const migrationPasswordInput = document.querySelector("#migration-existing-password");
+const migrationResult = document.querySelector("#migration-rehearsal-result");
+
+migrationDestinationInput.addEventListener("input", invalidateMigrationRehearsal);
+document.querySelector("#browse-migration-destination").addEventListener("click", async () => {
+  try {
+    const folder = await invoke("browse_directory");
+    if (!folder) return;
+    const separator = folder.includes("\\") ? "\\" : "/";
+    migrationDestinationInput.value = folder.replace(/[\\/]+$/, "") +
+      separator + "minglefield-migrated.sqlite3";
+    invalidateMigrationRehearsal();
+  } catch (error) {
+    migrationResult.textContent = "Destination folder selection failed: " + String(error);
+  }
+});
+
+document.querySelector("#preview-migration-rehearsal").addEventListener("click", async () => {
+  const source = selectedDatabase;
+  const destinationPath = migrationDestinationInput.value.trim();
+  const requestSequence = ++rehearsalRequestSequence;
+  lastMigrationRehearsal = null;
+  migrationResult.textContent = "Verifying the complete database and staged changes on a disposable snapshot…";
+  try {
+    if (!source || !lastDatabaseInspection?.integrityOk || !lastDatabaseInspection.foreignKeysOk) {
+      throw new Error("Select and inspect a valid existing database first.");
+    }
+    if (!destinationPath) throw new Error("Select a separate new database destination.");
+    const corrections = stagedMigrationChanges(
+      originalAlphaUsers, editedAlphaUsers, originalLegacyRecords, editedLegacyRecords, reviewLoadIssues
+    );
+    const password = migrationPasswordInput.value;
+    const request = invoke("preview_migration_rehearsal", {
+      sourcePath: source, destinationPath, password, corrections
+    });
+    migrationPasswordInput.value = "";
+    const preview = await request;
+    if (requestSequence !== rehearsalRequestSequence || selectedDatabase !== source) return;
+    if (preview.executionEnabled || preview.destinationCreated ||
+        !preview.sourcePreserved || !preview.sourceIntegrityVerified) {
+      throw new Error("Unexpected unsafe migration rehearsal result");
+    }
+    lastMigrationRehearsal = { ...preview, sourcePath: source, destinationPath };
+    migrationResult.textContent = JSON.stringify(preview, null, 2);
+    document.querySelector("#review-migration-rehearsal-status").textContent =
+      "Verified rehearsal: " + preview.verifiedChanges + " staged correction(s), " +
+      preview.preservedTables.length + " existing tables accounted for. " +
+      "Source preserved; no destination created. Migration execution disabled.";
+  } catch (error) {
+    if (requestSequence !== rehearsalRequestSequence) return;
+    migrationResult.textContent = "Migration rehearsal rejected: " + String(error);
+    document.querySelector("#review-migration-rehearsal-status").textContent =
+      "Migration rehearsal rejected. Migration execution remains disabled.";
+  } finally {
+    migrationPasswordInput.value = "";
+  }
+});
+
 document.querySelector("#inspect-selected-database").addEventListener("click", inspectSelectedSqlite);
 
 async function inspectDefaultUserData() {

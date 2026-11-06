@@ -1,0 +1,84 @@
+name: Installer Tauri native checks
+
+# Minglefield Development CI Policy v1; this is NOT a ComfyUI workflow.
+# Ordinary pushes test Ubuntu; pull requests and explicit gates test all OS.
+on:
+  push:
+    paths:
+      - "installer/gui/src-tauri/**"
+      - "installer/gui/icon-source.svg"
+      - "installer/gui/package.json"
+      - "installer/gui/package-lock.json"
+      - "installer/crates/installer-core/src/lib.rs"
+      - "installer/crates/installer-core/Cargo.toml"
+      - ".github/workflows/installer-gui-native.yml"
+  pull_request:
+    paths:
+      - "installer/gui/src-tauri/**"
+      - "installer/gui/icon-source.svg"
+      - "installer/gui/package.json"
+      - "installer/gui/package-lock.json"
+      - "installer/crates/**"
+      - ".github/workflows/installer-gui-native.yml"
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: "Run Tauri native checks on Windows, Linux and macOS"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-native-gui-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  tauri-gui:
+    name: Tauri GUI / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'pull_request' || inputs.full_matrix == true) && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: installer/gui
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache Tauri Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "installer/gui/src-tauri -> target"
+          shared-key: installer-gui
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: installer/gui/package-lock.json
+      - name: Install Linux Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - name: Check Tauri Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - name: Install locked GUI dependencies
+        run: npm ci --no-audit --no-fund --ignore-scripts
+      - name: Test installer GUI validation and review
+        run: node --test
+      - name: Build GUI frontend
+        run: npm run web:build
+      - name: Compile locked Tauri GUI Rust backend
+        run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+      - name: Lint Tauri GUI Rust backend
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Test Tauri GUI Rust backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked

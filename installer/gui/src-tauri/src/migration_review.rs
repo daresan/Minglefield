@@ -402,9 +402,28 @@ fn verify_local_experimental_approval(backup_path: &str, confirmation: &str) -> 
     Ok(())
 }
 
+fn valid_recovery_operation_id(operation_id: Option<&str>) -> bool {
+    operation_id.is_some_and(|id| {
+        id.len() == 32
+            && id.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    })
+}
+
 #[cfg(test)]
 mod experimental_copy_approval_tests {
-    use super::{verify_local_experimental_approval, EXPERIMENTAL_COPY_CONFIRMATION};
+    use super::{
+        valid_recovery_operation_id, verify_local_experimental_approval,
+        EXPERIMENTAL_COPY_CONFIRMATION,
+    };
+
+    #[test]
+    fn only_a_valid_128_bit_operation_id_is_accepted_for_success() {
+        assert!(!valid_recovery_operation_id(None));
+        assert!(!valid_recovery_operation_id(Some("")));
+        assert!(!valid_recovery_operation_id(Some("not-a-receipt")));
+        assert!(!valid_recovery_operation_id(Some("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")));
+        assert!(valid_recovery_operation_id(Some("0123456789abcdef0123456789abcdef")));
+    }
 
     #[test]
     fn no_unconfirmed_experimental_file_write() {
@@ -488,7 +507,7 @@ pub async fn create_experimental_encrypted_copy(
             || proof.staged_changes_verified != changes.len()
             || proof.rows_checked != baseline.fidelity.rows_checked
             || proof.tables_checked < baseline.fidelity.tables_checked
-            || proof.recovery_operation_id.is_none()
+            || !valid_recovery_operation_id(proof.recovery_operation_id.as_deref())
             || proof.schema_entries_checked
                 != baseline.fidelity.schema_entries_checked + proof.added_schema_objects.len()
             || schema_additions

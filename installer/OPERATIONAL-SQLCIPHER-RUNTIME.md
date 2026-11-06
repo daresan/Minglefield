@@ -150,12 +150,18 @@ The installer now includes an **explicit opt-in integration test** in
 `installer/crates/installer-core/src/encrypted_copy_preflight.rs` named
 `cross_runtime_sqlcipher_export_python_first_run`. It requires
 Python 3.11 and a compatible `sqlcipher3==0.6.4` wheel.
-**The cross-language test has not yet completed CI acceptance**; it is
-marked `#[ignore]` in the normal Rust suite. Attempts to insert an
-additional test step into GitHub Actions failed workflow validation,
-so the existing installer CI workflow remains unchanged until an
-independently validated test runner is available. Do not cite ordinary
-Rust CI success as proof of cross-language compatibility.
+**Focused cross-runtime CI evidence (2026-11-06):** the test remains
+`#[ignore]` during the ordinary Rust suite, but `installer-rust.yml`
+now explicitly invokes `cargo test -p minglefield-installer-core --locked
+cross_runtime_ -- --ignored` after provisioning Python 3.11 and the pinned
+CI SQLCipher dependencies. In
+[Ubuntu Installer Rust checks #533](https://github.com/daresan/Minglefield/actions/runs/42300421292),
+both `cross_runtime_published_fixture_python_open` and
+`cross_runtime_sqlcipher_export_python_first_run` passed (2/2) against
+the actual Rust-produced encrypted files and the Python application
+runtime. This is a single-platform CI acceptance for that explicit
+integration path, **not** first-run authorization, operator GUI acceptance,
+three-OS Python runtime certification, or complete M2.08.
 
 The test reuses the real Rust `sqlcipher_export` operation to create a
 randomly staged SQLCipher database, then starts a real Python subprocess

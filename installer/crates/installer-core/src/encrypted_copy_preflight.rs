@@ -880,11 +880,11 @@ mod tests {
 
     #[test]
     fn m207_published_sqlcipher_receipt_survives_fresh_process_validation() {
-        use std::io::Write;
         use crate::recovery_receipt::{
             fixture_recovery_receipt, inspect_fixture_recovery_receipt,
             write_fixture_recovery_receipt, ReceiptInspection,
         };
+        use std::io::Write;
         use std::process::{Command, Stdio};
 
         let root = target_volume_fixture();

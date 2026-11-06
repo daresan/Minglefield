@@ -65,22 +65,21 @@ test("rejects state and operation-ID contradictions without authorizing recovery
   }
 });
 
-test("rejects unexpected future mutation-capability flags in a read-only response", () => {
+test("rejects any future backend field without explicit schema review", () => {
   for (const field of [
     "executionEnabled", "migrationEnabled", "applicationInstallationEnabled",
     "hostProvisioningEnabled", "automaticResumePermitted", "automaticRollbackPermitted",
-    "automaticCleanupPermitted", "receiptTrusted", "recoveryAuthorized"
+    "automaticCleanupPermitted", "receiptTrusted", "recoveryAuthorized",
+    "arbitraryMetadata", "newUnreviewedPermission"
   ]) {
-    assert.throws(
-      () => assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: true }),
-      /Recovery response attempted to grant execution authority/
-    );
-    assert.throws(
-      () => assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: "yes" }),
-      /Recovery response attempted to grant execution authority/
-    );
-    assert.equal(assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: false }).automaticRetryPermitted, false);
+    for (const value of [true, "yes", false, null]) {
+      assert.throws(
+        () => assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: value }),
+        /Unexpected recovery response field/
+      );
+    }
   }
+  assert.equal(assessReadOnlyRecoveryStatus(valid("reserved_without_destination")).automaticRetryPermitted, false);
 });
 
 test("destination-only inspection cannot claim ciphertext fidelity or execution rights", () => {

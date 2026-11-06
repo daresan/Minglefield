@@ -20,16 +20,16 @@ export function assessReadOnlyRecoveryStatus(value, { mode = "full" } = {}) {
         (typeof value.operationId === "string" && /^[0-9a-f]{32}$/.test(value.operationId)))) {
     throw new Error("Unexpected recovery response; no recovery action is permitted.");
   }
-  // Future backend fields must not silently turn this informational view
-  // into an authorization-bearing response. Unknown non-capability metadata
-  // is harmless, but any explicit positive mutation capability fails closed.
-  const forbiddenCapabilities = [
-    "executionEnabled", "migrationEnabled", "applicationInstallationEnabled",
-    "hostProvisioningEnabled", "automaticResumePermitted", "automaticRollbackPermitted",
-    "automaticCleanupPermitted", "receiptTrusted", "recoveryAuthorized"
+  // The backend's read-only IPC envelope is intentionally closed. A new
+  // field, even an apparently harmless boolean, needs an explicit security
+  // review before this UI can interpret it: silently accepting additional
+  // capability fields could turn future schema drift into recovery authority.
+  const allowedFields = [
+    "status", "operationId", "automaticRetryPermitted",
+    "automaticDeletePermitted", "installationEnabled"
   ];
-  if (forbiddenCapabilities.some(name => Object.hasOwn(value, name) && value[name] !== false)) {
-    throw new Error("Recovery response attempted to grant execution authority.");
+  if (Reflect.ownKeys(value).some(name => !allowedFields.includes(name))) {
+    throw new Error("Unexpected recovery response field; manual review required.");
   }
   // A reservation or positively matched ciphertext MUST refer to an actual
   // operation. Conversely, a state without a recorded operation cannot name

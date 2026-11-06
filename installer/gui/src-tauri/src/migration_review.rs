@@ -575,8 +575,10 @@ fn recovery_status_label(state: InterruptedEncryptedCopyState) -> &'static str {
     }
 }
 
-/// Pure read-only interrupted-copy triage. A matched receipt and SQLCipher
-/// file do not authorize recovery, deletion, Host claims or application install.
+/// Pure read-only interrupted-copy triage, independent of in-memory
+/// rehearsal state so an operator can reopen Setup Manager after a crash.
+/// A matched receipt and SQLCipher file do not authorize recovery, deletion,
+/// Host claims or application installation.
 #[tauri::command]
 pub async fn inspect_interrupted_encrypted_copy_status(
     source_path: String,

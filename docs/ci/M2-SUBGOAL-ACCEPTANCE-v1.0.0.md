@@ -150,6 +150,29 @@ CI statuses tracked separately. A subsequent **explicitly approved**
 portable GUI milestone build is required for human acceptance;
 ordinary commits do not trigger any packaging.
 
+**Recovery GUI IPC contract hardening (2026-11-06; post-testbuild,
+technical-only, no new packaging):** The read-only result validator now
+rejects inconsistent status/operation-ID pairs and any unexpected positive
+execution, rollback, resume, deletion or Host-provisioning capability claim.
+The GUI's restarted-session inspector builds a strictly allowlisted IPC
+request from current source/backup/destination, keys, staged corrections
+and registered schema choices, without relying on a prior in-memory
+migration proof or accidentally transmitting the experimental write consent.
+Focused Node tests passed locally (8/8); the complete installer frontend
+suite passed (80/80) in [run 42306356318](https://github.com/daresan/Minglefield/actions/runs/42306356318)
+for commit `0f5b30860d03ae850dd60f646965e77422cb9f6b`.
+The prior request adapter passed [run 42306172740](https://github.com/daresan/Minglefield/actions/runs/42306172740).
+A first incremental CI failure (missing operation ID in an existing
+test fixture, [run 42304928808](https://github.com/daresan/Minglefield/actions/runs/42304928808))
+was fixed and passed in [run 42304963934](https://github.com/daresan/Minglefield/actions/runs/42304963934).
+These checks prove only the JavaScript contract, **not** native
+handle-relative crash durability, complete rollback or a tested
+Windows/macOS desktop experience. The already issued M2.07 three-OS
+testbuild [run 42303513385](https://github.com/daresan/Minglefield/actions/runs/42303513385)
+completed all three packaging jobs successfully; its binaries precede
+these post-build frontend-only changes, and operator acceptance remains
+pending. No further portable package is authorized by this record.
+
 **M2.07 receipt v1: integrated pre-publication operation reservation
 (2026-11-06, controlled Alpha path; full milestone still OPEN).**
 The first fixture-only recovery receipt was tested on all three platforms

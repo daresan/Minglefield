@@ -1,6 +1,6 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::encrypted_copy_preflight::{
-    execute_reviewed_encrypted_copy, rehearse_encrypted_test_copy, EXPERIMENTAL_COPY_CONFIRMATION,
+    execute_reviewed_encrypted_copy_with_schema, rehearse_encrypted_test_copy, EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
@@ -430,6 +430,7 @@ pub struct ExperimentalEncryptedCopyResult {
     checked_rows: u64,
     checked_tables: usize,
     checked_schema_entries: usize,
+    added_schema_objects: Vec<String>,
     verified_staged_changes: usize,
     temporary_files_removed: bool,
     application_installation_enabled: bool,
@@ -448,6 +449,7 @@ pub async fn create_experimental_encrypted_copy(
     existing_password: String,
     new_password: String,
     corrections: Vec<StagedCorrection>,
+    schema_additions: Vec<String>,
     confirmation: String,
 ) -> Result<ExperimentalEncryptedCopyResult, String> {
     verify_local_experimental_approval(&backup_path, &confirmation)?;
@@ -463,13 +465,14 @@ pub async fn create_experimental_encrypted_copy(
         if !baseline.fidelity.values_verified || baseline.source_records_written {
             return Err("Current source rehearsal must verify before execution".to_owned());
         }
-        let proof = execute_reviewed_encrypted_copy(
+        let proof = execute_reviewed_encrypted_copy_with_schema(
             source,
             destination,
             backup,
             &existing_password,
             &new_password,
             &changes,
+            &schema_additions,
             &confirmation,
         )?;
         if !proof.full_source_verified
@@ -480,8 +483,10 @@ pub async fn create_experimental_encrypted_copy(
             || proof.execution_enabled
             || proof.staged_changes_verified != changes.len()
             || proof.rows_checked != baseline.fidelity.rows_checked
-            || proof.tables_checked != baseline.fidelity.tables_checked
-            || proof.schema_entries_checked != baseline.fidelity.schema_entries_checked
+            || proof.tables_checked < baseline.fidelity.tables_checked
+            || proof.schema_entries_checked
+                != baseline.fidelity.schema_entries_checked + proof.added_schema_objects.len()
+            || schema_additions.iter().any(|name| !proof.added_schema_objects.contains(name))
         {
             return Err("Experimental encrypted destination did not satisfy verification".into());
         }
@@ -495,6 +500,7 @@ pub async fn create_experimental_encrypted_copy(
             checked_rows: proof.rows_checked,
             checked_tables: proof.tables_checked,
             checked_schema_entries: proof.schema_entries_checked,
+            added_schema_objects: proof.added_schema_objects,
             verified_staged_changes: proof.staged_changes_verified,
             temporary_files_removed: true,
             application_installation_enabled: false,

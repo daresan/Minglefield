@@ -320,6 +320,29 @@ pub fn audit_registered_alpha_schema_objects(
     {
         report.verified = true;
         report.reason = "registered_alpha_schema_objects_verified";
+    } else if report.extra_objects.is_empty()
+        && report.incompatible_objects.is_empty()
+        && report.missing_objects == ["uq_game_install_one_active_project"]
+        && report.matched_schema_entry_count + 1 == expected.len()
+    {
+        // A known older/uninitialized Alpha variant: the source omits
+        // precisely the DB-level exclusion of concurrent active Game installs.
+        // Inspect its rows read-only before even suggesting an isolated
+        // versioned repair. Do not modify the source or claim full verification.
+        let conflicting_groups: i64 = inspected_db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sec01_game_install_journal
+                 WHERE state NOT IN ('cancelled','committed','rolled_back')
+                 GROUP BY host_id,project_id HAVING COUNT(*) > 1)",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| "Cannot inspect active Game-install journal conflicts")?;
+        report.reason = if conflicting_groups == 0 {
+            "alpha_legacy_active_game_index_missing"
+        } else {
+            "alpha_legacy_active_game_index_conflicts"
+        };
     } else if !report.extra_objects.is_empty() {
         report.reason = "alpha_unregistered_schema_objects";
     } else if !report.missing_objects.is_empty() {
@@ -388,6 +411,8 @@ mod tests {
         assert!(report
             .missing_objects
             .contains(&"uq_game_install_one_active_project".to_owned()));
+        assert_eq!(report.reason, "alpha_legacy_active_game_index_missing");
+        assert!(!report.migration_enabled);
         db.execute_batch(
             "CREATE UNIQUE INDEX uq_game_install_one_active_project ON sec01_game_install_journal(host_id,project_id) WHERE state IN ('cancelled','committed','rolled_back')"
         ).unwrap();
@@ -396,6 +421,48 @@ mod tests {
         assert!(report
             .incompatible_objects
             .contains(&"uq_game_install_one_active_project".to_owned()));
+    }
+
+    #[test]
+    fn missing_active_game_index_with_duplicate_active_operations_is_not_repairable() {
+        let db = known_reference().unwrap();
+        db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+        db.execute_batch(
+            "INSERT INTO sec01_game_install_journal
+             (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+             VALUES
+             ('op-first','host-one','owner-one','game-one','prepared','digest-one'),
+             ('op-second','host-one','owner-one','game-one','prepared','digest-two');",
+        )
+        .unwrap();
+        let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
+        assert!(!report.verified);
+        assert!(!report.migration_enabled);
+        assert_eq!(report.reason, "alpha_legacy_active_game_index_conflicts");
+        assert_eq!(
+            report.missing_objects,
+            vec!["uq_game_install_one_active_project".to_owned()]
+        );
+        assert!(report.extra_objects.is_empty());
+        assert!(report.incompatible_objects.is_empty());
+    }
+
+    #[test]
+    fn terminal_journal_entries_do_not_count_as_active_index_conflicts() {
+        let db = known_reference().unwrap();
+        db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+        db.execute_batch(
+            "INSERT INTO sec01_game_install_journal
+             (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+             VALUES
+             ('op-first','host-one','owner-one','game-one','prepared','digest-one'),
+             ('op-second','host-one','owner-one','game-one','committed','digest-two');",
+        )
+        .unwrap();
+        let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
+        assert_eq!(report.reason, "alpha_legacy_active_game_index_missing");
+        assert!(!report.verified);
+        assert!(!report.migration_enabled);
     }
 
     #[test]

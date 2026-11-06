@@ -94,7 +94,6 @@ pub fn preview_migration_destination(
     })
 }
 
-
 /// A *rehearsal-only* pinned parent identity. The open directory handle
 /// survives path changes; revalidation checks that the selected path still
 /// names the same directory. This is not directory-relative publication:
@@ -186,7 +185,8 @@ fn directory_identity(file: &fs::File) -> Result<DirectoryIdentity, String> {
     // Stable Windows file-volume/index identity through native file handle;
     // std::os::windows::fs::MetadataExt::file_index is unstable on stable Rust.
     let mut info = std::mem::MaybeUninit::<WindowsFileInformation>::uninit();
-    let success = unsafe { get_file_information_by_handle(file.as_raw_handle(), info.as_mut_ptr()) };
+    let success =
+        unsafe { get_file_information_by_handle(file.as_raw_handle(), info.as_mut_ptr()) };
     if success == 0 {
         return Err("Cannot read destination directory file ID".to_owned());
     }
@@ -203,8 +203,8 @@ impl PinnedDestinationParent {
             .destination
             .parent()
             .ok_or("Destination directory unavailable")?;
-        let meta = fs::symlink_metadata(parent)
-            .map_err(|_| "Cannot inspect destination directory")?;
+        let meta =
+            fs::symlink_metadata(parent).map_err(|_| "Cannot inspect destination directory")?;
         if meta.file_type().is_symlink() || !meta.is_dir() {
             return Err("Destination directory changed or is a symlink".to_owned());
         }
@@ -225,8 +225,7 @@ impl PinnedDestinationParent {
             .destination
             .parent()
             .ok_or("Destination directory unavailable")?;
-        let meta = fs::symlink_metadata(parent)
-            .map_err(|_| "Destination directory disappeared")?;
+        let meta = fs::symlink_metadata(parent).map_err(|_| "Destination directory disappeared")?;
         if meta.file_type().is_symlink() || !meta.is_dir() {
             return Err("Destination directory changed or is a symlink".to_owned());
         }

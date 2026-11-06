@@ -160,6 +160,7 @@ pub fn rehearse_encrypted_test_copy(
         new_password,
         corrections,
         None,
+        None,
     )
 }
 
@@ -194,6 +195,7 @@ pub fn rehearse_encrypted_test_copy_on_destination_volume(
         new_password,
         corrections,
         Some(parent),
+        None,
     )?;
     parent_guard.revalidate()?;
     let after = preview_migration_destination(source_path, destination_path)
@@ -210,6 +212,7 @@ fn rehearse_encrypted_test_copy_under(
     new_password: &str,
     corrections: &[ReviewCorrection],
     staging_parent: Option<&Path>,
+    _fixture_publication: Option<&Path>,
 ) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
         .map_err(|_| "A strong new SQLCipher password is required")?;
@@ -325,6 +328,32 @@ fn rehearse_encrypted_test_copy_under(
         return Err("Atomic temporary ciphertext differs from the staged data".to_owned());
     }
     drop(published);
+
+    // An actual final filename is used ONLY in Rust's disposable fixture
+    // tests. Ordinary/release builds have no compiled final-publication path.
+    // Hard links create a new destination atomically and never overwrite an
+    // already occupied file. Native handle-relative and crash-safe publishing
+    // remain independent release gates.
+    #[cfg(test)]
+    let fixture_created = if let Some(target) = _fixture_publication {
+        fs::hard_link(&staged, target)
+            .map_err(|_| "Cannot exclusively publish fixture ciphertext")?;
+        let published_fixture = Connection::open_with_flags(target, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|_| "Cannot reopen published fixture ciphertext")?;
+        published_fixture
+            .pragma_update(None, "key", new_password)
+            .map_err(|_| "Cannot unlock published fixture ciphertext")?;
+        let final_fidelity = verify_snapshot_equality(&corrected_memory, &published_fixture)?;
+        if final_fidelity != fidelity || !final_fidelity.values_verified {
+            return Err("Published fixture data differs from verified stage".to_owned());
+        }
+        drop(published_fixture);
+        true
+    } else {
+        false
+    };
+    #[cfg(not(test))]
+    let fixture_created = false;
     drop(corrected_memory);
     drop(source);
     private.remove()?;
@@ -340,10 +369,38 @@ fn rehearse_encrypted_test_copy_under(
         tables_checked: fidelity.tables_checked,
         schema_entries_checked: fidelity.schema_entries_checked,
         temporary_files_removed: true,
-        destination_created: false,
-        encrypted_destination_verified: false,
+        destination_created: fixture_created,
+        encrypted_destination_verified: fixture_created,
+        // This flag means general application migration is enabled. A
+        // test-only fixture publication cannot turn that capability on.
         execution_enabled: false,
     })
+}
+
+#[cfg(test)]
+fn publish_disposable_fixture_copy(
+    source_path: &Path,
+    destination_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+) -> Result<EncryptedTestCopy, String> {
+    let preview = preview_migration_destination(source_path, destination_path)
+        .map_err(|_| "Disposable fixture destination rejected")?;
+    let guard = PinnedDestinationParent::open(&preview)?;
+    guard.revalidate()?;
+    let parent = preview
+        .destination
+        .parent()
+        .ok_or("Disposable fixture destination parent unavailable")?;
+    rehearse_encrypted_test_copy_under(
+        source_path,
+        existing_password,
+        new_password,
+        corrections,
+        Some(parent),
+        Some(&preview.destination),
+    )
 }
 
 #[cfg(test)]

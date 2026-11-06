@@ -1,6 +1,6 @@
 # Minglefield Development CI Policy (MDCI) v1.0.0
 
-**Status:** proposed implementation on `feat/game-integration-updates`; CI acceptance pending.
+**Status:** implementation committed on `feat/game-integration-updates`; first optimized CI acceptance pending.
 **Previous behavior / rollback baseline:** `c1bfd5a26f01444de4349836c463eaa5bd4f65be`.
 **Scope:** GitHub Actions, automated code checks, engineering gates and portable
 Minglefield application setup-manager packaging. Not the application runtime,

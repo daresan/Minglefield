@@ -244,6 +244,103 @@ impl PinnedDestinationParent {
     }
 }
 
+// Test-only Unix proof of create-if-absent using two pinned directory FDs.
+// No selected final migration filename is passed to linkat or unlinkat.
+// This must not be confused with authorized, durable final publication.
+#[cfg(all(test, unix))]
+unsafe extern "C" {
+    fn linkat(
+        olddirfd: std::os::raw::c_int,
+        oldpath: *const std::os::raw::c_char,
+        newdirfd: std::os::raw::c_int,
+        newpath: *const std::os::raw::c_char,
+        flags: std::os::raw::c_int,
+    ) -> std::os::raw::c_int;
+    fn unlinkat(
+        dirfd: std::os::raw::c_int,
+        path: *const std::os::raw::c_char,
+        flags: std::os::raw::c_int,
+    ) -> std::os::raw::c_int;
+}
+
+#[cfg(all(test, unix))]
+impl PinnedDestinationParent {
+    fn rehearse_exclusive_relative_link(
+        &self,
+        staged_parent: &fs::File,
+        staged_name: &std::ffi::OsStr,
+        rehearsal_name: &std::ffi::OsStr,
+    ) -> Result<(), String> {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::io::AsRawFd;
+
+        fn normal_name(name: &std::ffi::OsStr) -> Result<std::ffi::CString, String> {
+            let path = Path::new(name);
+            let mut parts = path.components();
+            if !matches!(parts.next(), Some(std::path::Component::Normal(_)))
+                || parts.next().is_some()
+            {
+                return Err("Rehearsal filename must be a single normal component".into());
+            }
+            std::ffi::CString::new(name.as_bytes())
+                .map_err(|_| "Rehearsal filename contains a NUL byte".to_owned())
+        }
+
+        let source = normal_name(staged_name)?;
+        let destination = normal_name(rehearsal_name)?;
+        if !rehearsal_name
+            .as_bytes()
+            .starts_with(b"minglefield-rehearsal-")
+            || self.preview.destination.file_name() == Some(rehearsal_name)
+        {
+            return Err("Only private rehearsal link names are permitted".into());
+        }
+        if !staged_parent
+            .metadata()
+            .map_err(|_| "Cannot validate staged directory handle")?
+            .is_dir()
+        {
+            return Err("Staged source handle is not a directory".into());
+        }
+        self.revalidate()?;
+        let created = unsafe {
+            linkat(
+                staged_parent.as_raw_fd(),
+                source.as_ptr(),
+                self._directory.as_raw_fd(),
+                destination.as_ptr(),
+                0,
+            )
+        };
+        if created != 0 {
+            return Err("Exclusive directory-relative rehearsal link rejected".into());
+        }
+        // A second create of the SAME name must fail with AlreadyExists.
+        let duplicate = unsafe {
+            linkat(
+                staged_parent.as_raw_fd(),
+                source.as_ptr(),
+                self._directory.as_raw_fd(),
+                destination.as_ptr(),
+                0,
+            )
+        };
+        let collision_rejected = duplicate != 0
+            && std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists;
+        // Cleanup is also relative to the original pinned directory FD;
+        // never delete a pathname resolved through a substituted parent.
+        let removed = unsafe { unlinkat(self._directory.as_raw_fd(), destination.as_ptr(), 0) };
+        if removed != 0 {
+            return Err("Cannot clean pinned-directory rehearsal link".into());
+        }
+        self.revalidate()?;
+        if !collision_rejected {
+            return Err("Native relative link failed to reject duplicate target".into());
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,6 +423,59 @@ mod tests {
         fs::remove_dir(&parent).unwrap();
         fs::rename(&moved, &parent).unwrap();
         guard.revalidate().unwrap();
+        drop(guard);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn relative_link_rehearsal_is_exclusive_and_cleans_only_its_own_name() {
+        let root = temp_root();
+        let source_dir = root.join("original");
+        let destination_dir = root.join("target");
+        let staging_dir = destination_dir.join("private-stage");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&staging_dir).unwrap();
+        let source = source_dir.join("alpha.sqlite3");
+        fs::write(&source, b"original").unwrap();
+        let expected = destination_dir.join("encrypted.sqlite3");
+        let stage_file = staging_dir.join("stage.sqlite3");
+        fs::write(&stage_file, b"verified encrypted fixture").unwrap();
+        let preview = preview_migration_destination(&source, &expected).unwrap();
+        let guard = PinnedDestinationParent::open(&preview).unwrap();
+        let stage_handle = fs::File::open(&staging_dir).unwrap();
+        let proof_name = std::ffi::OsStr::new("minglefield-rehearsal-verified.sqlite3");
+        guard
+            .rehearse_exclusive_relative_link(
+                &stage_handle,
+                std::ffi::OsStr::new("stage.sqlite3"),
+                proof_name,
+            )
+            .unwrap();
+        assert!(!destination_dir.join(proof_name).exists());
+        assert!(!expected.exists());
+        assert_eq!(fs::read(&stage_file).unwrap(), b"verified encrypted fixture");
+        assert_eq!(fs::read(&source).unwrap(), b"original");
+
+        // A preexisting unrelated target cannot be overwritten or removed.
+        let occupied = destination_dir.join(proof_name);
+        fs::write(&occupied, b"existing user bytes").unwrap();
+        assert!(guard
+            .rehearse_exclusive_relative_link(
+                &stage_handle,
+                std::ffi::OsStr::new("stage.sqlite3"),
+                proof_name,
+            )
+            .is_err());
+        assert_eq!(fs::read(&occupied).unwrap(), b"existing user bytes");
+        assert!(guard
+            .rehearse_exclusive_relative_link(
+                &stage_handle,
+                std::ffi::OsStr::new("stage.sqlite3"),
+                std::ffi::OsStr::new("encrypted.sqlite3"),
+            )
+            .is_err());
+        drop(stage_handle);
         drop(guard);
         fs::remove_dir_all(root).unwrap();
     }

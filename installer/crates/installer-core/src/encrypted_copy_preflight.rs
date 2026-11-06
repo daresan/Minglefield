@@ -212,7 +212,7 @@ fn rehearse_encrypted_test_copy_under(
     new_password: &str,
     corrections: &[ReviewCorrection],
     staging_parent: Option<&Path>,
-    _fixture_publication: Option<&Path>,
+    publication_target: Option<&Path>,
 ) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
         .map_err(|_| "A strong new SQLCipher password is required")?;
@@ -329,13 +329,10 @@ fn rehearse_encrypted_test_copy_under(
     }
     drop(published);
 
-    // An actual final filename is used ONLY in Rust's disposable fixture
-    // tests. Ordinary/release builds have no compiled final-publication path.
-    // Hard links create a new destination atomically and never overwrite an
-    // already occupied file. Native handle-relative and crash-safe publishing
-    // remain independent release gates.
-    #[cfg(test)]
-    let fixture_created = if let Some(target) = _fixture_publication {
+    // Only explicitly gated callers may request a final-name publication.
+    // No hard-link operation may overwrite an existing destination file.
+    // Full handle-relative and crash-durable release gates remain separate.
+    let fixture_created = if let Some(target) = publication_target {
         fs::hard_link(&staged, target)
             .map_err(|_| "Cannot exclusively publish fixture ciphertext")?;
         let published_fixture =
@@ -353,8 +350,6 @@ fn rehearse_encrypted_test_copy_under(
     } else {
         false
     };
-    #[cfg(not(test))]
-    let fixture_created = false;
     drop(corrected_memory);
     drop(source);
     private.remove()?;
@@ -376,6 +371,75 @@ fn rehearse_encrypted_test_copy_under(
         // test-only fixture publication cannot turn that capability on.
         execution_enabled: false,
     })
+}
+
+/// Explicitly permitted, experimental encrypted *copy*, not application
+/// installation or Host authorization. The caller must provide a separate,
+/// independently verified backup and the exact opt-in phrase. Unlike the
+/// test-only helper, this path is compiled for the controlled Alpha GUI.
+pub const EXPERIMENTAL_COPY_CONFIRMATION: &str = "CREATE EXPERIMENTAL ENCRYPTED COPY";
+
+pub fn execute_reviewed_encrypted_copy(
+    source_path: &Path,
+    destination_path: &Path,
+    backup_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    confirmation: &str,
+) -> Result<EncryptedTestCopy, String> {
+    if confirmation != EXPERIMENTAL_COPY_CONFIRMATION {
+        return Err("Experimental encrypted copy requires the exact operator confirmation".into());
+    }
+    let before = preview_migration_destination(source_path, destination_path)
+        .map_err(|_| "Experimental encrypted destination rejected")?;
+    let source = before.source.as_path();
+    let backup_meta = fs::symlink_metadata(backup_path)
+        .map_err(|_| "An existing separate backup file is required")?;
+    if backup_meta.file_type().is_symlink() || !backup_meta.is_file() {
+        return Err("Backup must be an existing regular file, not a symlink".into());
+    }
+    let backup = fs::canonicalize(backup_path)
+        .map_err(|_| "Cannot identify backup file")?;
+    if backup == source || backup == before.destination {
+        return Err("Backup must be separate from source and destination".into());
+    }
+    // A backup is not considered verified because a checkbox was selected.
+    // Compare actual data, schema and metadata using independent read-only
+    // snapshots. This is a local Alpha safety gate, not proof of physical
+    // media independence or adversarial path-race resistance.
+    let (source_db, source_info) = open_inspected_snapshot(source, existing_password)
+        .map_err(|_| "Cannot verify original source for backup comparison")?;
+    let (backup_db, backup_info) = open_inspected_snapshot(&backup, existing_password)
+        .map_err(|_| "Cannot open verified source backup")?;
+    if !source_info.integrity_ok || !backup_info.integrity_ok
+        || source_info.foreign_key_violations != 0
+        || backup_info.foreign_key_violations != 0
+    {
+        return Err("Source and backup must both pass integrity checks".into());
+    }
+    if !verify_snapshot_equality(&source_db, &backup_db)?.values_verified {
+        return Err("Backup contents do not match source".into());
+    }
+    drop(backup_db);
+    drop(source_db);
+    let parent = before.destination.parent()
+        .ok_or("Destination parent unavailable")?;
+    let guard = PinnedDestinationParent::open(&before)?;
+    // Explicitly request a durable output filename only after consent and
+    // the independent source/backup comparison; use the proven same-volume
+    // encrypted staging and exclusive hard-link copy.
+    let report = rehearse_encrypted_test_copy_under(
+        source, existing_password, new_password, corrections,
+        Some(parent), Some(&before.destination),
+    )?;
+    guard.revalidate_identity()?;
+    if !report.destination_created || !report.encrypted_destination_verified
+        || !report.full_disk_copy_verified || !report.temporary_files_removed
+    {
+        return Err("Experimental encrypted copy was not verified".into());
+    }
+    Ok(report)
 }
 
 #[cfg(test)]

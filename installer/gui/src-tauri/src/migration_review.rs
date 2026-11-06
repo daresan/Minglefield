@@ -1,6 +1,7 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::encrypted_copy_preflight::{
-    execute_reviewed_encrypted_copy_with_schema, rehearse_encrypted_test_copy, EXPERIMENTAL_COPY_CONFIRMATION,
+    execute_reviewed_encrypted_copy_with_schema, rehearse_encrypted_test_copy,
+    EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
@@ -486,7 +487,9 @@ pub async fn create_experimental_encrypted_copy(
             || proof.tables_checked < baseline.fidelity.tables_checked
             || proof.schema_entries_checked
                 != baseline.fidelity.schema_entries_checked + proof.added_schema_objects.len()
-            || schema_additions.iter().any(|name| !proof.added_schema_objects.contains(name))
+            || schema_additions
+                .iter()
+                .any(|name| !proof.added_schema_objects.contains(name))
         {
             return Err("Experimental encrypted destination did not satisfy verification".into());
         }

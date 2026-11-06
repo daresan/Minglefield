@@ -164,8 +164,11 @@ fn receipt_for_known_operation(
     }
     let (source_sha256, source_bytes) = checked_sha256_of_file(source)?;
     let (backup_sha256, backup_bytes) = checked_sha256_of_file(backup)?;
-    if source_sha256 != backup_sha256 || source_bytes != backup_bytes {
-        return Err("Recovery source and independently copied backup differ".into());
+    // The caller verifies logical SQLite/SQLCipher equivalence before
+    // recording this receipt. Two legitimate snapshots may have different
+    // on-disk layouts; bind BOTH hashes rather than demanding byte identity.
+    if source_bytes == 0 || backup_bytes == 0 {
+        return Err("Recovery source and backup must both be nonempty".into());
     }
     let (ciphertext_sha256, ciphertext_bytes) = checked_sha256_of_file(ciphertext)?;
     if ciphertext_bytes < 16 {
@@ -219,6 +222,126 @@ pub fn recovery_receipt_filename(operation_id: &str) -> Result<String, String> {
         return Err("Invalid recovery receipt filename identifier".into());
     }
     Ok(format!("minglefield-recovery-{operation_id}.receipt"))
+}
+
+/// A deterministic, destination-specific filename is an exclusive operation
+/// slot. A second attempt cannot silently write another random receipt for
+/// the same canonical destination. This is not a native handle-relative lock.
+pub fn reserved_destination_receipt_path(destination: &Path) -> Result<PathBuf, String> {
+    let hash = destination_name_digest(destination)?;
+    let parent = destination.parent().ok_or("Recovery destination has no parent")?;
+    Ok(parent.join(format!("minglefield-target-{hash}.receipt")))
+}
+
+#[derive(Debug, Clone)]
+pub struct ReceiptReservation {
+    pub operation_id: String,
+    pub receipt_path: PathBuf,
+    /// True only after Unix's explicit parent-directory sync. On Windows,
+    /// file sync passes but durable directory publication remains unproven.
+    pub directory_entry_synced: bool,
+}
+
+/// Only for the explicitly approved Alpha copy path or disposable fixtures.
+/// This record is written after the ciphertext has been flushed and verified
+/// but BEFORE the destination is linked into place. File creation is exclusive.
+pub fn reserve_destination_recovery_receipt(
+    destination: &Path,
+    receipt: &RecoveryReceiptV1,
+) -> Result<ReceiptReservation, String> {
+    let expected = destination_name_digest(destination)?;
+    if expected != receipt.destination_path_sha256 {
+        return Err("Recovery receipt does not match chosen destination".into());
+    }
+    match fs::symlink_metadata(destination) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("Cannot inspect destination before receipt reservation".into()),
+        Ok(_) => return Err("Recovery destination already exists".into()),
+    }
+    let path = reserved_destination_receipt_path(destination)?;
+    let parent = path.parent().ok_or("Recovery receipt parent unavailable")?;
+    let info = fs::symlink_metadata(parent)
+        .map_err(|_| "Cannot inspect recovery receipt parent")?;
+    if info.file_type().is_symlink() || !info.is_dir() {
+        return Err("Recovery receipt parent must be a regular directory".into());
+    }
+    // Exclusive create_new is the inter-process winner selection. A receipt
+    // deliberately remains after later failures, preventing silent retries.
+    let data = receipt_text(receipt)?;
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(&path)
+        .map_err(|_| "Recovery destination reservation already exists or cannot be created")?;
+    file.write_all(data.as_bytes())
+        .map_err(|_| "Cannot write exclusive recovery receipt")?;
+    file.sync_all()
+        .map_err(|_| "Cannot flush exclusive recovery receipt")?;
+    let directory_entry_synced = sync_recovery_parent_directory(parent)?;
+    Ok(ReceiptReservation {
+        operation_id: receipt.operation_id.clone(),
+        receipt_path: path,
+        directory_entry_synced,
+    })
+}
+
+#[cfg(unix)]
+fn sync_recovery_parent_directory(parent: &Path) -> Result<bool, String> {
+    fs::File::open(parent)
+        .map_err(|_| "Cannot open recovery receipt parent for sync")?
+        .sync_all()
+        .map_err(|_| "Cannot sync recovery receipt directory entry")?;
+    Ok(true)
+}
+
+#[cfg(windows)]
+fn sync_recovery_parent_directory(_parent: &Path) -> Result<bool, String> {
+    // File::sync_all on the receipt is still required. Windows directory
+    // FlushFileBuffers needs a separately proven native handle strategy.
+    // Never advertise directory durability from this Alpha-only slice.
+    Ok(false)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn inspect_reserved_destination_recovery_receipt(
+    source: &Path,
+    backup: &Path,
+    destination: &Path,
+    ciphertext: &Path,
+    corrections: &[ReviewCorrection],
+    schema_additions: &[String],
+) -> Result<ReceiptInspection, String> {
+    let path = reserved_destination_receipt_path(destination)?;
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ReceiptInspection::Missing);
+        }
+        Err(_) => return Err("Cannot read destination recovery reservation".into()),
+        Ok(_) => {}
+    }
+    let expected = match read_receipt(&path) {
+        Ok(record) => record,
+        Err(_) => return Ok(ReceiptInspection::Unverified),
+    };
+    let verified = receipt_for_known_operation(
+        &expected.operation_id,
+        source,
+        backup,
+        destination,
+        ciphertext,
+        corrections,
+        schema_additions,
+    );
+    Ok(if verified.is_ok_and(|value| value == expected) {
+        ReceiptInspection::Matched
+    } else {
+        ReceiptInspection::Unverified
+    })
 }
 
 fn receipt_text(receipt: &RecoveryReceiptV1) -> Result<String, String> {
@@ -303,10 +426,14 @@ fn read_receipt(path: &Path) -> Result<RecoveryReceiptV1, String> {
     }
     let bytes = fs::read(path).map_err(|_| "Cannot read recovery receipt")?;
     let receipt = parse_receipt(&bytes)?;
-    if path.file_name().and_then(|name| name.to_str())
-        != Some(recovery_receipt_filename(&receipt.operation_id)?.as_str())
-    {
-        return Err("Recovery receipt filename does not match operation identifier".into());
+    let name = path.file_name().and_then(|name| name.to_str());
+    let by_id = recovery_receipt_filename(&receipt.operation_id)?;
+    let by_target = format!(
+        "minglefield-target-{}.receipt",
+        receipt.destination_path_sha256
+    );
+    if name != Some(by_id.as_str()) && name != Some(by_target.as_str()) {
+        return Err("Recovery receipt filename does not match record identity".into());
     }
     Ok(receipt)
 }
@@ -455,10 +582,12 @@ mod tests {
                 .is_err()
         );
         fs::write(&backup, b"changed backup").unwrap();
-        assert!(
-            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[],)
-                .is_err()
-        );
+        // The receipt layer captures both hashes; logical equivalence
+        // belongs to the separately verified SQLCipher source/backup guard.
+        let other_layout = fixture_recovery_receipt(
+            &source, &backup, &destination, &ciphertext, &[], &[],
+        ).unwrap();
+        assert_ne!(other_layout.source_sha256, other_layout.backup_sha256);
         fs::copy(&source, &backup).unwrap();
         let record =
             fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
@@ -484,6 +613,90 @@ mod tests {
             .unwrap(),
             ReceiptInspection::Unverified,
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn target_reservation_is_exclusive_and_reports_directory_sync_scope() {
+        let root = directory();
+        let (source, backup, destination, ciphertext) = fixture(&root);
+        let receipt = fixture_recovery_receipt(
+            &source, &backup, &destination, &ciphertext, &[], &[],
+        ).unwrap();
+        let reserved = reserve_destination_recovery_receipt(&destination, &receipt).unwrap();
+        assert_eq!(reserved.operation_id, receipt.operation_id);
+        assert_eq!(
+            reserved.receipt_path,
+            reserved_destination_receipt_path(&destination).unwrap()
+        );
+        assert!(reserved.receipt_path.is_file());
+        #[cfg(unix)]
+        assert!(reserved.directory_entry_synced);
+        #[cfg(windows)]
+        assert!(!reserved.directory_entry_synced);
+        assert_eq!(
+            inspect_reserved_destination_recovery_receipt(
+                &source, &backup, &destination, &ciphertext, &[], &[],
+            ).unwrap(),
+            ReceiptInspection::Matched,
+        );
+        let other = fixture_recovery_receipt(
+            &source, &backup, &destination, &ciphertext, &[], &[],
+        ).unwrap();
+        assert_ne!(receipt.operation_id, other.operation_id);
+        assert!(reserve_destination_recovery_receipt(&destination, &other).is_err());
+        assert_eq!(
+            inspect_reserved_destination_recovery_receipt(
+                &source, &backup, &destination, &ciphertext, &[], &[],
+            ).unwrap(),
+            ReceiptInspection::Matched,
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reserved_receipt_is_persisted_before_publication_and_does_not_authorize_retry() {
+        let root = directory();
+        let (source, backup, destination, ciphertext) = fixture(&root);
+        let receipt = fixture_recovery_receipt(
+            &source, &backup, &destination, &ciphertext, &[], &[],
+        ).unwrap();
+        let reserved = reserve_destination_recovery_receipt(&destination, &receipt).unwrap();
+        assert!(!destination.exists());
+        // A missing target does not imply a free operation slot.
+        assert!(reserve_destination_recovery_receipt(&destination, &receipt).is_err());
+        assert!(reserved.receipt_path.is_file());
+        fs::hard_link(&ciphertext, &destination).unwrap();
+        assert!(reserve_destination_recovery_receipt(&destination, &receipt).is_err());
+        assert_eq!(
+            inspect_reserved_destination_recovery_receipt(
+                &source, &backup, &destination, &destination, &[], &[],
+            ).unwrap(),
+            ReceiptInspection::Matched,
+        );
+        fs::write(&destination, b"changed-existing-file").unwrap();
+        assert_eq!(
+            inspect_reserved_destination_recovery_receipt(
+                &source, &backup, &destination, &destination, &[], &[],
+            ).unwrap(),
+            ReceiptInspection::Unverified,
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn different_but_logically_equivalent_backup_bytes_can_be_fingerprinted() {
+        let root = directory();
+        let (source, backup, destination, ciphertext) = fixture(&root);
+        fs::write(&backup, b"other layout of a caller-verified backup").unwrap();
+        // The receipt layer records raw bytes; SQLite logical equality is
+        // already established by the higher-level migration guard.
+        let record = fixture_recovery_receipt(
+            &source, &backup, &destination, &ciphertext, &[], &[],
+        ).unwrap();
+        assert_ne!(record.source_sha256, record.backup_sha256);
+        let reserved = reserve_destination_recovery_receipt(&destination, &record).unwrap();
+        assert!(reserved.receipt_path.is_file());
         fs::remove_dir_all(root).unwrap();
     }
 

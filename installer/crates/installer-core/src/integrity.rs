@@ -11,25 +11,29 @@ const K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-pub fn sha256(bytes: &[u8]) -> [u8; 32] {
-    let mut h = [
-        0x6a09e667u32,
-        0xbb67ae85,
-        0x3c6ef372,
-        0xa54ff53a,
-        0x510e527f,
-        0x9b05688c,
-        0x1f83d9ab,
-        0x5be0cd19,
-    ];
-    let bit_len = (bytes.len() as u64).wrapping_mul(8);
-    let mut padded = bytes.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
+/// Small incremental SHA-256 implementation shared by package integrity
+/// and bounded-memory installer recovery fingerprints. No new dependency.
+struct Sha256State {
+    state: [u32; 8],
+    partial: [u8; 64],
+    partial_len: usize,
+    byte_count: u64,
+}
+
+impl Sha256State {
+    fn new() -> Self {
+        Self {
+            state: [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+            ],
+            partial: [0; 64],
+            partial_len: 0,
+            byte_count: 0,
+        }
     }
-    padded.extend_from_slice(&bit_len.to_be_bytes());
-    for chunk in padded.as_chunks::<64>().0 {
+
+    fn compress(&mut self, chunk: &[u8; 64]) {
         let mut w = [0u32; 64];
         for (i, word) in w.iter_mut().take(16).enumerate() {
             let start = i * 4;
@@ -45,7 +49,7 @@ pub fn sha256(bytes: &[u8]) -> [u8; 32] {
                 .wrapping_add(w[i - 7])
                 .wrapping_add(s1);
         }
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = h;
+        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = self.state;
         for i in 0..64 {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let ch = (e & f) ^ ((!e) & g);
@@ -66,15 +70,77 @@ pub fn sha256(bytes: &[u8]) -> [u8; 32] {
             b = a;
             a = t1.wrapping_add(t2);
         }
-        for (state, value) in h.iter_mut().zip([a, b, c, d, e, f, g, hh]) {
+        for (state, value) in self.state.iter_mut().zip([a, b, c, d, e, f, g, hh]) {
             *state = state.wrapping_add(value);
         }
     }
-    let mut result = [0u8; 32];
-    for (i, word) in h.iter().enumerate() {
-        result[i * 4..i * 4 + 4].copy_from_slice(&word.to_be_bytes());
+
+    fn update(&mut self, data: &[u8]) {
+        self.byte_count = self.byte_count.wrapping_add(data.len() as u64);
+        let mut data = data;
+        while !data.is_empty() {
+            let n = (64 - self.partial_len).min(data.len());
+            self.partial[self.partial_len..self.partial_len + n].copy_from_slice(&data[..n]);
+            self.partial_len += n;
+            data = &data[n..];
+            if self.partial_len == 64 {
+                let block = self.partial;
+                self.compress(&block);
+                self.partial_len = 0;
+            }
+        }
     }
-    result
+
+    fn finish(mut self) -> [u8; 32] {
+        let bit_length = self.byte_count.wrapping_mul(8);
+        self.update(&[0x80]);
+        while self.partial_len != 56 {
+            self.update(&[0]);
+        }
+        self.update(&bit_length.to_be_bytes());
+        debug_assert_eq!(self.partial_len, 0);
+        let mut output = [0u8; 32];
+        for (i, word) in self.state.iter().enumerate() {
+            output[i * 4..i * 4 + 4].copy_from_slice(&word.to_be_bytes());
+        }
+        output
+    }
+}
+
+pub fn sha256(bytes: &[u8]) -> [u8; 32] {
+    let mut state = Sha256State::new();
+    state.update(bytes);
+    state.finish()
+}
+
+/// Streaming SHA-256 fingerprint. Reads at most 64 KiB at a time, so a
+/// multi-GB SQLCipher database does not need to fit in memory.
+pub fn sha256_reader_hex(mut reader: impl std::io::Read) -> std::io::Result<(String, u64)> {
+    use std::fmt::Write as _;
+    let mut state = Sha256State::new();
+    let mut count = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let n = reader.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        count = count.checked_add(n as u64).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "SHA-256 length overflow")
+        })?;
+        if count > u64::MAX / 8 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "SHA-256 input bit length overflow",
+            ));
+        }
+        state.update(&buffer[..n]);
+    }
+    let mut result = String::with_capacity(64);
+    for byte in state.finish() {
+        write!(&mut result, "{byte:02x}").unwrap();
+    }
+    Ok((result, count))
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -88,6 +154,50 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn incremental_sha256_matches_known_vectors_across_chunk_boundaries() {
+        use std::io::{Cursor, Read};
+        struct ShortReads<T>(T);
+        impl<T: Read> Read for ShortReads<T> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let len = buf.len().min(13);
+                self.0.read(&mut buf[..len])
+            }
+        }
+        for len in [0usize, 1, 13, 55, 56, 63, 64, 65, 100, 119, 120, 128, 1024, 65_537] {
+            let bytes: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+            let expected = sha256_hex(&bytes);
+            let (hash, size) = sha256_reader_hex(ShortReads(Cursor::new(&bytes))).unwrap();
+            assert_eq!(hash, expected, "mismatch at {len} bytes");
+            assert_eq!(size, len as u64);
+        }
+    }
+
+    #[test]
+    fn streamed_file_larger_than_64_mib_has_fixed_memory_usage() {
+        use std::fs::File;
+        use std::io::{Seek, SeekFrom, Write};
+        let path = std::env::temp_dir().join(format!(
+            "mf-sha256-stream-{}-{:x}.fixture",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+        ));
+        let len = 64 * 1024 * 1024 + 19;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true).create_new(true).open(&path).unwrap();
+        file.set_len(len).unwrap();
+        file.seek(SeekFrom::Start(len - 3)).unwrap();
+        file.write_all(b"END").unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+        let (digest, size) = sha256_reader_hex(File::open(&path).unwrap()).unwrap();
+        assert_eq!(size, len);
+        assert_eq!(digest.len(), 64);
+        assert!(digest.bytes().all(|b| b.is_ascii_hexdigit()));
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn standard_sha256_vectors() {

@@ -92,3 +92,17 @@ test("unknown inspection modes and absent target fail closed", () => {
       /Zieldatei/);
   }
 });
+
+test("the wizard wires distinct provisional and full recovery readers to one read-only IPC", async () => {
+  const { readFileSync } = await import("node:fs");
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const gui = readFileSync(new URL("./main.js", import.meta.url), "utf8");
+  for (const id of ["inspect-interrupted-copy", "inspect-interrupted-copy-status-only"]) {
+    assert.equal((html.match(new RegExp('id="' + id + '"', "g")) ?? []).length, 1);
+  }
+  assert.equal((gui.match(/invoke\("inspect_interrupted_encrypted_copy_status"/g) ?? []).length, 1);
+  assert.match(gui, /briefRecoveryButton\.addEventListener\("click", \(\) => inspectRecovery\("reservation_only"\)\)/);
+  assert.match(gui, /fullRecoveryButton\.addEventListener\("click", \(\) => inspectRecovery\("full"\)\)/);
+  assert.match(html, /keine Passwörter/);
+  assert.match(html, /keine Wiederherstellungsfreigabe/);
+});

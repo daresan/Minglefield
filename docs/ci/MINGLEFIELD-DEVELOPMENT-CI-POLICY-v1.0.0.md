@@ -56,7 +56,7 @@ effect or job to represent a GitHub CI action.
   git rm .github/workflows/installer-gui-frontend.yml \
     .github/workflows/installer-gui-native.yml \
     .github/workflows/installer-native-security.yml
-  # Reconcile scripts/test_minglefield_ci_policy.py and the AGENTS guard
+  # Reconcile scripts/test_development_ci_policy.py and the AGENTS guard
   # invocation; retain later unrelated changes and review the complete diff.
   git diff --check
   ```

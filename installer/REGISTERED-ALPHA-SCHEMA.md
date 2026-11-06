@@ -176,3 +176,59 @@ Existing source column definitions were never editable in the
 schema-structure sense: the old type selector affected individual
 cell storage classes. It has nevertheless been removed because it was
 outside the approved values-only scope.
+
+## Shadow M2.06 finding: lone missing active Game-install index (2026-11-06)
+
+**Observed in the owner-provided installer output, not independently read
+from the owner's PC:** the existing source and its successfully
+published SQLCipher copy contain **27 tables, 143 checked rows and 58
+schema entries**. The complete current registered DDL expects **59
+entries**, including 32 indexes; the exact one missing is
+`uq_game_install_one_active_project`. No extra or changed schema
+objects were reported. One staged row-value correction was verified.
+
+**Origin:** this index is created by the server's
+`HostCommitPolicy.__init__` in
+`server/sec01_host_commit_policy_sim.py`. It is a partial UNIQUE index
+on `sec01_game_install_journal(host_id, project_id)` restricted to
+`state NOT IN ('cancelled','committed','rolled_back')`, preventing
+concurrent active Game-install operations for the same Host/project
+even across independent SQLite connections. Earlier/uninitialized
+local Alpha databases may lack that index. We cannot determine the
+exact historical reason from the UI report alone, nor infer the
+number of active journal operations on the owner's PC.
+
+**Finding:** the fully verified SQLCipher export intentionally
+preserved the exact source schema (58 entries). The missing 59th
+entry is not lost during migration, and file-size differences are
+outside this investigation. **Data fidelity success does not imply
+current application schema compatibility.** The encrypted copy is
+not yet approved as the live Minglefield database.
+
+**New read-only diagnostic:** when the other 58 registered entries match
+exactly, this index is the *only* missing object, and there are no
+extra/incompatible objects, the Rust schema audit checks for multiple
+active journal rows per Host/project, using the same partial-index
+predicate. It reports:
+- `alpha_legacy_active_game_index_missing` — no conflicting active
+  Host/project groups detected in the inspected consistent snapshot;
+- `alpha_legacy_active_game_index_conflicts` — at least one group
+  would conflict with the required uniqueness invariant.
+
+In **both** cases, `verified=false` and `migrationEnabled=false`.
+Neither condition permits a blind `CREATE INDEX` on the original
+or automatically changes a published encrypted destination. Unknown
+DDL mismatches retain the existing fail-closed diagnostics.
+
+**Required before operational activation:** define an explicit,
+versioned, transactional conversion for this *exact* known legacy
+variant, applied only to a verified isolated copy after validating
+journal uniqueness. Create the exact canonical index, re-audit
+all 59 schema entries, verify rows and foreign keys, and publish
+only through the approved migration/recovery route. If duplicates
+exist, stop and report the conflict; do not silently cancel,
+delete, merge or rewrite Game-install journal rows. Preserve the
+source and backups. The subsequent M2.07 recovery contract must
+handle interrupted conversion without pretending it already
+happened. No live source file or existing published Shadow
+database is modified by this analysis.

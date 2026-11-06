@@ -515,7 +515,12 @@ pub fn inspect_encrypted_copy_recovery(
         }
         Ok(_) => {
             let distinct = same_underlying_file(source_path, destination_path)?;
-            let verified = if distinct && !destination_password.is_empty() {
+            let mut header = [0_u8; 16];
+            let ciphertext_header = fs::File::open(destination_path)
+                .and_then(|mut file| file.read_exact(&mut header))
+                .is_ok()
+                && &header != b"SQLite format 3\0";
+            let verified = if distinct && ciphertext_header && !destination_password.is_empty() {
                 let check = (|| -> Result<(), String> {
                     let copy = Connection::open_with_flags(
                         destination_path,
@@ -661,6 +666,15 @@ mod tests {
         let collision = inspect("NewKey123!");
         assert_eq!(collision.state, EncryptedCopyRecoveryState::ExistingUnverified);
         assert_eq!(fs::read(&target).unwrap(), b"existing-user-file");
+        fs::remove_file(&target).unwrap();
+
+        // A structurally identical plaintext copy is not a verified
+        // encrypted destination even if its values and schema match.
+        fs::copy(&source, &target).unwrap();
+        assert_eq!(
+            inspect("NewKey123!").state,
+            EncryptedCopyRecoveryState::ExistingUnverified
+        );
         fs::remove_file(&target).unwrap();
 
         let proof = publish_disposable_fixture_copy(

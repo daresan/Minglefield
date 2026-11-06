@@ -807,8 +807,7 @@ mod tests {
             );
             let published = matches!(
                 fault,
-                CopyCheckpoint::AfterFinalPublication
-                    | CopyCheckpoint::DuringFinalVerification
+                CopyCheckpoint::AfterFinalPublication | CopyCheckpoint::DuringFinalVerification
             );
             assert_eq!(destination.exists(), published, "{fault:?}");
             assert_eq!(
@@ -816,14 +815,9 @@ mod tests {
                 if published { 2 } else { 1 },
                 "No private staging remains after a caught interruption: {fault:?}"
             );
-            let recovery = inspect_encrypted_copy_recovery(
-                &source,
-                &destination,
-                "",
-                "NewKey123!",
-                &[],
-            )
-            .unwrap();
+            let recovery =
+                inspect_encrypted_copy_recovery(&source, &destination, "", "NewKey123!", &[])
+                    .unwrap();
             assert_eq!(
                 recovery.state,
                 if published {
@@ -861,15 +855,18 @@ mod tests {
                     Ok(())
                 }
             },
-        ).is_err());
+        )
+        .is_err());
         assert!(destination.is_file());
-        let correct = inspect_encrypted_copy_recovery(
-            &source, &destination, "", "NewKey123!", &changes,
-        ).unwrap();
-        assert_eq!(correct.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
-        let stale = inspect_encrypted_copy_recovery(
-            &source, &destination, "", "NewKey123!", &[],
-        ).unwrap();
+        let correct =
+            inspect_encrypted_copy_recovery(&source, &destination, "", "NewKey123!", &changes)
+                .unwrap();
+        assert_eq!(
+            correct.state,
+            EncryptedCopyRecoveryState::ExistingMatchesExpected
+        );
+        let stale =
+            inspect_encrypted_copy_recovery(&source, &destination, "", "NewKey123!", &[]).unwrap();
         assert_eq!(stale.state, EncryptedCopyRecoveryState::ExistingUnverified);
         assert!(!correct.automatic_delete_permitted);
         assert!(!stale.automatic_retry_permitted);

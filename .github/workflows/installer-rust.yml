@@ -75,8 +75,8 @@ jobs:
           python-version: '3.11'
       - name: Install declared Python SQLCipher conformance runtime
         run: python -m pip install -r ../requirements-ci.txt
-      - name: Verify Rust SQLCipher export with real Python login and Host ownership
-        run: cargo test -p minglefield-installer-core --locked cross_runtime_sqlcipher_export_python_first_run -- --ignored
+      - name: Verify Rust exported and final fixture ciphertext with Python login and Host ownership
+        run: cargo test -p minglefield-installer-core --locked cross_runtime_ -- --ignored
       - name: Offline installer release preparation tests
         run: python -m unittest discover -s scripts -p "test_*.py" -v
       - name: Inspect transitive Alpha runtime imports (read-only)

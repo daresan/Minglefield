@@ -525,7 +525,8 @@ pub fn inspect_encrypted_copy_recovery(
                     let copy = Connection::open_with_flags(
                         destination_path,
                         OpenFlags::SQLITE_OPEN_READ_ONLY,
-                    ).map_err(|_| "Cannot read existing recovery destination")?;
+                    )
+                    .map_err(|_| "Cannot read existing recovery destination")?;
                     copy.pragma_update(None, "key", destination_password)
                         .map_err(|_| "Cannot unlock existing recovery destination")?;
                     verify_snapshot_equality(&expected, &copy)?;
@@ -664,7 +665,10 @@ mod tests {
 
         fs::write(&target, b"existing-user-file").unwrap();
         let collision = inspect("NewKey123!");
-        assert_eq!(collision.state, EncryptedCopyRecoveryState::ExistingUnverified);
+        assert_eq!(
+            collision.state,
+            EncryptedCopyRecoveryState::ExistingUnverified
+        );
         assert_eq!(fs::read(&target).unwrap(), b"existing-user-file");
         fs::remove_file(&target).unwrap();
 
@@ -677,15 +681,20 @@ mod tests {
         );
         fs::remove_file(&target).unwrap();
 
-        let proof = publish_disposable_fixture_copy(
-            &source, &target, "", "NewKey123!", &[],
-        ).unwrap();
+        let proof =
+            publish_disposable_fixture_copy(&source, &target, "", "NewKey123!", &[]).unwrap();
         assert!(proof.encrypted_destination_verified);
         let verified = inspect("NewKey123!");
-        assert_eq!(verified.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
+        assert_eq!(
+            verified.state,
+            EncryptedCopyRecoveryState::ExistingMatchesExpected
+        );
         assert!(!verified.automatic_retry_permitted && !verified.automatic_delete_permitted);
         let wrong_key = inspect("WrongKey123!");
-        assert_eq!(wrong_key.state, EncryptedCopyRecoveryState::ExistingUnverified);
+        assert_eq!(
+            wrong_key.state,
+            EncryptedCopyRecoveryState::ExistingUnverified
+        );
         assert_eq!(fs::read(&source).unwrap(), original);
         assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
         fs::remove_dir_all(parent).unwrap();
@@ -698,17 +707,20 @@ mod tests {
         let original = fs::read(&source).unwrap();
         let parent = target_volume_fixture();
         let target = parent.join("recovery-edits.sqlite3");
-        publish_disposable_fixture_copy(
-            &source, &target, "", "NewKey123!", &changes(),
-        ).unwrap();
-        let with_edits = inspect_encrypted_copy_recovery(
-            &source, &target, "", "NewKey123!", &changes(),
-        ).unwrap();
-        assert_eq!(with_edits.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
-        let without_edits = inspect_encrypted_copy_recovery(
-            &source, &target, "", "NewKey123!", &[],
-        ).unwrap();
-        assert_eq!(without_edits.state, EncryptedCopyRecoveryState::ExistingUnverified);
+        publish_disposable_fixture_copy(&source, &target, "", "NewKey123!", &changes()).unwrap();
+        let with_edits =
+            inspect_encrypted_copy_recovery(&source, &target, "", "NewKey123!", &changes())
+                .unwrap();
+        assert_eq!(
+            with_edits.state,
+            EncryptedCopyRecoveryState::ExistingMatchesExpected
+        );
+        let without_edits =
+            inspect_encrypted_copy_recovery(&source, &target, "", "NewKey123!", &[]).unwrap();
+        assert_eq!(
+            without_edits.state,
+            EncryptedCopyRecoveryState::ExistingUnverified
+        );
         assert!(!without_edits.automatic_delete_permitted);
         assert_eq!(fs::read(&source).unwrap(), original);
         fs::remove_dir_all(parent).unwrap();

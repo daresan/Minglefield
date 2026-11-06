@@ -106,6 +106,24 @@ Then every ordinary local commit runs the guard against the **staged Git index v
 - Do not mutate default integration registry, other projects, production data, or unrelated repositories to make a test pass.
 - Commercial and licensing decisions require human/legal review. Do not describe proposed fee arrangements or draft licenses as already legally enforceable.
 
+## Versioned development CI versus ComfyUI workflows
+
+The GitHub Actions engineering/check/packaging policy is called **Minglefield
+Development CI (MDCI)**, current version **v1.0.0**. Its authoritative trigger,
+risk-matrix, acceptance-build and reviewed rollback contract is
+[docs/ci/MINGLEFIELD-DEVELOPMENT-CI-POLICY-v1.0.0.md](docs/ci/MINGLEFIELD-DEVELOPMENT-CI-POLICY-v1.0.0.md).
+**MDCI CI jobs are not ComfyUI node-graph workflows.** Use "CI check",
+"GitHub Actions run" and "milestone acceptance build" for development,
+and "ComfyUI workflow" only for ComfyUI processing graphs.
+
+Ordinary changes require only scope-specific checks. Reserve portable Windows
+EXE/Linux AppImage/macOS app packaging for an explicitly requested and
+test-defined user-visible subgoal (existing `PORTABLE-TEST-REQUEST.md` marker),
+or separately approved manual dispatch. Do not bypass security-critical
+three-OS checks; green CI is not authority to install, publish migrated data
+or claim a Host. Never duplicate active YAML workflows merely to preserve an
+older policy; the v0 configuration is recoverable from the recorded Git SHA.
+
 ## Working contract and verification
 1. Confirm branch, scope, existing entry points, interfaces, and the user's already-agreed architecture. Search the actual code paths before guessing filenames. GitHub code search may index only the default branch; use branch-aware file reads or repository grep.
 2. State the invariant, smallest change, trust boundary, and focused tests. Prefer small commits; preserve backward compatibility unless explicitly authorized.

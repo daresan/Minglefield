@@ -6,6 +6,15 @@
 Minglefield application setup-manager packaging. Not the application runtime,
 not the Minglefield Agent Protocol (MAP) version, and **not ComfyUI workflows**.
 
+## Reusable agent onboarding (separate from this deployed CI version)
+
+The project-independent [MF_AGENTS_TEMPLATE_V1](../../templates/MF_AGENTS_TEMPLATE_V1/README.md)
+includes **MDCI Core v1.1.0**, a root AGENTS.md/SOUL.md resumption entry,
+a project CI profile and a Game repository example. This repository's
+actual installer CI and rollback baseline remain **MDCI v1.0.0** until the
+owner separately approves a new project-specific CI version. Reusing the
+template does not automatically modify this repository's GitHub Actions.
+
 ## Terminology / Begriffsabgrenzung
 
 | Term | Meaning |

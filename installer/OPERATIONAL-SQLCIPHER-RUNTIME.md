@@ -369,3 +369,76 @@ crash-recoverable installation. The next bounded milestone task is the
 this proven core path and preserving no-overwrite, source-safety and
 backup/rollback requirements before any real user-data test. Never weaken
 the existing Python login/Host authorization boundary.
+
+## Controlled Alpha GUI: explicit, backup-verified encrypted database copy (2026-11-06)
+
+**Implementation:** `installer-core::encrypted_copy_preflight::execute_reviewed_encrypted_copy`
+and Tauri `migration_review::create_experimental_encrypted_copy`. This is the
+first **normally compiled** (not `#[cfg(test)]`-only) path that can publish a
+real encrypted SQLCipher copy at a user-selected, unused destination filename.
+The existing source is opened read-only; the seven previously verified
+categories of staged corrections reuse the same corrected in-memory snapshot
+and SQLCipher export path as the fully passing CI fixture tests.
+
+**Operator flow:** review the existing Alpha source and all tables, enter and
+confirm a strong NEW destination DB password once in the existing wizard,
+complete both the in-memory rehearsal and the temporary SQLCipher proof, and
+on the final Review page enter an **existing separate source backup** and
+type exactly `CREATE EXPERIMENTAL ENCRYPTED COPY`. The Tauri backend
+repeats the mandatory approval and migration checks. The Rust core requires
+a regular non-symlink backup that is a **different underlying file**
+(natively checked, including hardlink aliases on Windows/Unix), reopens both
+source and backup through read-only verified SQLite/SQLCipher snapshots and
+compares complete data, schema, metadata and foreign-key/integrity evidence.
+If validation fails it creates **no final destination**. A selected target
+that already exists, an invalid source, incorrect key, stale staged edit,
+invalid destination path, or wrong/absent confirmation is rejected.
+
+**After approval:** a private directory on the chosen destination volume
+holds the fully checked encrypted ciphertext. The file is flushed before
+the final name is created with a no-overwrite hard link; the **real final
+destination file**, not just the temporary stage, is reopened and independently
+compared to the corrected RAM snapshot. The final file remains at the
+chosen path; temporary staging is cleaned up. The returned result has
+`status=experimental_encrypted_copy_created`,
+`destinationCreated=true`, `encryptedDestinationVerified=true`,
+`backupVerified=true`; it explicitly reports
+`applicationInstallationEnabled=false` and
+`hostProvisioningEnabled=false`. The old preflight results continue
+truthfully to report `destinationCreated=false`.
+
+**Limitations — not production-ready or M2.06 fully accepted:**
+- The backup is **user-supplied** and must be created independently while
+  the source application is stopped. We verify data equivalence and
+  distinguish hard links, but do not create/manage an automatic backup,
+  attest independent physical storage, or guarantee the copy has survived
+  arbitrary power failures. The GUI must not claim otherwise.
+- This deliberately bounded Alpha path uses an OS pathname for the final
+  hard-link. Despite destination-volume staging and directory-identity
+  checks, a malicious concurrent ancestor/target-directory substitution
+  may race pathname resolution. Full native handle-relative publication
+  and parent-directory durability/recovery remain required before general
+  release.
+- If a late verification/cleanup operation fails **after** creating the
+  final hard link, the destination may remain. The UI instructs the
+  operator to inspect the path before retrying; it must never overwrite
+  an existing file, silently remove data or falsely report clean rollback.
+- The current source is resnapshotted on execution; edits/credentials and
+  backup are checked again. Running a live database with concurrent writes
+  can invalidate the backup equivalence; **stop the application** and retain
+  a known-good source copy for manual Alpha tests.
+- This command does **not** start or install the application, unlock the
+  runtime on subsequent launches, create `mingleadmin`, claim the Host,
+  enable unattended migration or create any other installation artifact.
+  Those remain separate approved milestones and security boundaries.
+- There is **no portable acceptance build from this development commit**.
+  The CI core and GUI checks prove narrow backend/frontend behavior; the
+  owner must still inspect a portable Alpha milestone build and its actual
+  user-visible behavior on Shadow/other supported systems.
+
+**Tests:** ordinary Rust cross-OS tests now cover absent/mismatched backup,
+hardlink aliases, insufficient confirmation, occupied target and verified
+successful encrypted publication. Separate Python interoperability and
+fixture tests continue on all three OS. The GUI frontend tests the same
+review/consent prerequisites, and the Tauri backend validates the exact
+confirmation and presence of a backup before any database work.

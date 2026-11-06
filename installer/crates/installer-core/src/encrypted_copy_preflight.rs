@@ -1,5 +1,6 @@
 //! Isolated on-disk SQLCipher export rehearsal. No final destination writes.
 use crate::database_password::validate_new_database_password;
+use crate::legacy_alpha_constraints::add_selected_registered_schema_objects;
 use crate::migration_destination::{
     preview_migration_destination, same_underlying_file, PinnedDestinationParent,
 };
@@ -27,6 +28,7 @@ pub struct EncryptedTestCopy {
     pub rows_checked: u64,
     pub tables_checked: usize,
     pub schema_entries_checked: usize,
+    pub added_schema_objects: Vec<String>,
     pub temporary_files_removed: bool,
     pub destination_created: bool,
     pub encrypted_destination_verified: bool,
@@ -228,6 +230,26 @@ fn rehearse_encrypted_test_copy_under(
     staging_parent: Option<&Path>,
     publication_target: Option<&Path>,
 ) -> Result<EncryptedTestCopy, String> {
+    rehearse_encrypted_test_copy_under_with_schema(
+        source_path,
+        existing_password,
+        new_password,
+        corrections,
+        staging_parent,
+        publication_target,
+        &[],
+    )
+}
+
+fn rehearse_encrypted_test_copy_under_with_schema(
+    source_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    staging_parent: Option<&Path>,
+    publication_target: Option<&Path>,
+    schema_additions: &[String],
+) -> Result<EncryptedTestCopy, String> {
     rehearse_encrypted_test_copy_under_with_checkpoints(
         source_path,
         existing_password,
@@ -235,6 +257,7 @@ fn rehearse_encrypted_test_copy_under(
         corrections,
         staging_parent,
         publication_target,
+        schema_additions,
         |_| Ok(()),
     )
 }
@@ -246,6 +269,7 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
     corrections: &[ReviewCorrection],
     staging_parent: Option<&Path>,
     publication_target: Option<&Path>,
+    schema_additions: &[String],
     mut checkpoint: impl FnMut(CopyCheckpoint) -> Result<(), String>,
 ) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
@@ -281,6 +305,12 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
             true,
         )?;
     }
+    // Add only operator-selected, registered missing objects on the isolated
+    // corrected RAM copy. SQLite performs the actual constraint validation;
+    // the entire selection is rolled back on any DDL or integrity failure.
+    let added_schema_objects =
+        add_selected_registered_schema_objects(&mut corrected_memory, schema_additions)?
+            .added_objects;
     checkpoint(CopyCheckpoint::BeforeStaging)?;
     let private = match staging_parent {
         Some(parent) => PrivateTempDir::create_under(&source, parent)?,
@@ -403,6 +433,7 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
         rows_checked: fidelity.rows_checked,
         tables_checked: fidelity.tables_checked,
         schema_entries_checked: fidelity.schema_entries_checked,
+        added_schema_objects,
         temporary_files_removed: true,
         destination_created: fixture_created,
         encrypted_destination_verified: fixture_created,
@@ -425,6 +456,24 @@ pub fn execute_reviewed_encrypted_copy(
     existing_password: &str,
     new_password: &str,
     corrections: &[ReviewCorrection],
+    confirmation: &str,
+) -> Result<EncryptedTestCopy, String> {
+    execute_reviewed_encrypted_copy_with_schema(
+        source_path, destination_path, backup_path, existing_password,
+        new_password, corrections, &[], confirmation,
+    )
+}
+
+/// Operator-selected schema additions are confined to the same verified
+/// isolated encrypted-copy path. The original/backup remain byte-preserved.
+pub fn execute_reviewed_encrypted_copy_with_schema(
+    source_path: &Path,
+    destination_path: &Path,
+    backup_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    schema_additions: &[String],
     confirmation: &str,
 ) -> Result<EncryptedTestCopy, String> {
     if confirmation != EXPERIMENTAL_COPY_CONFIRMATION {
@@ -470,13 +519,14 @@ pub fn execute_reviewed_encrypted_copy(
     // Explicitly request a durable output filename only after consent and
     // the independent source/backup comparison; use the proven same-volume
     // encrypted staging and exclusive hard-link copy.
-    let report = rehearse_encrypted_test_copy_under(
+    let report = rehearse_encrypted_test_copy_under_with_schema(
         source,
         existing_password,
         new_password,
         corrections,
         Some(parent),
         Some(&before.destination),
+        schema_additions,
     )?;
     guard.revalidate_identity()?;
     if !report.destination_created
@@ -789,6 +839,7 @@ mod tests {
                 &[],
                 Some(&parent),
                 Some(&destination),
+                &[],
                 |point| {
                     if point == fault {
                         intercepted += 1;
@@ -848,6 +899,7 @@ mod tests {
             &changes,
             Some(&parent),
             Some(&destination),
+            &[],
             |point| {
                 if point == CopyCheckpoint::DuringFinalVerification {
                     Err("synthetic post-link interruption".to_owned())
@@ -871,6 +923,75 @@ mod tests {
         assert!(!correct.automatic_delete_permitted);
         assert!(!stale.automatic_retry_permitted);
         assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn selected_missing_index_is_written_only_to_new_encrypted_destination() {
+        let source = editable_alpha_fixture(false);
+        let original = fs::read(&source).unwrap();
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+        }
+        let source_bytes = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let backup = parent.join("source-backup.sqlite3");
+        let target = parent.join("encrypted-with-schema.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        let wanted = vec!["uq_game_install_one_active_project".to_owned()];
+        let proof = execute_reviewed_encrypted_copy_with_schema(
+            &source, &target, &backup, "", "NewKey123!", &[], &wanted,
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        ).unwrap();
+        assert!(proof.destination_created);
+        assert_eq!(proof.added_schema_objects, wanted);
+        assert_eq!(proof.schema_entries_checked, 59);
+        let output = Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        output.pragma_update(None, "key", "NewKey123!").unwrap();
+        let found: i64 = output
+            .query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name='uq_game_install_one_active_project'",
+                [], |r| r.get(0),
+            ).unwrap();
+        assert_eq!(found, 1);
+        drop(output);
+        assert_eq!(fs::read(&source).unwrap(), source_bytes);
+        assert_eq!(fs::read(&backup).unwrap(), source_bytes);
+        assert_ne!(fs::read(&source).unwrap(), original);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn conflicting_selected_schema_additions_refuse_publication_and_leave_backup_untouched() {
+        let source = editable_alpha_fixture(false);
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch(
+                "DROP INDEX uq_game_install_one_active_project;
+                 INSERT INTO sec01_game_install_journal
+                 (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+                 VALUES
+                 ('a','host-one','owner','game-one','prepared','digest-one'),
+                 ('b','host-one','owner','game-one','prepared','digest-two');",
+            ).unwrap();
+        }
+        let parent = target_volume_fixture();
+        let backup = parent.join("source-backup.sqlite3");
+        let target = parent.join("should-not-exist.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        let before = fs::read(&source).unwrap();
+        assert!(execute_reviewed_encrypted_copy_with_schema(
+            &source, &target, &backup, "", "NewKey123!", &[],
+            &["uq_game_install_one_active_project".to_owned()],
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        ).is_err());
+        assert!(!target.exists());
+        assert_eq!(fs::read(&source).unwrap(), before);
+        assert_eq!(fs::read(&backup).unwrap(), before);
         assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
         fs::remove_dir_all(parent).unwrap();
         fs::remove_file(source).unwrap();

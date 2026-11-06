@@ -7,7 +7,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 .data-review-table td select{width:94px;min-width:94px;padding:6px;margin-bottom:6px}
 .data-review-table td textarea{min-height:68px;width:300px;padding:6px;font:12px/1.4 monospace}
 .data-review-table td input{padding:6px}</style></head>
-<body><main><h1>Minglefield Installer</h1><p>Installation preview — no files will be changed.</p>
+<body><main><h1>Minglefield Installer</h1><p>Application installation remains a preview. An optional, expressly approved experimental database copy is available on the final review page.</p>
 <p id="wizard-progress" role="status" aria-live="polite">Step 1 of 6 — Welcome</p><section class="wizard-page" data-wizard-page="welcome"><h2>Welcome and project information</h2><p class="help">Review the bundled documentation before choosing your setup configuration.</p><details id="license-panel"><summary>Framework license — GPL-3.0-or-later (read-only)</summary><p>The Minglefield framework uses the GNU GPL. Marketplace service terms are separate. Reading this license does not authorize installation or accept marketplace terms.</p><pre id="license-text" tabindex="0" aria-label="Complete GNU GPL version 3 license">Loading license…</pre></details>
 <details id="readme-panel"><summary>Minglefield application README (read-only)</summary><p class="help">Bundled project overview, available offline in both setup modes.</p><pre id="readme-text" tabindex="0" aria-label="Minglefield application README">Loading README…</pre></details>
 </section><section class="wizard-page" data-wizard-page="configuration" hidden><h2>Configuration</h2><fieldset><legend>Setup mode</legend><div class="mode"><label><input type="radio" name="setup-mode" value="standard" checked> Standard (recommended)</label><label><input type="radio" name="setup-mode" value="advanced"> Advanced</label></div><p class="help" id="setup-description">Uses safe per-user installation and data locations. No optional components are selected.</p></fieldset>
@@ -66,6 +66,16 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <pre id="review-database-summary">No database inspected yet.</pre><h3>Staged application data corrections</h3><div id="review-data-corrections" role="status" aria-live="polite">No verified application records loaded for review.</div>
 <p class="help" id="review-migration-rehearsal-status">No verified migration rehearsal yet. Execution remains disabled.</p><p class="help">The source database remains read-only. Corrections on the Data Review page are staged for future migration.</p></section>
 <section id="review-security" hidden><p id="review-security-summary" class="help">Database encryption and migration are not yet enabled.</p></section>
+<fieldset id="experimental-copy-controls"><legend>Experimental encrypted database copy — explicit permission required</legend>
+<p class="help">This action creates a REAL new encrypted SQLCipher file at the selected migration destination. It does not install Minglefield, replace the source database, authorize a Host, or activate the application. Use only controlled tests or data with a separate verified backup. Back up the original database while it is stopped; a separate filename is not automatically a valid backup. The Rust core checks the backup's contents and physical file identity before any destination publication.</p>
+<label for="experimental-backup-path">Existing separate source database backup (absolute file path)</label>
+<input id="experimental-backup-path" spellcheck="false" placeholder="Select an existing, independent SQLite or SQLCipher source backup" />
+<button id="browse-experimental-backup" type="button" class="secondary">Select existing backup file</button>
+<label for="experimental-copy-confirmation">Type CREATE EXPERIMENTAL ENCRYPTED COPY to acknowledge this test-only write</label>
+<input id="experimental-copy-confirmation" spellcheck="false" autocomplete="off" aria-label="Exact experimental database-copy confirmation" />
+<button id="create-experimental-copy" type="button">Create verified encrypted database copy (experimental)</button>
+<pre id="experimental-copy-result" role="status" aria-live="polite">Not executed. Requires a current full database rehearsal, encrypted temporary-copy proof, independent backup and exact confirmation.</pre>
+</fieldset>
 <h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
 <small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>

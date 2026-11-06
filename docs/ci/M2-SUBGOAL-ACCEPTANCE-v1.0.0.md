@@ -448,6 +448,33 @@ contents.
   requires separate valid grant.
 - **Packaging:** one acceptance build after real first-run path is wired.
 
+**Verified executable Alpha runtime slice (2026-11-07; not the native
+first-run authorization yet):** Existing `AlphaAuthStore`,
+`IntegratedAlphaAdmission`, `HostCommitPolicy` and local-only
+`handler_for` can now be started against an existing *real* SQLCipher
+database through `server/private_alpha_gateway.py::
+create_installed_local_alpha_server`, without the old plaintext
+developer startup or console Host-claim token. The private executable
+`server/installed_alpha_launch.py` accepts one size-limited, versioned
+startup frame on inherited stdin (database path, SQLCipher key and
+loopback port); it takes no key on argv/environment or disk and exposes
+no initial Host provisioning route. Negative invalid/missing/wrong-key
+inputs fail without a plaintext fallback.
+
+**End-to-end evidence:** The source+runtime changes were checked
+on [Ubuntu Installer Rust CI 42313263186](https://github.com/daresan/Minglefield/actions/runs/42313263186),
+[Windows/macOS Installer native security CI 42313263192](https://github.com/daresan/Minglefield/actions/runs/42313263192),
+and [MAP/Python conformance 42313263195](https://github.com/daresan/Minglefield/actions/runs/42313263195)
+at source `bebb6d4979e91dac2397fb4b67affc19c398d271` (all successful).
+The focused tests run a **real Python subprocess** and real loopback
+HTTP login, create exactly one owner-scoped Effect, mock queued Job,
+Game project and Host settings through the existing HTTP API, stop
+the process, restart it and verify all four persisted in the encrypted
+DB. Foreign-Host GET and claim attempts are denied; wrong login and
+SQLCipher keys fail independently. The existing imported rows remain.
+No independent operator GUI acceptance, actual installed Python runtime
+or M2.08 single-use native consent is implied by this test.
+
 ### M2.09 — Encrypted operational runtime
 
 - Launch the installed Alpha against the migrated encrypted SQLCipher file.
@@ -457,6 +484,35 @@ contents.
   falling back to plaintext SQLite or retaining the key in logs/config.
 - **Packaging:** combine with M2.10 unless distinct user-visible UX requires
   a separately accepted build.
+
+**First tangible application-source artifact (2026-11-07):**
+`installer/scripts/build_alpha_application_payload.py` now builds one
+deterministic non-overwriting ZIP containing the exact audited
+`installed_alpha_launch.py` Python module dependency closure. Its own
+JSON manifest declares SHA-256 and size for every included module,
+the actual Alpha entrypoint and unresolved external/dynamic imports.
+The companion verifier rejects extra, tampered, missing, oversized,
+nonregular source or unreviewed entries. Tests assemble the real Alpha
+source package, extract it to a **separate temporary directory** and
+run the included launcher with isolated `python -I -B`; a missing
+request fails through the actual packaged entrypoint, not an import
+of the source checkout. The test also requires mandatory runtime
+gateway/auth/Host modules to be in the archive.
+
+**Focused CI:** initial [Installer Rust run 42313764062](https://github.com/daresan/Minglefield/actions/runs/42313764062)
+identified missing-module false acceptance in the builder test; fixed
+in `4188346c16a493bca109936f21dfe67dbd007bf1`.
+[Installer Rust checks 42313949256](https://github.com/daresan/Minglefield/actions/runs/42313949256)
+then passed the offline payload tests and existing Rust/Python suites.
+**Not yet a distributable or launchable clean-machine installer:**
+the application ZIP does **not** include a pinned managed Python
+interpreter, SQLCipher binary driver/wheels, release signing, a
+trusted publisher manifest, or the installation-bound native
+consent mechanism. All those are still required before any user
+receives an installable application. The ZIP explicitly labels
+`pythonRuntimeIncluded=false`, `runtimeDependencyLockVerified=false`,
+`publisherSignatureVerified=false`; do not repurpose its checksum
+manifest as publisher trust or request packaging prematurely.
 
 ### M2.10 — Managed Python runtime and Minglefield application payload
 

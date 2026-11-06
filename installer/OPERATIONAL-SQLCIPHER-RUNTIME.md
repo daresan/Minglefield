@@ -674,3 +674,43 @@ Schema additions are applied only to the new isolated SQLCipher copy
 after an explicit choice; they do not alter the original, grant Host
 ownership, or authorize an unverified operational runtime. This generic
 copy-time option is distinct from M2.07 read-only recovery inspection.
+
+## Installed Alpha runtime and preliminary application-source payload (2026-11-07)
+
+The existing `private_alpha_gateway` can now run against a verified,
+already encrypted operational SQLCipher database through
+`create_installed_local_alpha_server` and the original
+`AlphaAuthStore`/`HostCommitPolicy` tables. A private isolated Python
+subprocess entrypoint `server/installed_alpha_launch.py` starts the
+same gateway using a bounded one-shot stdin JSON envelope from an
+eventual native installer-controlled launcher; keys and passwords
+are not command-line options, environment variables or saved config.
+The gateway is loopback-only, the previous console bootstrap is
+disabled, and the account/Host must have been provisioned by
+a separate authorized transaction *before* launch.
+
+In [Ubuntu CI 42313263186](https://github.com/daresan/Minglefield/actions/runs/42313263186)
+and [Windows/macOS CI 42313263192](https://github.com/daresan/Minglefield/actions/runs/42313263192)
+the subprocess was launched twice with a real disposable encrypted
+Alpha store. Local login, Hosts, Effects, Jobs, Games, Host settings
+and negative foreign-Host authorization checks passed over HTTP and
+persisted after shutdown/restart. See also the 795-test
+[MAP conformance run 42313263195](https://github.com/daresan/Minglefield/actions/runs/42313263195).
+
+The first **actual source-bundle creation** path is
+`installer/scripts/build_alpha_application_payload.py`, reusing
+`audit_alpha_runtime_imports.audit`. It produces a deterministic
+verified ZIP of the precise imported Python Alpha application modules
+and an inspectable per-file checksum/size manifest. The bundle
+can be extracted and its real launch script imported/run under
+a separately provided compatible Python. [Focused CI 42313949256](https://github.com/daresan/Minglefield/actions/runs/42313949256)
+passed after correcting the necessary required-module check.
+
+**Not yet built:** a pinned, redistributable cross-platform Python
+interpreter and verified SQLCipher driver, an installable Minglefield
+application, native Tauri execution/handoff, installation-bound
+single-use `mingleadmin` authorization, or a clean-machine end-user
+launch. The application source ZIP itself says no embedded Python
+runtime, dependency lock or publisher signature. Existing secure
+source/backup copy and Host authorization requirements remain intact;
+no portable acceptance build has been requested by these steps.

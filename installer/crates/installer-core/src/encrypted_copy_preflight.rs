@@ -1016,6 +1016,12 @@ mod tests {
         let target = parent.join("target.sqlite3");
         assert!(source.is_file());
         assert!(!target.exists());
+        let with_receipt = std::env::var("MINGLEFIELD_M207_WITH_RECEIPT").as_deref()
+            == Ok("1");
+        let backup = parent.join("backup.sqlite3");
+        if with_receipt {
+            assert!(backup.is_file());
+        }
         let selected = match fault.as_str() {
             "before_staging" => CopyCheckpoint::BeforeStaging,
             "after_export" => CopyCheckpoint::AfterEncryptedExport,
@@ -1035,7 +1041,7 @@ mod tests {
             Some(&parent),
             Some(&target),
             &[],
-            None,
+            if with_receipt { Some(backup.as_path()) } else { None },
             |point| {
                 if point == selected {
                     process::exit(77);
@@ -1044,6 +1050,86 @@ mod tests {
             },
         );
         panic!("Selected process-termination checkpoint was not reached");
+    }
+
+    #[test]
+    fn m207_abrupt_exit_after_receipt_reservation_is_exclusively_classified() {
+        use crate::recovery_receipt::{
+            inspect_reserved_destination_recovery_receipt, reserved_destination_receipt_path,
+            ReceiptInspection,
+        };
+        use std::process::{Command, Stdio};
+
+        for (fault, final_expected) in [("after_receipt", false), ("after_publish", true)] {
+            let parent = target_volume_fixture();
+            let source = parent.join("source.sqlite3");
+            let backup = parent.join("backup.sqlite3");
+            let target = parent.join("target.sqlite3");
+            let fixture_path = fixture(false);
+            fs::copy(&fixture_path, &source).unwrap();
+            fs::remove_file(fixture_path).unwrap();
+            fs::copy(&source, &backup).unwrap();
+            let original = fs::read(&source).unwrap();
+            let worker = std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("--exact")
+                .arg("encrypted_copy_preflight::tests::m207_abrupt_exit_worker")
+                .arg("--nocapture")
+                .env("MINGLEFIELD_M207_TEST_CHILD_PARENT", &parent)
+                .env("MINGLEFIELD_M207_TEST_CHILD_CHECKPOINT", fault)
+                .env("MINGLEFIELD_M207_WITH_RECEIPT", "1")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .expect("Cannot launch recovery receipt interruption fixture worker");
+            assert_eq!(worker.code(), Some(77), "{fault}");
+            let receipt_path = reserved_destination_receipt_path(&target).unwrap();
+            assert!(receipt_path.is_file(), "{fault}");
+            assert_eq!(target.exists(), final_expected, "{fault}");
+            assert_eq!(fs::read(&source).unwrap(), original, "{fault}");
+            assert_eq!(fs::read(&backup).unwrap(), original, "{fault}");
+
+            let stages: Vec<_> = fs::read_dir(&parent)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .filter(|path| {
+                    path.file_name().unwrap().to_string_lossy().starts_with("minglefield-stage-")
+                })
+                .collect();
+            assert_eq!(stages.len(), 1, "{fault}");
+            let expected_ciphertext = if final_expected {
+                target.clone()
+            } else {
+                stages[0].join("temporary-encrypted.sqlite3")
+            };
+            assert_eq!(
+                inspect_reserved_destination_recovery_receipt(
+                    &source, &backup, &target, &expected_ciphertext, &[], &[],
+                ).unwrap(),
+                ReceiptInspection::Matched,
+                "{fault}"
+            );
+            // No final file after the receipt-only crash, but that does NOT
+            // make the target available for a second operation.
+            let separate = crate::recovery_receipt::fixture_recovery_receipt(
+                &source, &backup, &target, &expected_ciphertext, &[], &[],
+            ).unwrap();
+            assert!(crate::recovery_receipt::reserve_destination_recovery_receipt(
+                &target, &separate,
+            ).is_err(), "{fault}");
+            assert_eq!(
+                inspect_encrypted_copy_recovery(
+                    &source, &target, "", "NewKey123!", &[],
+                ).unwrap().state,
+                if final_expected {
+                    EncryptedCopyRecoveryState::ExistingMatchesExpected
+                } else {
+                    EncryptedCopyRecoveryState::DestinationAbsent
+                },
+                "{fault}"
+            );
+            // Deliberately remove only our disposable test fixture tree.
+            fs::remove_dir_all(parent).unwrap();
+        }
     }
 
     #[test]

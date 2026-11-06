@@ -642,8 +642,12 @@ pub fn inspect_encrypted_copy_recovery(
     corrections: &[ReviewCorrection],
 ) -> Result<EncryptedCopyRecoveryAssessment, String> {
     inspect_encrypted_copy_recovery_with_schema(
-        source_path, destination_path, source_password, destination_password,
-        corrections, &[],
+        source_path,
+        destination_path,
+        source_password,
+        destination_password,
+        corrections,
+        &[],
     )
 }
 
@@ -788,7 +792,11 @@ pub fn inspect_interrupted_encrypted_copy(
     };
     if operation_id.is_none() {
         return Ok(result(
-            if target_present { S::UnrecordedDestination } else { S::NoRecordedOperation },
+            if target_present {
+                S::UnrecordedDestination
+            } else {
+                S::NoRecordedOperation
+            },
             None,
         ));
     }
@@ -802,7 +810,8 @@ pub fn inspect_interrupted_encrypted_copy(
             .map_err(|_| "Cannot reopen original source for recovery")?;
         let (backup_db, backup_info) = open_inspected_snapshot(backup_path, source_password)
             .map_err(|_| "Cannot reopen independent backup for recovery")?;
-        if !source_info.integrity_ok || !backup_info.integrity_ok
+        if !source_info.integrity_ok
+            || !backup_info.integrity_ok
             || source_info.foreign_key_violations != 0
             || backup_info.foreign_key_violations != 0
             || same_underlying_file(source_path, backup_path)?
@@ -813,14 +822,23 @@ pub fn inspect_interrupted_encrypted_copy(
             return Err("Recovery backup no longer matches source".into());
         }
         if inspect_reserved_destination_recovery_receipt(
-            source_path, backup_path, destination_path, destination_path,
-            corrections, schema_additions,
-        )? != ReceiptInspection::Matched {
+            source_path,
+            backup_path,
+            destination_path,
+            destination_path,
+            corrections,
+            schema_additions,
+        )? != ReceiptInspection::Matched
+        {
             return Err("Recovery destination does not match saved operation receipt".into());
         }
         let destination = inspect_encrypted_copy_recovery_with_schema(
-            source_path, destination_path, source_password, destination_password,
-            corrections, schema_additions,
+            source_path,
+            destination_path,
+            source_password,
+            destination_password,
+            corrections,
+            schema_additions,
         )?;
         if destination.state != EncryptedCopyRecoveryState::ExistingMatchesExpected {
             return Err("Recovery SQLCipher contents differ from expected source".into());
@@ -828,7 +846,11 @@ pub fn inspect_interrupted_encrypted_copy(
         Ok(())
     })();
     Ok(result(
-        if verified.is_ok() { S::PublishedContentMatches } else { S::ManualReviewRequired },
+        if verified.is_ok() {
+            S::PublishedContentMatches
+        } else {
+            S::ManualReviewRequired
+        },
         operation_id,
     ))
 }
@@ -946,11 +968,21 @@ mod tests {
         fs::copy(&source, &backup).unwrap();
         let check = |destination_password: &str| {
             inspect_interrupted_encrypted_copy(
-                &source, &backup, &destination, "", destination_password, &[], &[],
-            ).unwrap()
+                &source,
+                &backup,
+                &destination,
+                "",
+                destination_password,
+                &[],
+                &[],
+            )
+            .unwrap()
         };
         let absent = check("NewKey123!");
-        assert_eq!(absent.state, InterruptedEncryptedCopyState::NoRecordedOperation);
+        assert_eq!(
+            absent.state,
+            InterruptedEncryptedCopyState::NoRecordedOperation
+        );
         assert!(!absent.automatic_retry_permitted && !absent.automatic_delete_permitted);
         fs::write(&destination, b"unrelated-occupied-file").unwrap();
         assert_eq!(
@@ -961,12 +993,21 @@ mod tests {
         fs::remove_file(&destination).unwrap();
 
         let proof = execute_reviewed_encrypted_copy(
-            &source, &destination, &backup, "", "NewKey123!", &[],
+            &source,
+            &destination,
+            &backup,
+            "",
+            "NewKey123!",
+            &[],
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(proof.encrypted_destination_verified);
         let correct = check("NewKey123!");
-        assert_eq!(correct.state, InterruptedEncryptedCopyState::PublishedContentMatches);
+        assert_eq!(
+            correct.state,
+            InterruptedEncryptedCopyState::PublishedContentMatches
+        );
         assert_eq!(correct.operation_id, proof.recovery_operation_id);
         assert!(!correct.automatic_retry_permitted);
         assert!(!correct.automatic_delete_permitted);
@@ -983,10 +1024,16 @@ mod tests {
         fs::copy(&source, &backup).unwrap();
         let receipt = reserved_destination_receipt_path(&destination).unwrap();
         fs::OpenOptions::new()
-            .append(true).open(&receipt).unwrap()
-            .write_all(b"unexpected=yes\n").unwrap();
+            .append(true)
+            .open(&receipt)
+            .unwrap()
+            .write_all(b"unexpected=yes\n")
+            .unwrap();
         let tampered = check("NewKey123!");
-        assert_eq!(tampered.state, InterruptedEncryptedCopyState::ManualReviewRequired);
+        assert_eq!(
+            tampered.state,
+            InterruptedEncryptedCopyState::ManualReviewRequired
+        );
         assert_eq!(tampered.operation_id, None);
         assert_eq!(fs::read(&source).unwrap(), before);
         assert_eq!(fs::read(&backup).unwrap(), before);
@@ -1003,28 +1050,52 @@ mod tests {
         let destination = parent.join("final.sqlite3");
         fs::copy(&source, &backup).unwrap();
         assert!(rehearse_encrypted_test_copy_under_with_checkpoints(
-            &source, "", "NewKey123!", &[], Some(&parent), Some(&destination),
-            &[], Some(&backup), |point| {
+            &source,
+            "",
+            "NewKey123!",
+            &[],
+            Some(&parent),
+            Some(&destination),
+            &[],
+            Some(&backup),
+            |point| {
                 if point == CopyCheckpoint::AfterReceiptReserved {
                     Err("injected interrupted receipt reservation".to_owned())
                 } else {
                     Ok(())
                 }
             },
-        ).is_err());
+        )
+        .is_err());
         assert!(!destination.exists());
         let status = inspect_interrupted_encrypted_copy(
-            &source, &backup, &destination, "", "NewKey123!", &[], &[],
-        ).unwrap();
-        assert_eq!(status.state, InterruptedEncryptedCopyState::ReservationWithoutDestination);
+            &source,
+            &backup,
+            &destination,
+            "",
+            "NewKey123!",
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            status.state,
+            InterruptedEncryptedCopyState::ReservationWithoutDestination
+        );
         assert!(status.operation_id.is_some());
         assert!(!status.automatic_retry_permitted);
         assert!(!status.automatic_delete_permitted);
         assert!(!status.installation_enabled);
         assert!(execute_reviewed_encrypted_copy(
-            &source, &destination, &backup, "", "NewKey123!", &[],
+            &source,
+            &destination,
+            &backup,
+            "",
+            "NewKey123!",
+            &[],
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).is_err());
+        )
+        .is_err());
         assert!(!destination.exists());
         assert_eq!(fs::read(&source).unwrap(), original);
         assert_eq!(fs::read(&backup).unwrap(), original);
@@ -1039,25 +1110,50 @@ mod tests {
         crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
         {
             let db = Connection::open(&source).unwrap();
-            db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+            db.execute_batch("DROP INDEX uq_game_install_one_active_project;")
+                .unwrap();
         }
         let backup = parent.join("backup.sqlite3");
         let target = parent.join("encrypted-with-selected-index.sqlite3");
         fs::copy(&source, &backup).unwrap();
         let selected = vec!["uq_game_install_one_active_project".to_owned()];
         let published = execute_reviewed_encrypted_copy_with_schema(
-            &source, &target, &backup, "", "NewKey123!", &[], &selected,
+            &source,
+            &target,
+            &backup,
+            "",
+            "NewKey123!",
+            &[],
+            &selected,
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(published.added_schema_objects, selected);
         let verified = inspect_interrupted_encrypted_copy(
-            &source, &backup, &target, "", "NewKey123!", &[], &selected,
-        ).unwrap();
-        assert_eq!(verified.state, InterruptedEncryptedCopyState::PublishedContentMatches);
+            &source,
+            &backup,
+            &target,
+            "",
+            "NewKey123!",
+            &[],
+            &selected,
+        )
+        .unwrap();
+        assert_eq!(
+            verified.state,
+            InterruptedEncryptedCopyState::PublishedContentMatches
+        );
         assert_eq!(verified.operation_id, published.recovery_operation_id);
         let missing_selection = inspect_interrupted_encrypted_copy(
-            &source, &backup, &target, "", "NewKey123!", &[], &[],
-        ).unwrap();
+            &source,
+            &backup,
+            &target,
+            "",
+            "NewKey123!",
+            &[],
+            &[],
+        )
+        .unwrap();
         assert_eq!(
             missing_selection.state,
             InterruptedEncryptedCopyState::ManualReviewRequired

@@ -66,12 +66,12 @@ test("mismatched source objects are shown by name without copying SQL or secrets
   assert.equal(report.migrationEnabled,false);
 });
 
-test("a single known missing game-install index is a warning, not full schema approval", () => {
+test("any missing registered schema object is reported as optional version compatibility, not full approval", () => {
   const original = source();
   const expected = {
     ...original.registeredSchemaObjects,
     verified: false,
-    reason: "alpha_legacy_active_game_index_missing",
+    reason: "alpha_required_schema_objects_missing",
     expectedSchemaEntryCount: 59,
     matchedSchemaEntryCount: 58,
     expectedIndexCount: 32,
@@ -81,27 +81,27 @@ test("a single known missing game-install index is a warning, not full schema ap
     ...original,
     registeredSchemaObjects: expected
   });
-  assert.equal(result.reason, "alpha_legacy_active_game_index_missing");
+  assert.equal(result.reason, "alpha_required_schema_objects_missing");
   assert.equal(result.verified, false);
   assert.equal(result.migrationEnabled, false);
   assert.deepEqual(result.missingObjects, ["uq_game_install_one_active_project"]);
 });
 
-test("conflicting active Game installs stay blocked despite otherwise matching legacy schema", () => {
+test("generic missing schema remains unverified regardless of existing row state", () => {
   const original = source();
   const result = assessRegisteredSchemaObjects({
     ...original,
     registeredSchemaObjects: {
       ...original.registeredSchemaObjects,
       verified: false,
-      reason: "alpha_legacy_active_game_index_conflicts",
+      reason: "alpha_required_schema_objects_missing",
       expectedSchemaEntryCount: 59,
       matchedSchemaEntryCount: 58,
       expectedIndexCount: 32,
       missingObjects: ["uq_game_install_one_active_project"]
     }
   });
-  assert.equal(result.reason, "alpha_legacy_active_game_index_conflicts");
+  assert.equal(result.reason, "alpha_required_schema_objects_missing");
   assert.equal(result.verified, false);
   assert.equal(result.migrationEnabled, false);
 });

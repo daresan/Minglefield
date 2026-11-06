@@ -93,6 +93,21 @@ migration path and separate real-user backup safeguards.
   independently verified backup and explicit risk acknowledgement.
   The controlled Alpha testbuild may precede complete hostile-directory
   race hardening, but cannot bypass the basic exclusive-creation guarantee.
+- **Controlled GUI wiring (implemented; human acceptance pending):**
+  The final Tauri Review page now offers an expressly consented database-only
+  creation command after both existing proof steps. It requires a separately
+  verified source backup and exact operator confirmation, revalidates in
+  Rust, and reports the real new encrypted destination file without enabling
+  general Minglefield installation or local Host activation. Source and
+  backup are preserved; stale edits, mismatched backups, hardlink aliases,
+  missing confirmation and preexisting target names are denied. Rust core
+  and frontend/Tauri CI evidence are separate from any later manual
+  GUI/portable testbuild acceptance. See
+  [operational SQLCipher runtime notes](../../installer/OPERATIONAL-SQLCIPHER-RUNTIME.md).
+  **Next gate:** confirm all OS core/Tauri checks, then request exactly one
+  portable M2.06 Alpha testbuild through the existing explicit marker.
+  Human tests must verify real selected-path output, denial/error UI and
+  no automatic Host/application activation before calling the gate accepted.
 - **Full M2.06 acceptance:** complete native handle-relative publication,
   durability and relevant security boundaries for all supported OSs,
   plus necessary authorization/recovery gates. The testbuild does not

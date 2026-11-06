@@ -302,8 +302,10 @@ let rehearsalRequestSequence = 0;
 let lastTemporaryEncryptedProof = null;
 let temporaryEncryptedRequestSequence = 0;
 let experimentalCopyRequestSequence = 0;
+let lastExperimentalCopy = null;
 function invalidateMigrationRehearsal() {
   experimentalCopyRequestSequence += 1;
+  lastExperimentalCopy = null;
   document.querySelector("#experimental-copy-result").textContent =
     "Review or destination changed. Repeat both migration checks before any new experimental copy.";
   rehearsalRequestSequence += 1;
@@ -506,6 +508,7 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
   const source = selectedDatabase;
   const destinationPath = migrationDestinationInput.value.trim();
   const requestSequence = ++rehearsalRequestSequence;
+  lastExperimentalCopy = null;
   temporaryEncryptedRequestSequence += 1;
   lastTemporaryEncryptedProof = null;
   document.querySelector("#temporary-sqlcipher-result").textContent =
@@ -560,6 +563,7 @@ for (const entry of [newDbPassword, confirmDbPassword, existingDbPassword]) {
   entry.addEventListener("input", () => {
     temporaryEncryptedRequestSequence += 1;
     lastTemporaryEncryptedProof = null;
+    lastExperimentalCopy = null;
     experimentalCopyRequestSequence += 1;
     document.querySelector("#experimental-copy-result").textContent =
       "Credentials changed; reverify before creating any experimental database copy.";
@@ -699,6 +703,7 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
         proof.hostProvisioningEnabled !== false) {
       throw new Error("Unexpected experimental migration response; inspect destination manually.");
     }
+    lastExperimentalCopy = { ...proof, destinationPath: request.destinationPath };
     experimentalResult.textContent = "EXPERIMENTAL COPY CREATED. Minglefield application not installed. " +
       "Source and verified backup remain unchanged.\n" +
       JSON.stringify({ ...proof, destinationPath: request.destinationPath }, null, 2);
@@ -762,12 +767,16 @@ function refreshReview() {
           lastTemporaryEncryptedProof.verifiedStagedChanges +
           " staged correction(s); all temporary files removed."
         : " Encrypted temporary copy has not been verified.") +
-      " No final destination file created. Migration execution remains disabled.";
+      (lastExperimentalCopy && lastExperimentalCopy.destinationPath ===
+        lastMigrationRehearsal.destinationPath
+        ? " Experimental encrypted copy created at the approved destination; full Minglefield installation and Host provisioning remain disabled."
+        : " No final destination file created by the rehearsal. Full Minglefield installation remains disabled.");
   }
   document.querySelector("#review-security-summary").textContent =
     "SQLCipher is mandatory for fresh installs and legacy imports. Destination password: " +
     validateDestinationPassword(newDbPassword.value, confirmDbPassword.value).message +
-    " Execution is not enabled yet. No passwords are displayed.";
+    " Full application installation and Host provisioning remain disabled. " +
+    "An experimental encrypted database copy requires separate approval and verified backup. No passwords are displayed.";
 }
 for (const [reviewId, sourceId, configKey, overrideKey] of [
   ["review-install-dir", "destination", "install_dir", "installDir"],

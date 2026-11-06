@@ -455,6 +455,25 @@ fn read_receipt(path: &Path) -> Result<RecoveryReceiptV1, String> {
     Ok(receipt)
 }
 
+/// Read a destination-reserved operation identifier without accepting the
+/// record as authenticated provenance or changing either file. An invalid
+/// receipt is an error rather than a new available operation slot.
+pub fn read_reserved_destination_operation_id(
+    destination: &Path,
+) -> Result<Option<String>, String> {
+    let path = reserved_destination_receipt_path(destination)?;
+    match fs::symlink_metadata(&path) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("Cannot inspect existing recovery reservation".into()),
+        Ok(_) => {}
+    }
+    let receipt = read_receipt(&path)?;
+    if receipt.destination_path_sha256 != destination_name_digest(destination)? {
+        return Err("Recovery reservation belongs to a different destination".into());
+    }
+    Ok(Some(receipt.operation_id))
+}
+
 /// Purely observational: matching a self-asserted receipt is NEVER approval
 /// to delete, retry, roll back, install or activate a Host.
 #[allow(clippy::too_many_arguments)]

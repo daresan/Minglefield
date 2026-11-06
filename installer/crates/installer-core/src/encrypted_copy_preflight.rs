@@ -9,7 +9,8 @@ use crate::migration_dry_run::{
 };
 use crate::recovery_receipt::{
     fixture_recovery_receipt, inspect_reserved_destination_recovery_receipt,
-    reserve_destination_recovery_receipt, sync_published_destination_parent, ReceiptInspection,
+    read_reserved_destination_operation_id, reserve_destination_recovery_receipt,
+    sync_published_destination_parent, ReceiptInspection,
 };
 use crate::snapshot_fidelity::{create_verified_memory_copy, verify_snapshot_equality};
 use crate::sqlite_inspection::open_inspected_snapshot;
@@ -640,6 +641,22 @@ pub fn inspect_encrypted_copy_recovery(
     destination_password: &str,
     corrections: &[ReviewCorrection],
 ) -> Result<EncryptedCopyRecoveryAssessment, String> {
+    inspect_encrypted_copy_recovery_with_schema(
+        source_path, destination_path, source_password, destination_password,
+        corrections, &[],
+    )
+}
+
+/// Read-only expected-copy comparison including optional reviewed schema
+/// additions. An exact data match still confers no recovery authorization.
+pub fn inspect_encrypted_copy_recovery_with_schema(
+    source_path: &Path,
+    destination_path: &Path,
+    source_password: &str,
+    destination_password: &str,
+    corrections: &[ReviewCorrection],
+    schema_additions: &[String],
+) -> Result<EncryptedCopyRecoveryAssessment, String> {
     // Require a fresh, integrity-checked read-only source snapshot. The
     // expected result is produced in private memory using existing typed
     // correction validation; source and target files are never modified.
@@ -667,6 +684,9 @@ pub fn inspect_encrypted_copy_recovery(
             corrections,
             true,
         )?;
+    }
+    if !schema_additions.is_empty() {
+        add_selected_registered_schema_objects(&mut expected, schema_additions)?;
     }
     let state = match fs::symlink_metadata(destination_path) {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -711,6 +731,106 @@ pub fn inspect_encrypted_copy_recovery(
         automatic_retry_permitted: false,
         automatic_delete_permitted: false,
     })
+}
+
+/// Read-only operator-facing interpretation of an interrupted Alpha copy.
+/// A source/backup/receipt/ciphertext match is evidence of consistency, not
+/// proof of who created the files or a permission to restart or delete them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptedEncryptedCopyState {
+    NoRecordedOperation,
+    UnrecordedDestination,
+    ReservationWithoutDestination,
+    PublishedContentMatches,
+    ManualReviewRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterruptedEncryptedCopyAssessment {
+    pub state: InterruptedEncryptedCopyState,
+    pub operation_id: Option<String>,
+    pub automatic_retry_permitted: bool,
+    pub automatic_delete_permitted: bool,
+    pub installation_enabled: bool,
+}
+
+/// This function never creates, writes, deletes, renames or replays files.
+/// A malformed sidecar or any mismatch produces ManualReviewRequired.
+#[allow(clippy::too_many_arguments)]
+pub fn inspect_interrupted_encrypted_copy(
+    source_path: &Path,
+    backup_path: &Path,
+    destination_path: &Path,
+    source_password: &str,
+    destination_password: &str,
+    corrections: &[ReviewCorrection],
+    schema_additions: &[String],
+) -> Result<InterruptedEncryptedCopyAssessment, String> {
+    use InterruptedEncryptedCopyState as S;
+
+    let result = |state, operation_id| InterruptedEncryptedCopyAssessment {
+        state,
+        operation_id,
+        automatic_retry_permitted: false,
+        automatic_delete_permitted: false,
+        installation_enabled: false,
+    };
+    // A name collision is not a clean state. Refuse symlinks or directories
+    // rather than assuming the final target is a trustworthy ciphertext.
+    let target_present = match fs::symlink_metadata(destination_path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Ok(_) => true,
+        Err(_) => return Err("Cannot inspect interrupted encrypted target".into()),
+    };
+    let operation_id = match read_reserved_destination_operation_id(destination_path) {
+        Ok(value) => value,
+        Err(_) => return Ok(result(S::ManualReviewRequired, None)),
+    };
+    if operation_id.is_none() {
+        return Ok(result(
+            if target_present { S::UnrecordedDestination } else { S::NoRecordedOperation },
+            None,
+        ));
+    }
+    if !target_present {
+        // No claim about the surviving private staging or original file
+        // contents: this is a reservation only, not a completed migration.
+        return Ok(result(S::ReservationWithoutDestination, operation_id));
+    }
+    let verified = (|| -> Result<(), String> {
+        let (source_db, source_info) = open_inspected_snapshot(source_path, source_password)
+            .map_err(|_| "Cannot reopen original source for recovery")?;
+        let (backup_db, backup_info) = open_inspected_snapshot(backup_path, source_password)
+            .map_err(|_| "Cannot reopen independent backup for recovery")?;
+        if !source_info.integrity_ok || !backup_info.integrity_ok
+            || source_info.foreign_key_violations != 0
+            || backup_info.foreign_key_violations != 0
+            || same_underlying_file(source_path, backup_path)?
+        {
+            return Err("Recovery source or backup is invalid".into());
+        }
+        if !verify_snapshot_equality(&source_db, &backup_db)?.values_verified {
+            return Err("Recovery backup no longer matches source".into());
+        }
+        if inspect_reserved_destination_recovery_receipt(
+            source_path, backup_path, destination_path, destination_path,
+            corrections, schema_additions,
+        )? != ReceiptInspection::Matched {
+            return Err("Recovery destination does not match saved operation receipt".into());
+        }
+        let destination = inspect_encrypted_copy_recovery_with_schema(
+            source_path, destination_path, source_password, destination_password,
+            corrections, schema_additions,
+        )?;
+        if destination.state != EncryptedCopyRecoveryState::ExistingMatchesExpected {
+            return Err("Recovery SQLCipher contents differ from expected source".into());
+        }
+        Ok(())
+    })();
+    Ok(result(
+        if verified.is_ok() { S::PublishedContentMatches } else { S::ManualReviewRequired },
+        operation_id,
+    ))
 }
 
 #[cfg(test)]

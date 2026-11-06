@@ -173,6 +173,33 @@ fields instead of silently accepting unknown permission or metadata flags.
 This is a verified read-only partial M2.07 subgoal, **not** an authorized
 rollback, a crash-durable native publish protocol or manual GUI acceptance.
 
+**Bounded receipt-reading and CI coverage gate (2026-11-06):**
+`recovery_receipt.rs` now rejects nonregular/oversized receipts both before
+and after opening, limits the actual read to 2 KiB + 1 byte, compares
+open-handle length with read length and pathname metadata, and on Unix
+compares native device/inode identities before and after the read.
+The additional real-filesystem regression rejects oversized receipt
+content, reserved-slot replay and symlink substitution, while preserving
+the source and backup. The first Ubuntu build
+[42309113767](https://github.com/daresan/Minglefield/actions/runs/42309113767)
+failed at compilation because the Rust `Read` and `Write` traits both
+provide `by_ref`; commit `070b702bd2eeb6e9d466a19bcbaed7b31cbd6864`
+explicitly disambiguated the method and the focused regression then
+passed [Ubuntu Installer Rust checks](https://github.com/daresan/Minglefield/actions/runs/42309209078)
+(129 core tests plus the two explicit Python SQLCipher interoperability
+tests). The native security workflow was corrected in
+`3da6c943daeaeb06eaf51f2fb1e5cc8a535c2734` so subsequent changes
+to **both** `recovery_receipt.rs` and `integrity.rs` trigger the existing
+Windows/macOS matrix. [Native security run 42309252884](https://github.com/daresan/Minglefield/actions/runs/42309252884)
+passed on **Windows** (126 core + 2 cross-runtime tests) and **macOS**
+(129 core + 2 cross-runtime tests), including formatting, compilation
+and Clippy. No new packaging was requested.
+These bounded reads reduce a potential memory-exhaustion/TOCTOU exposure,
+**not** an absolute pathname-race guarantee; Windows opened-file identity,
+native handle-relative final publication and crash durability remain
+separate M2.07 security gates. The self-asserted receipt is never an
+authorization credential.
+
 
 **M2.07 read-only operator recovery triage — implemented in the
 shared core and Tauri GUI; manual portable acceptance pending:**

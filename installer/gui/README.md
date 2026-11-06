@@ -1,6 +1,6 @@
-# Tauri 2 installer GUI — non-installing proof of concept
+# Portable Tauri 2 Setup Manager — experimental Alpha database copy
 
-This GUI calls the existing Rust `minglefield-installer-core::plan` function, the same one used by `installer-cli`. It only previews plans. It does not copy files, download dependencies, verify release provenance, install runtimes, authenticate, or claim Hosts. Do not distribute as a functional installer.
+This GUI shares the existing Rust `minglefield-installer-core::plan` engine with `installer-cli`. **Minglefield application installation remains a preview**: the manager cannot install Minglefield, download runtimes, authenticate a new local Host administrator, or claim Hosts. Separately, the final review page has an **explicitly consented, backup-verified experimental SQLCipher database-copy action** that really creates a new, non-overwriting encrypted destination. Its M2.07 recovery inspector is read-only and offers both destination/receipt-only provisional triage without credentials and a full source/backup/content inspection. Neither inspection authorizes automatic cleanup, rollback, retry or application installation. This Alpha tool must not be presented as a functional Minglefield application installer.
 
 On a trusted developer workstation with Node.js/npm, Rust and Tauri OS prerequisites:
 

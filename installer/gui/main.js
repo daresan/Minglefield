@@ -12,6 +12,7 @@ import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./tempo
 import { validateExperimentalCopyRequest } from "./experimental-copy-review.js";
 import { validateSchemaAdditionSelection } from "./schema-addition-selection.js";
 import { assessReadOnlyRecoveryStatus } from "./read-only-recovery-status.js";
+import { prepareReadOnlyRecoveryRequest } from "./read-only-recovery-request.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -804,20 +805,14 @@ document.querySelector("#inspect-interrupted-copy").addEventListener("click", as
     const sourcePath = selectedDatabase;
     const destinationPath = migrationDestinationInput.value.trim();
     const backupPath = experimentalBackup.value.trim();
-    if (!sourcePath || !destinationPath || !backupPath) {
-      throw new Error("Quelle, Ziel und bestehendes separates Backup auswählen.");
-    }
-    const credentials = selectTemporaryCopyCredentials({
+    const params = prepareReadOnlyRecoveryRequest({
+      sourcePath, backupPath, destinationPath,
+      existingSourcePassword: retainedSourceUnlockPassword,
       newPassword: newDbPassword.value,
       confirmation: confirmDbPassword.value,
-      existingSourcePassword: retainedSourceUnlockPassword
-    });
-    const params = {
-      sourcePath, backupPath, destinationPath,
-      ...credentials,
       corrections: allStagedMigrationChanges(),
       schemaAdditions: selectedMissingSchemaObjects()
-    };
+    });
     const raw = await invoke("inspect_interrupted_encrypted_copy_status", params);
     if (sequence !== recoveryStatusRequestSequence ||
         selectedDatabase !== sourcePath ||

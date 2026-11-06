@@ -131,10 +131,17 @@ The build's Windows, Ubuntu and macOS package jobs succeeded.
 This accepts the **bounded experimental database-copy test**, not full
 durable M2.06 publication or installed application behavior. The owner's
 full-schema preview also revealed **59 registered / 58 source objects**:
-the sole missing `uq_game_install_one_active_project` index is a
-**source compatibility gap**, not a lost SQLCipher export object. Never
-claim a live application installation is safe while the schema audit
-remains unverified.
+the sole missing `uq_game_install_one_active_project` index is
+a **possible older-schema compatibility difference**, not a lost
+SQLCipher export object or an automatic security finding. The generic
+M2 missing-schema workflow now offers none, individual objects or all
+missing registered DDL objects for the **new isolated encrypted copy**
+only, defaults to none, and uses an all-or-nothing schema transaction.
+If a selected constraint conflicts with existing data, it is rejected
+without altering the source, backup or publishing a target. A subset
+can still be incompatible with the later application runtime, which
+requires its own complete schema check. No individual index-specific
+approval or repair branch is permitted.
 
 **M2.07 first development slice (read-only, not yet GUI acceptance):**
 Classify a candidate interrupted encrypted-copy target as absent,

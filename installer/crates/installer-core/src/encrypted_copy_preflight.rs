@@ -1,5 +1,6 @@
 //! Isolated on-disk SQLCipher export rehearsal. No final destination writes.
 use crate::database_password::validate_new_database_password;
+use crate::migration_destination::preview_migration_destination;
 use crate::migration_dry_run::{
     apply_staged_to_isolated_copy, table_counts, validate_alpha_schema, ReviewCorrection,
 };
@@ -37,11 +38,14 @@ struct PrivateTempDir {
 
 impl PrivateTempDir {
     fn create(source: &Connection) -> Result<Self, String> {
+        Self::create_under(source, &std::env::temp_dir())
+    }
+    fn create_under(source: &Connection, staging_parent: &Path) -> Result<Self, String> {
         for _ in 0..8 {
             let id: String = source
                 .query_row("SELECT lower(hex(randomblob(16)))", [], |r| r.get(0))
                 .map_err(|_| "Cannot choose private staging identifier")?;
-            let path = std::env::temp_dir().join(format!("minglefield-stage-{id}"));
+            let path = staging_parent.join(format!("minglefield-stage-{id}"));
             #[cfg(unix)]
             let mut builder = fs::DirBuilder::new();
             #[cfg(not(unix))]
@@ -122,6 +126,58 @@ pub fn rehearse_encrypted_test_copy(
     new_password: &str,
     corrections: &[ReviewCorrection],
 ) -> Result<EncryptedTestCopy, String> {
+    rehearse_encrypted_test_copy_under(
+        source_path,
+        existing_password,
+        new_password,
+        corrections,
+        &std::env::temp_dir(),
+    )
+}
+
+/// Explicit destination-volume *rehearsal* for trusted callers and isolated
+/// tests. Creates and removes an encrypted scratch copy in a randomized
+/// private subdirectory beneath the selected destination parent. The final
+/// destination path itself is never created, replaced or used as a link name.
+///
+/// Both path checks are advisory: they do not pin a native directory handle
+/// or prevent a malicious concurrent directory replacement. This function
+/// is NOT a safe final-publication primitive and must not authorize install.
+pub fn rehearse_encrypted_test_copy_on_destination_volume(
+    source_path: &Path,
+    destination_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+) -> Result<EncryptedTestCopy, String> {
+    let before = preview_migration_destination(source_path, destination_path)
+        .map_err(|_| "Destination-volume rehearsal path rejected")?;
+    let parent = before
+        .destination
+        .parent()
+        .ok_or("Destination-volume rehearsal parent unavailable")?;
+    let proof = rehearse_encrypted_test_copy_under(
+        source_path,
+        existing_password,
+        new_password,
+        corrections,
+        parent,
+    )?;
+    let after = preview_migration_destination(source_path, destination_path)
+        .map_err(|_| "Destination-volume rehearsal path changed")?;
+    if before != after {
+        return Err("Destination-volume rehearsal path changed".to_owned());
+    }
+    Ok(proof)
+}
+
+fn rehearse_encrypted_test_copy_under(
+    source_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    staging_parent: &Path,
+) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
         .map_err(|_| "A strong new SQLCipher password is required")?;
     if !existing_password.is_empty() && existing_password == new_password {
@@ -155,7 +211,7 @@ pub fn rehearse_encrypted_test_copy(
             true,
         )?;
     }
-    let private = PrivateTempDir::create(&source)?;
+    let private = PrivateTempDir::create_under(&source, staging_parent)?;
     let staged = private.path.join("temporary-encrypted.sqlite3");
     export(&corrected_memory, &staged, new_password)?;
     let mut header = [0_u8; 16];
@@ -308,6 +364,95 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_file(path).unwrap();
     }
+    fn target_volume_fixture() -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let directory = std::env::temp_dir().join(format!(
+            "minglefield-target-volume-{}-{stamp}-{id}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        directory
+    }
+
+    #[test]
+    fn destination_volume_rehearsal_uses_target_parent_and_removes_all_scratch() {
+        let source = fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let target = parent.join("encrypted-migration.sqlite3");
+        let proof = rehearse_encrypted_test_copy_on_destination_volume(
+            &source,
+            &target,
+            "",
+            "NewKey123!",
+            &[],
+        )
+        .unwrap();
+        assert!(proof.atomic_temporary_publication_verified);
+        assert!(proof.full_disk_copy_verified && proof.temporary_files_removed);
+        assert!(!proof.destination_created && !proof.execution_enabled);
+        assert!(!target.exists());
+        assert!(fs::read_dir(&parent).unwrap().next().is_none());
+        assert_eq!(fs::read(&source).unwrap(), original);
+        fs::remove_dir(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn destination_volume_rehearsal_rejects_occupied_and_missing_targets() {
+        let source = fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let occupied = parent.join("occupied.sqlite3");
+        fs::write(&occupied, b"do not overwrite").unwrap();
+        assert!(rehearse_encrypted_test_copy_on_destination_volume(
+            &source,
+            &occupied,
+            "",
+            "NewKey123!",
+            &[],
+        )
+        .is_err());
+        assert_eq!(fs::read(&occupied).unwrap(), b"do not overwrite");
+        assert!(rehearse_encrypted_test_copy_on_destination_volume(
+            &source,
+            &parent.join("missing").join("new.sqlite3"),
+            "",
+            "NewKey123!",
+            &[],
+        )
+        .is_err());
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn destination_volume_rehearsal_rejects_symlink_destination_parent() {
+        let source = fixture(false);
+        let parent = target_volume_fixture();
+        let alias = parent.with_extension("symlink");
+        std::os::unix::fs::symlink(&parent, &alias).unwrap();
+        assert!(rehearse_encrypted_test_copy_on_destination_volume(
+            &source,
+            &alias.join("new.sqlite3"),
+            "",
+            "NewKey123!",
+            &[],
+        )
+        .is_err());
+        assert!(fs::read_dir(&parent).unwrap().next().is_none());
+        fs::remove_file(alias).unwrap();
+        fs::remove_dir(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
     #[test]
     fn invalid_keys_reject_without_source_mutation() {
         let path = fixture(true);

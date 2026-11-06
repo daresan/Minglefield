@@ -4,12 +4,12 @@ use crate::legacy_alpha_constraints::add_selected_registered_schema_objects;
 use crate::migration_destination::{
     preview_migration_destination, same_underlying_file, PinnedDestinationParent,
 };
+use crate::migration_dry_run::{
+    apply_staged_to_isolated_copy, table_counts, validate_alpha_schema, ReviewCorrection,
+};
 use crate::recovery_receipt::{
     fixture_recovery_receipt, inspect_reserved_destination_recovery_receipt,
     reserve_destination_recovery_receipt, sync_published_destination_parent, ReceiptInspection,
-};
-use crate::migration_dry_run::{
-    apply_staged_to_isolated_copy, table_counts, validate_alpha_schema, ReviewCorrection,
 };
 use crate::snapshot_fidelity::{create_verified_memory_copy, verify_snapshot_equality};
 use crate::sqlite_inspection::open_inspected_snapshot;
@@ -422,12 +422,23 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
             // slot BEFORE linking it. An earlier operation (even interrupted
             // before publication) must prevent an unannounced second try.
             let record = fixture_recovery_receipt(
-                source_path, backup, target, &staged, corrections, schema_additions,
+                source_path,
+                backup,
+                target,
+                &staged,
+                corrections,
+                schema_additions,
             )?;
             let reserved = reserve_destination_recovery_receipt(target, &record)?;
             if inspect_reserved_destination_recovery_receipt(
-                source_path, backup, target, &staged, corrections, schema_additions,
-            )? != ReceiptInspection::Matched {
+                source_path,
+                backup,
+                target,
+                &staged,
+                corrections,
+                schema_additions,
+            )? != ReceiptInspection::Matched
+            {
                 return Err("Recovery receipt failed immediate staged-file verification".into());
             }
             recovery_operation_id = Some(reserved.operation_id);
@@ -454,8 +465,14 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
         drop(published_fixture);
         if let Some(backup) = receipt_backup {
             if inspect_reserved_destination_recovery_receipt(
-                source_path, backup, target, target, corrections, schema_additions,
-            )? != ReceiptInspection::Matched {
+                source_path,
+                backup,
+                target,
+                target,
+                corrections,
+                schema_additions,
+            )? != ReceiptInspection::Matched
+            {
                 return Err("Published ciphertext does not match reserved recovery record".into());
             }
         }
@@ -1016,8 +1033,7 @@ mod tests {
         let target = parent.join("target.sqlite3");
         assert!(source.is_file());
         assert!(!target.exists());
-        let with_receipt = std::env::var("MINGLEFIELD_M207_WITH_RECEIPT").as_deref()
-            == Ok("1");
+        let with_receipt = std::env::var("MINGLEFIELD_M207_WITH_RECEIPT").as_deref() == Ok("1");
         let backup = parent.join("backup.sqlite3");
         if with_receipt {
             assert!(backup.is_file());
@@ -1041,7 +1057,11 @@ mod tests {
             Some(&parent),
             Some(&target),
             &[],
-            if with_receipt { Some(backup.as_path()) } else { None },
+            if with_receipt {
+                Some(backup.as_path())
+            } else {
+                None
+            },
             |point| {
                 if point == selected {
                     process::exit(77);
@@ -1092,7 +1112,10 @@ mod tests {
                 .unwrap()
                 .map(|entry| entry.unwrap().path())
                 .filter(|path| {
-                    path.file_name().unwrap().to_string_lossy().starts_with("minglefield-stage-")
+                    path.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with("minglefield-stage-")
                 })
                 .collect();
             assert_eq!(stages.len(), 1, "{fault}");
@@ -1103,23 +1126,37 @@ mod tests {
             };
             assert_eq!(
                 inspect_reserved_destination_recovery_receipt(
-                    &source, &backup, &target, &expected_ciphertext, &[], &[],
-                ).unwrap(),
+                    &source,
+                    &backup,
+                    &target,
+                    &expected_ciphertext,
+                    &[],
+                    &[],
+                )
+                .unwrap(),
                 ReceiptInspection::Matched,
                 "{fault}"
             );
             // No final file after the receipt-only crash, but that does NOT
             // make the target available for a second operation.
             let separate = crate::recovery_receipt::fixture_recovery_receipt(
-                &source, &backup, &target, &expected_ciphertext, &[], &[],
-            ).unwrap();
-            assert!(crate::recovery_receipt::reserve_destination_recovery_receipt(
-                &target, &separate,
-            ).is_err(), "{fault}");
+                &source,
+                &backup,
+                &target,
+                &expected_ciphertext,
+                &[],
+                &[],
+            )
+            .unwrap();
+            assert!(
+                crate::recovery_receipt::reserve_destination_recovery_receipt(&target, &separate,)
+                    .is_err(),
+                "{fault}"
+            );
             assert_eq!(
-                inspect_encrypted_copy_recovery(
-                    &source, &target, "", "NewKey123!", &[],
-                ).unwrap().state,
+                inspect_encrypted_copy_recovery(&source, &target, "", "NewKey123!", &[],)
+                    .unwrap()
+                    .state,
                 if final_expected {
                     EncryptedCopyRecoveryState::ExistingMatchesExpected
                 } else {

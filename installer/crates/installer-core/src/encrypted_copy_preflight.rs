@@ -844,9 +844,11 @@ mod tests {
         let temp = fs::canonicalize(std::env::temp_dir()).unwrap();
         let parent = fs::canonicalize(&parent).unwrap();
         assert_eq!(parent.parent(), Some(temp.as_path()));
-        assert!(parent.file_name().unwrap().to_string_lossy().starts_with(
-            "minglefield-target-volume-"
-        ));
+        assert!(parent
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("minglefield-target-volume-"));
         let source = parent.join("source.sqlite3");
         let target = parent.join("target.sqlite3");
         assert!(source.is_file());
@@ -911,7 +913,11 @@ mod tests {
                 .stderr(Stdio::null())
                 .status()
                 .expect("Could not start the isolated fixture test process");
-            assert_eq!(exit.code(), Some(77), "{checkpoint}: no actual process exit");
+            assert_eq!(
+                exit.code(),
+                Some(77),
+                "{checkpoint}: no actual process exit"
+            );
             assert_eq!(fs::read(&source).unwrap(), source_bytes, "{checkpoint}");
             assert_eq!(
                 fs::read(&sentinel).unwrap(),
@@ -940,14 +946,8 @@ mod tests {
             // This executes in the test parent, after the child is gone:
             // the recovery reader is newly opened and may never mutate an
             // existing target, delete staging, or enable an automatic retry.
-            let status = inspect_encrypted_copy_recovery(
-                &source,
-                &target,
-                "",
-                "NewKey123!",
-                &[],
-            )
-            .unwrap();
+            let status =
+                inspect_encrypted_copy_recovery(&source, &target, "", "NewKey123!", &[]).unwrap();
             assert_eq!(
                 status.state,
                 if should_publish {
@@ -960,14 +960,9 @@ mod tests {
             assert!(!status.automatic_retry_permitted, "{checkpoint}");
             assert!(!status.automatic_delete_permitted, "{checkpoint}");
             if should_publish {
-                let bad_key = inspect_encrypted_copy_recovery(
-                    &source,
-                    &target,
-                    "",
-                    "WrongKey123!",
-                    &[],
-                )
-                .unwrap();
+                let bad_key =
+                    inspect_encrypted_copy_recovery(&source, &target, "", "WrongKey123!", &[])
+                        .unwrap();
                 assert_eq!(
                     bad_key.state,
                     EncryptedCopyRecoveryState::ExistingUnverified,

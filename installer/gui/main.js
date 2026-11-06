@@ -795,34 +795,41 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
 // This does not require the earlier copy/rehearsal success flags because
 // interrupted processes and restarted Setup Managers no longer have them.
 const recoveryResult = document.querySelector("#read-only-recovery-result");
-document.querySelector("#inspect-interrupted-copy").addEventListener("click", async () => {
-  const button = document.querySelector("#inspect-interrupted-copy");
-  if (button.disabled) return;
+const fullRecoveryButton = document.querySelector("#inspect-interrupted-copy");
+const briefRecoveryButton = document.querySelector("#inspect-interrupted-copy-status-only");
+async function inspectRecovery(mode) {
+  if (fullRecoveryButton.disabled || briefRecoveryButton.disabled) return;
   const sequence = ++recoveryStatusRequestSequence;
-  button.disabled = true;
-  recoveryResult.textContent = "Prüfe vorhandenen Recovery-Beleg und SQLCipher-Ziel nur lesend…";
+  fullRecoveryButton.disabled = true;
+  briefRecoveryButton.disabled = true;
+  recoveryResult.textContent = mode === "reservation_only"
+    ? "Prüfe Dateieintrag und Vorgangsbeleg vorläufig, ohne Schlüssel oder Quelldaten…"
+    : "Prüfe Recovery-Beleg, Quelle, Backup und SQLCipher-Ziel nur lesend…";
   try {
     const sourcePath = selectedDatabase;
     const destinationPath = migrationDestinationInput.value.trim();
     const backupPath = experimentalBackup.value.trim();
     const params = prepareReadOnlyRecoveryRequest({
-      sourcePath, backupPath, destinationPath,
+      mode, sourcePath, backupPath, destinationPath,
       existingSourcePassword: retainedSourceUnlockPassword,
       newPassword: newDbPassword.value,
       confirmation: confirmDbPassword.value,
-      corrections: allStagedMigrationChanges(),
-      schemaAdditions: selectedMissingSchemaObjects()
+      corrections: mode === "full" ? allStagedMigrationChanges() : [],
+      schemaAdditions: mode === "full" ? selectedMissingSchemaObjects() : []
     });
     const raw = await invoke("inspect_interrupted_encrypted_copy_status", params);
     if (sequence !== recoveryStatusRequestSequence ||
-        selectedDatabase !== sourcePath ||
         migrationDestinationInput.value.trim() !== destinationPath ||
-        experimentalBackup.value.trim() !== backupPath) {
+        (mode === "full" && (selectedDatabase !== sourcePath ||
+          experimentalBackup.value.trim() !== backupPath))) {
       recoveryResult.textContent = "Eingaben während der Prüfung geändert. Recovery-Status erneut prüfen.";
       return;
     }
-    const checked = assessReadOnlyRecoveryStatus(raw);
+    const checked = assessReadOnlyRecoveryStatus(raw, { mode });
     recoveryResult.textContent =
+      (mode === "reservation_only"
+        ? "VORLÄUFIG – nur Zielpfad/Beleg, keine Inhalts- oder Autorisierungsprüfung.\n"
+        : "Vollständige SQLCipher-Inhaltsprüfung (keine Recovery-Autorisierung).\n") +
       checked.message + "\n" +
       JSON.stringify(checked, null, 2) + "\n" +
       "Niemals automatisch überschreiben, löschen, zurückrollen oder Installation freigeben.";
@@ -830,9 +837,12 @@ document.querySelector("#inspect-interrupted-copy").addEventListener("click", as
     recoveryResult.textContent = "Recovery-Status nicht verifizierbar: " + String(error) +
       ". Keine automatische Wiederholung, Löschung oder Host-Aktivierung erlaubt.";
   } finally {
-    button.disabled = false;
+    fullRecoveryButton.disabled = false;
+    briefRecoveryButton.disabled = false;
   }
-});
+}
+fullRecoveryButton.addEventListener("click", () => inspectRecovery("full"));
+briefRecoveryButton.addEventListener("click", () => inspectRecovery("reservation_only"));
 
 // Wizard navigation preserves the existing form controls and their values.
 // No page transition authorizes a download, filesystem write, or installation.

@@ -8,7 +8,10 @@ const statuses = Object.freeze({
   manual_review_required: "Recovery-Beleg, Inhalt oder Eingaben konnten nicht gemeinsam verifiziert werden. Manuelle Prüfung erforderlich."
 });
 
-export function assessReadOnlyRecoveryStatus(value) {
+export function assessReadOnlyRecoveryStatus(value, { mode = "full" } = {}) {
+  if (mode !== "full" && mode !== "reservation_only") {
+    throw new Error("Unknown recovery inspection scope.");
+  }
   if (!value || !Object.hasOwn(statuses, value.status) ||
       value.automaticRetryPermitted !== false ||
       value.automaticDeletePermitted !== false ||
@@ -39,6 +42,12 @@ export function assessReadOnlyRecoveryStatus(value) {
   if ((requiresOperationId && value.operationId == null) ||
       (forbidsOperationId && value.operationId != null)) {
     throw new Error("Inconsistent recovery status and operation ID; manual review required.");
+  }
+  // The destination-only pass never verifies DB contents, and must not
+  // present a forged or newly introduced "verified ciphertext" response.
+  if (mode === "reservation_only" &&
+      value.status === "published_content_matches_untrusted_receipt") {
+    throw new Error("Content verification requires the full recovery inspection.");
   }
   return {
     status: value.status,

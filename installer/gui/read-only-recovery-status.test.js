@@ -82,3 +82,21 @@ test("rejects unexpected future mutation-capability flags in a read-only respons
     assert.equal(assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: false }).automaticRetryPermitted, false);
   }
 });
+
+test("destination-only inspection cannot claim ciphertext fidelity or execution rights", () => {
+  for (const status of [
+    "no_recorded_operation", "unrecorded_destination",
+    "reserved_without_destination", "manual_review_required"
+  ]) {
+    const assessed = assessReadOnlyRecoveryStatus(valid(status), { mode: "reservation_only" });
+    assert.equal(assessed.status, status);
+    assert.equal(assessed.automaticDeletePermitted, false);
+    assert.equal(assessed.automaticRetryPermitted, false);
+    assert.equal(assessed.installationEnabled, false);
+  }
+  assert.throws(() => assessReadOnlyRecoveryStatus(
+    valid("published_content_matches_untrusted_receipt"), { mode: "reservation_only" }),
+    /Content verification requires/);
+  assert.throws(() => assessReadOnlyRecoveryStatus(valid("no_recorded_operation"), { mode: "unsafe" }),
+    /Unknown recovery inspection scope/);
+});

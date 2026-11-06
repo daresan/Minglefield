@@ -6,8 +6,24 @@ import { selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js"
 export function prepareReadOnlyRecoveryRequest({
   sourcePath, destinationPath, backupPath,
   existingSourcePassword, newPassword, confirmation,
-  corrections, schemaAdditions
+  corrections, schemaAdditions, mode = "full"
 }) {
+  // When restarting after a crash, a read-only reservation check can be
+  // made using just the chosen destination filename. The backend reports
+  // only filesystem/receipt states here; a matching encrypted *content*
+  // assertion requires the separately selected full inspection.
+  if (mode === "reservation_only") {
+    if (typeof destinationPath !== "string" || !destinationPath.trim()) {
+      throw new Error("Zieldatei für die Recovery-Kurzprüfung auswählen.");
+    }
+    return {
+      sourcePath: "", backupPath: "", destinationPath: destinationPath.trim(),
+      existingPassword: "", newPassword: "", corrections: [], schemaAdditions: []
+    };
+  }
+  if (mode !== "full") {
+    throw new Error("Unbekannter Recovery-Prüfmodus.");
+  }
   for (const path of [sourcePath, destinationPath, backupPath]) {
     if (typeof path !== "string" || !path.trim()) {
       throw new Error("Quelle, Ziel und bestehendes separates Backup auswählen.");

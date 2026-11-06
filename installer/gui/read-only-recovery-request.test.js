@@ -59,3 +59,36 @@ test("a missing or mismatched current SQLCipher password is rejected without exp
       (!request.confirmation || !error.message.includes(request.confirmation)));
   }
 });
+
+test("restart can inspect only destination and receipt without disclosing credentials", () => {
+  const raw = { ...required(), mode: "reservation_only" };
+  const result = prepareReadOnlyRecoveryRequest(raw);
+  assert.deepEqual(result, {
+    sourcePath: "", backupPath: "", destinationPath: "/tmp/encrypted.sqlite3",
+    existingPassword: "", newPassword: "", corrections: [], schemaAdditions: []
+  });
+  // Other form inputs must never be forwarded or accidentally used here.
+  assert.equal(JSON.stringify(result).includes(raw.newPassword), false);
+  assert.equal(JSON.stringify(result).includes(raw.existingSourcePassword), false);
+  assert.equal(JSON.stringify(result).includes(raw.corrections[0].table), false);
+});
+
+test("reservation-only triage works after restart with only a target name", () => {
+  const result = prepareReadOnlyRecoveryRequest({
+    mode: "reservation_only", destinationPath: "/tmp/recovery.sqlite3",
+    sourcePath: null, backupPath: null, newPassword: undefined,
+    confirmation: undefined, corrections: null, schemaAdditions: null
+  });
+  assert.equal(result.destinationPath, "/tmp/recovery.sqlite3");
+  assert.equal(result.sourcePath, "");
+  assert.equal(result.newPassword, "");
+});
+
+test("unknown inspection modes and absent target fail closed", () => {
+  assert.throws(() => prepareReadOnlyRecoveryRequest({ ...required(), mode: "unchecked" }),
+    /Unbekannter Recovery-Prüfmodus/);
+  for (const destinationPath of [undefined, null, "", "  "]) {
+    assert.throws(() => prepareReadOnlyRecoveryRequest({ mode: "reservation_only", destinationPath }),
+      /Zieldatei/);
+  }
+});

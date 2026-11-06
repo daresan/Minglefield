@@ -86,6 +86,9 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <fieldset id="read-only-recovery-controls">
 <legend>Recovery status – inspect existing migration (read-only)</legend>
 <p class="help">Prüft den ausgewählten Quell- und Backup-Pfad, den gespeicherten Recovery-Beleg und die verschlüsselte Zieldatei, ohne Dateien zu verändern. Dafür dieselben Datenbankpasswörter und dieselbe Auswahl der Änderungen und Schemaobjekte wie beim ursprünglichen Versuch verwenden. Ein passender Beleg beweist keine Autorisierung und erlaubt weder automatisches Fortsetzen noch Rollback oder Löschen.</p>
+<p class="help">Nach einem Abbruch genügt für den ersten, vorläufigen Dateistatus der bisherige Zielpfad. Diese Kurzprüfung liest nur Dateieinträge und einen eventuell vorhandenen Recovery-Beleg; sie prüft KEINE SQLCipher-Inhalte, benötigt keine Passwörter und berechtigt niemals zu einem Wiederholungsversuch.</p>
+<button id="inspect-interrupted-copy-status-only" type="button" class="secondary">Kurzstatus prüfen – nur Ziel und Beleg</button>
+<p class="help">Für die vollständige Prüfung Quelle, separates Backup, Datenbankpasswörter und genau dieselben Änderungen sowie Schema-Ergänzungen auswählen. Auch eine vollständige Übereinstimmung ist keine Wiederherstellungsfreigabe.</p>
 <button id="inspect-interrupted-copy" type="button" class="secondary">Recovery-Zustand prüfen (nur lesen)</button>
 <pre id="read-only-recovery-result" role="status" aria-live="polite">Noch keine Recovery-Prüfung durchgeführt. Vorhandene Belege und Zieldateien niemals automatisch löschen oder überschreiben.</pre>
 </fieldset>

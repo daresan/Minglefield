@@ -1,0 +1,51 @@
+name: Installer GUI frontend checks
+
+# Minglefield Development CI Policy v1; NOT ComfyUI workflow execution.
+# Frontend checks never build portable installer packages.
+on:
+  push:
+    paths:
+      - "installer/gui/*.js"
+      - "installer/gui/*.html"
+      - "installer/gui/*.css"
+      - "installer/gui/*.json"
+      - "installer/gui/*.svg"
+      - ".github/workflows/installer-gui-frontend.yml"
+  pull_request:
+    paths:
+      - "installer/gui/*.js"
+      - "installer/gui/*.html"
+      - "installer/gui/*.css"
+      - "installer/gui/*.json"
+      - "installer/gui/*.svg"
+      - ".github/workflows/installer-gui-frontend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-frontend-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: installer/gui
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: installer/gui/package-lock.json
+      - name: Install locked GUI dependencies
+        run: npm ci --no-audit --no-fund --ignore-scripts
+      - name: Test installer GUI validation and review
+        run: node --test
+      - name: Build GUI frontend
+        run: npm run web:build

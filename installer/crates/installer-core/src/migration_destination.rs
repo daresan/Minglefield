@@ -454,7 +454,10 @@ mod tests {
             .unwrap();
         assert!(!destination_dir.join(proof_name).exists());
         assert!(!expected.exists());
-        assert_eq!(fs::read(&stage_file).unwrap(), b"verified encrypted fixture");
+        assert_eq!(
+            fs::read(&stage_file).unwrap(),
+            b"verified encrypted fixture"
+        );
         assert_eq!(fs::read(&source).unwrap(), b"original");
 
         // A preexisting unrelated target cannot be overwritten or removed.

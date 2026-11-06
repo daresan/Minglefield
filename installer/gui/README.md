@@ -99,6 +99,40 @@ The host-policy tables are optional in older Alpha databases. Absent tables, fai
 
 Frontend correction guards have Node regression tests in `legacy-record-review.test.js` and `alpha-user-review.test.js`; Tauri reader tests verify available/missing schemas and source preservation. A green CI run proves only automated checks; a real DB migration and installation acceptance test remains outstanding.
 
+## Optional missing-schema additions during SQLCipher migration
+
+When the existing read-only schema audit detects **missing registered
+schema objects**, the Data Review page now displays their names with
+**single/multiple selection**, **Select all** and **Select none**.
+Nothing is selected by default. A missing registered object is a
+possible indication of an earlier database version, not automatically
+a security vulnerability or a reason to replace the original database.
+
+Any selected additions are executed only on the verified in-memory
+copy during the experimental encrypted-destination action. The GUI
+never submits arbitrary SQL: the Rust core maps each selected name
+to independently registered reference DDL, verifies that it really is
+missing, applies the whole selected group inside a transaction,
+checks schema integrity and copies only the verified result to the
+new SQLCipher destination. Existing source/backup files are not
+changed. For example, an index with a UNIQUE constraint cannot be
+added to duplicate/conflicting existing rows; SQLite rejects it,
+the isolated transaction rolls back and the destination remains
+unpublished. The user can then correct the conflicting records
+separately through the existing typed data-review workflow and
+reverify, rather than bypassing the constraint.
+
+The original schema is preserved when **none** is selected. A partial
+selection does not imply full compatibility with the subsequently
+installed application: complete schema validation remains a separate
+launch/installation gate. Unknown or incompatible objects do not
+become executable migration SQL; they require their own review.
+Changing any schema selection invalidates prior migration proofs.
+The general M2.07 interruption/recovery rules still apply to
+the encrypted publication path. This feature requires a new
+explicitly authorized portable testbuild before end-user GUI
+acceptance; ordinary CI does not package installers.
+
 ## Experimental SQLCipher copy on the final Review page (not application installation)
 
 A controlled Alpha **database-copy-only** execution command is available

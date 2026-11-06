@@ -246,3 +246,23 @@ authorization and verified operational application packaging remain open.
 Keep `destinationCreated=false`, `encryptedDestinationVerified=false`,
 `migrationEnabled=false`, and `executionEnabled=false` for every
 application-facing result until those independent gates pass.
+
+## Verified-stage file flush barrier (M2.06 prerequisite, 2026-11-06)
+
+Before its **existing private temporary hard-link rehearsal**, the installer
+core now requires `sync_verified_ciphertext_stage` to succeed on the
+already-reopened and independently compared SQLCipher ciphertext file.
+The barrier rejects absent, non-regular and symlink staging paths, opens
+the verified stage with a writable handle for Windows `FlushFileBuffers`
+compatibility, and calls Rust `File::sync_all` without modifying its
+contents. A failed flush refuses even the *temporary* promotion link.
+Focused Rust regression coverage checks successful flush, unchanged file
+contents, missing paths, directory rejection and Unix symlink rejection.
+
+This is **only a file-content flush prerequisite**, not a completed
+crash-durable database publication. It neither flushes the target parent
+directory entry nor pins an exclusive native destination directory handle.
+There is no final user-selected target creation, no application first-run
+authorization, no recovery journal and no GUI/CLI migration execution.
+The existing four fail-closed installer result flags stay unchanged.
+Cross-platform CI evidence for this incremental step is recorded separately.

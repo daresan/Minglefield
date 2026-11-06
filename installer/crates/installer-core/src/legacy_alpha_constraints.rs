@@ -4,7 +4,7 @@
 //! No rows, credentials, or host settings are embedded in this contract.
 use crate::sqlite_inspection::SqliteInspection;
 use rusqlite::Connection;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 const REGISTERED_SOURCE_SQL: &[(&str, &str)] = &[
     (
@@ -320,35 +320,137 @@ pub fn audit_registered_alpha_schema_objects(
     {
         report.verified = true;
         report.reason = "registered_alpha_schema_objects_verified";
-    } else if report.extra_objects.is_empty()
-        && report.incompatible_objects.is_empty()
-        && report.missing_objects == ["uq_game_install_one_active_project"]
-        && report.matched_schema_entry_count + 1 == expected.len()
-    {
-        // A known older/uninitialized Alpha variant: the source omits
-        // precisely the DB-level exclusion of concurrent active Game installs.
-        // Inspect its rows read-only before even suggesting an isolated
-        // versioned repair. Do not modify the source or claim full verification.
-        let conflicting_groups: i64 = inspected_db
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM sec01_game_install_journal
-                 WHERE state NOT IN ('cancelled','committed','rolled_back')
-                 GROUP BY host_id,project_id HAVING COUNT(*) > 1)",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(|_| "Cannot inspect active Game-install journal conflicts")?;
-        report.reason = if conflicting_groups == 0 {
-            "alpha_legacy_active_game_index_missing"
-        } else {
-            "alpha_legacy_active_game_index_conflicts"
-        };
     } else if !report.extra_objects.is_empty() {
         report.reason = "alpha_unregistered_schema_objects";
     } else if !report.missing_objects.is_empty() {
         report.reason = "alpha_required_schema_objects_missing";
     }
     Ok(report)
+}
+
+/// Explicit, non-destructive-on-failure addition of operator-selected
+/// schema objects from the *registered* reference DDL. The caller supplies
+/// an isolated, mutable target copy; never pass the original database here.
+/// No SQL text is accepted from the UI or inferred from missing-object names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectedSchemaAdditions {
+    pub added_objects: Vec<String>,
+    pub still_missing_objects: Vec<String>,
+    pub complete_registered_schema: bool,
+}
+
+pub fn add_selected_registered_schema_objects(
+    target: &mut Connection,
+    selected: &[String],
+) -> Result<SelectedSchemaAdditions, String> {
+    let reference = known_reference()?;
+    let expected = schema_objects(&reference)?;
+    let current = schema_objects(target)?;
+    if current.iter().any(|(name, row)| {
+        !matches!(expected.get(name), Some(reference_row) if reference_row == row)
+    }) {
+        return Err("Unregistered or incompatible schema objects require separate review".into());
+    }
+    let missing: BTreeSet<String> = expected
+        .keys()
+        .filter(|name| !current.contains_key(*name))
+        .cloned()
+        .collect();
+    let choices: BTreeSet<String> = selected.iter().cloned().collect();
+    if choices.len() != selected.len() || !choices.is_subset(&missing) {
+        return Err("Schema additions must be distinct, currently missing registered objects".into());
+    }
+    if selected.is_empty() {
+        return Ok(SelectedSchemaAdditions {
+            added_objects: Vec::new(),
+            still_missing_objects: missing.into_iter().collect(),
+            complete_registered_schema: current == expected,
+        });
+    }
+    // A transaction means a failed UNIQUE index, missing dependency, or
+    // invalid DDL cannot leave *part* of a chosen group behind.
+    let transaction = target
+        .transaction()
+        .map_err(|_| "Cannot begin isolated schema additions transaction")?;
+    // Explicit tables first: their implicit SQLite autoindexes appear with
+    // the table's PRIMARY KEY/UNIQUE constraints. They are never constructed
+    // through arbitrary or user-provided SQL.
+    for &(name, statement) in REGISTERED_SOURCE_SQL {
+        if choices.contains(name) {
+            transaction
+                .execute_batch(statement)
+                .map_err(|_| "Selected schema table cannot be created with existing data")?;
+        }
+    }
+    // Explicit indexes, views and triggers (if registered later) use the
+    // independently constructed reference, not any client-provided SQL.
+    for name in &choices {
+        let row = expected
+            .get(name)
+            .ok_or("Selected schema object is not registered")?;
+        if row.kind == "table" || row.sql.is_none() {
+            continue;
+        }
+        let statement: String = reference
+            .query_row(
+                "SELECT sql FROM sqlite_schema WHERE name=?1",
+                [name.as_str()],
+                |r| r.get(0),
+            )
+            .map_err(|_| "Registered SQL for missing object is unavailable")?;
+        transaction
+            .execute_batch(&statement)
+            .map_err(|_| "Selected schema object cannot be created with existing data")?;
+    }
+    let after = schema_objects(&transaction)?;
+    for (name, row) in &current {
+        if after.get(name) != Some(row) {
+            return Err("Existing schema object unexpectedly changed".into());
+        }
+    }
+    for (name, row) in &after {
+        if expected.get(name) != Some(row) {
+            return Err("Unexpected schema object introduced by selected additions".into());
+        }
+        if !current.contains_key(name) && !choices.contains(name) {
+            // Autoindexes are dependencies generated by an explicitly
+            // selected missing table, not standalone user-requested DDL.
+            if row.kind != "index" || row.sql.is_some() || !choices.contains(&row.table) {
+                return Err("Selected schema addition produced an unapproved dependency".into());
+            }
+        }
+    }
+    if choices.iter().any(|name| !after.contains_key(name)) {
+        return Err("A selected schema object could not be created independently".into());
+    }
+    let check: String = transaction
+        .query_row("PRAGMA quick_check", [], |r| r.get(0))
+        .map_err(|_| "Cannot verify schema additions integrity")?;
+    let violations: i64 = transaction
+        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
+        .map_err(|_| "Cannot verify schema additions foreign keys")?;
+    if check != "ok" || violations != 0 {
+        return Err("Schema additions failed database integrity checks".into());
+    }
+    let added_objects = after
+        .keys()
+        .filter(|name| !current.contains_key(*name))
+        .cloned()
+        .collect();
+    let still_missing_objects = expected
+        .keys()
+        .filter(|name| !after.contains_key(*name))
+        .cloned()
+        .collect();
+    let complete_registered_schema = after == expected;
+    transaction
+        .commit()
+        .map_err(|_| "Cannot commit verified schema additions to isolated copy")?;
+    Ok(SelectedSchemaAdditions {
+        added_objects,
+        still_missing_objects,
+        complete_registered_schema,
+    })
 }
 
 #[cfg(test)]
@@ -411,7 +513,7 @@ mod tests {
         assert!(report
             .missing_objects
             .contains(&"uq_game_install_one_active_project".to_owned()));
-        assert_eq!(report.reason, "alpha_legacy_active_game_index_missing");
+        assert_eq!(report.reason, "alpha_required_schema_objects_missing");
         assert!(!report.migration_enabled);
         db.execute_batch(
             "CREATE UNIQUE INDEX uq_game_install_one_active_project ON sec01_game_install_journal(host_id,project_id) WHERE state IN ('cancelled','committed','rolled_back')"
@@ -439,7 +541,7 @@ mod tests {
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(!report.verified);
         assert!(!report.migration_enabled);
-        assert_eq!(report.reason, "alpha_legacy_active_game_index_conflicts");
+        assert_eq!(report.reason, "alpha_required_schema_objects_missing");
         assert_eq!(
             report.missing_objects,
             vec!["uq_game_install_one_active_project".to_owned()]
@@ -462,9 +564,87 @@ mod tests {
         )
         .unwrap();
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
-        assert_eq!(report.reason, "alpha_legacy_active_game_index_missing");
+        assert_eq!(report.reason, "alpha_required_schema_objects_missing");
         assert!(!report.verified);
         assert!(!report.migration_enabled);
+    }
+
+    #[test]
+    fn selected_missing_index_can_be_added_on_isolated_copy_without_special_cases() {
+        let mut db = known_reference().unwrap();
+        db.execute_batch("DROP INDEX uq_game_install_one_active_project;")
+            .unwrap();
+        let original = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
+        assert!(!original.verified);
+        assert_eq!(original.missing_objects, ["uq_game_install_one_active_project"]);
+        let outcome = add_selected_registered_schema_objects(
+            &mut db,
+            &["uq_game_install_one_active_project".to_owned()],
+        )
+        .unwrap();
+        assert_eq!(outcome.added_objects, ["uq_game_install_one_active_project"]);
+        assert!(outcome.still_missing_objects.is_empty());
+        assert!(outcome.complete_registered_schema);
+        assert!(audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap().verified);
+    }
+
+    #[test]
+    fn selected_missing_table_creates_required_implicit_indexes_and_supports_subset_choice() {
+        let mut db = known_reference().unwrap();
+        db.execute_batch("DROP TABLE alpha_users; DROP INDEX uq_game_install_one_active_project;")
+            .unwrap();
+        let skipped = add_selected_registered_schema_objects(&mut db, &[]).unwrap();
+        assert!(skipped.added_objects.is_empty());
+        assert!(!skipped.complete_registered_schema);
+        let selected = add_selected_registered_schema_objects(
+            &mut db,
+            &["alpha_users".to_owned()],
+        )
+        .unwrap();
+        assert!(selected.added_objects.contains(&"alpha_users".to_owned()));
+        assert!(selected.added_objects.contains(&"sqlite_autoindex_alpha_users_1".to_owned()));
+        assert_eq!(selected.still_missing_objects, ["uq_game_install_one_active_project"]);
+        assert!(!selected.complete_registered_schema);
+        assert!(!audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap().verified);
+    }
+
+    #[test]
+    fn adding_a_unique_index_with_conflicting_rows_rolls_back_all_selected_objects() {
+        let mut db = known_reference().unwrap();
+        db.execute_batch(
+            "DROP TABLE alpha_users;
+             DROP INDEX uq_game_install_one_active_project;
+             INSERT INTO sec01_game_install_journal
+             (operation_id,host_id,owner_id,project_id,state,plan_sha256)
+             VALUES
+             ('op-first','host-one','owner-one','game-one','prepared','digest-one'),
+             ('op-second','host-one','owner-one','game-one','prepared','digest-two');",
+        )
+        .unwrap();
+        assert!(add_selected_registered_schema_objects(
+            &mut db,
+            &["alpha_users".to_owned(), "uq_game_install_one_active_project".to_owned()],
+        ).is_err());
+        let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
+        assert!(!report.verified);
+        assert!(report.missing_objects.contains(&"alpha_users".to_owned()));
+        assert!(report.missing_objects.contains(&"uq_game_install_one_active_project".to_owned()));
+        assert!(schema_objects(&db).unwrap().get("alpha_users").is_none());
+    }
+
+    #[test]
+    fn unknown_duplicate_or_already_present_schema_selections_are_rejected() {
+        let mut db = known_reference().unwrap();
+        db.execute_batch("DROP INDEX uq_game_install_one_active_project;")
+            .unwrap();
+        for selection in [
+            vec!["some_nonexistent_index".to_owned()],
+            vec!["alpha_users".to_owned()],
+            vec!["uq_game_install_one_active_project".to_owned(); 2],
+        ] {
+            assert!(add_selected_registered_schema_objects(&mut db, &selection).is_err());
+        }
+        assert!(schema_objects(&db).unwrap().get("uq_game_install_one_active_project").is_none());
     }
 
     #[test]

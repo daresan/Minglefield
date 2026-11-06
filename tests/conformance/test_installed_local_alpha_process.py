@@ -118,7 +118,7 @@ class InstalledAlphaProcessTests(unittest.TestCase):
             self.assertTrue(ready["encryptedDatabase"])
             self.assertFalse(ready["hostClaimBootstrapEnabled"])
             port = ready["port"]
-            def http(method, endpoint, data=None, token=None):
+            def request_local(method, endpoint, data=None, token=None):
                 c = http.client.HTTPConnection("127.0.0.1", port, timeout=8)
                 headers = {"Host": f"127.0.0.1:{port}"}
                 if data is not None:
@@ -133,16 +133,16 @@ class InstalledAlphaProcessTests(unittest.TestCase):
                     return result.status, json.loads(result.read(1024 * 100))
                 finally:
                     c.close()
-            invalid, _ = http("POST", "/api/login", {
+            invalid, _ = request_local("POST", "/api/login", {
                 "user_id": "mingleadmin", "password": DB_KEY})
             self.assertEqual(invalid, 401)
-            ok, login = http("POST", "/api/login", {
+            ok, login = request_local("POST", "/api/login", {
                 "user_id": "mingleadmin", "password": LOGIN_KEY})
             self.assertEqual(ok, 200)
-            status, hosts = http("GET", "/api/hosts", token=login["session_token"])
+            status, hosts = request_local("GET", "/api/hosts", token=login["session_token"])
             self.assertEqual(status, 200)
             self.assertEqual([h["host_id"] for h in hosts["hosts"]], ["host.local"])
-            blocked, _ = http("POST", "/api/host/claim",
+            blocked, _ = request_local("POST", "/api/host/claim",
                               {"host_id": "host.remote", "bootstrap_secret": "anything"},
                               token=login["session_token"])
             self.assertEqual(blocked, 403)

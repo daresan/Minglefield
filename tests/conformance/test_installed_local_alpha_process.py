@@ -107,7 +107,10 @@ class InstalledAlphaProcessTests(unittest.TestCase):
                 target=lambda: received.put(child.stdout.readline()), daemon=True)
             reader.start()
             try:
-                line = received.get(timeout=25)
+                # Cold macOS SQLCipher initialization may exceed 25 seconds
+                # when setting up the full Host runtime on a CI worker.
+                # This is a bounded readiness check, not a latency SLA.
+                line = received.get(timeout=90)
             except queue.Empty:
                 self.fail("installed Alpha did not report ready within test deadline")
             self.assertTrue(line, "installed Alpha exited before ready")

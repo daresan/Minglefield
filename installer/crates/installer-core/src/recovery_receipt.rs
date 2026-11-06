@@ -229,7 +229,9 @@ pub fn recovery_receipt_filename(operation_id: &str) -> Result<String, String> {
 /// the same canonical destination. This is not a native handle-relative lock.
 pub fn reserved_destination_receipt_path(destination: &Path) -> Result<PathBuf, String> {
     let hash = destination_name_digest(destination)?;
-    let parent = destination.parent().ok_or("Recovery destination has no parent")?;
+    let parent = destination
+        .parent()
+        .ok_or("Recovery destination has no parent")?;
     Ok(parent.join(format!("minglefield-target-{hash}.receipt")))
 }
 
@@ -260,8 +262,8 @@ pub fn reserve_destination_recovery_receipt(
     }
     let path = reserved_destination_receipt_path(destination)?;
     let parent = path.parent().ok_or("Recovery receipt parent unavailable")?;
-    let info = fs::symlink_metadata(parent)
-        .map_err(|_| "Cannot inspect recovery receipt parent")?;
+    let info =
+        fs::symlink_metadata(parent).map_err(|_| "Cannot inspect recovery receipt parent")?;
     if info.file_type().is_symlink() || !info.is_dir() {
         return Err("Recovery receipt parent must be a regular directory".into());
     }
@@ -584,9 +586,9 @@ mod tests {
         fs::write(&backup, b"changed backup").unwrap();
         // The receipt layer captures both hashes; logical equivalence
         // belongs to the separately verified SQLCipher source/backup guard.
-        let other_layout = fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).unwrap();
+        let other_layout =
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
+                .unwrap();
         assert_ne!(other_layout.source_sha256, other_layout.backup_sha256);
         fs::copy(&source, &backup).unwrap();
         let record =
@@ -620,9 +622,9 @@ mod tests {
     fn target_reservation_is_exclusive_and_reports_directory_sync_scope() {
         let root = directory();
         let (source, backup, destination, ciphertext) = fixture(&root);
-        let receipt = fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).unwrap();
+        let receipt =
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
+                .unwrap();
         let reserved = reserve_destination_recovery_receipt(&destination, &receipt).unwrap();
         assert_eq!(reserved.operation_id, receipt.operation_id);
         assert_eq!(
@@ -636,19 +638,30 @@ mod tests {
         assert!(!reserved.directory_entry_synced);
         assert_eq!(
             inspect_reserved_destination_recovery_receipt(
-                &source, &backup, &destination, &ciphertext, &[], &[],
-            ).unwrap(),
+                &source,
+                &backup,
+                &destination,
+                &ciphertext,
+                &[],
+                &[],
+            )
+            .unwrap(),
             ReceiptInspection::Matched,
         );
-        let other = fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).unwrap();
+        let other = fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
+            .unwrap();
         assert_ne!(receipt.operation_id, other.operation_id);
         assert!(reserve_destination_recovery_receipt(&destination, &other).is_err());
         assert_eq!(
             inspect_reserved_destination_recovery_receipt(
-                &source, &backup, &destination, &ciphertext, &[], &[],
-            ).unwrap(),
+                &source,
+                &backup,
+                &destination,
+                &ciphertext,
+                &[],
+                &[],
+            )
+            .unwrap(),
             ReceiptInspection::Matched,
         );
         fs::remove_dir_all(root).unwrap();
@@ -658,9 +671,9 @@ mod tests {
     fn reserved_receipt_is_persisted_before_publication_and_does_not_authorize_retry() {
         let root = directory();
         let (source, backup, destination, ciphertext) = fixture(&root);
-        let receipt = fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).unwrap();
+        let receipt =
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
+                .unwrap();
         let reserved = reserve_destination_recovery_receipt(&destination, &receipt).unwrap();
         assert!(!destination.exists());
         // A missing target does not imply a free operation slot.
@@ -670,15 +683,27 @@ mod tests {
         assert!(reserve_destination_recovery_receipt(&destination, &receipt).is_err());
         assert_eq!(
             inspect_reserved_destination_recovery_receipt(
-                &source, &backup, &destination, &destination, &[], &[],
-            ).unwrap(),
+                &source,
+                &backup,
+                &destination,
+                &destination,
+                &[],
+                &[],
+            )
+            .unwrap(),
             ReceiptInspection::Matched,
         );
         fs::write(&destination, b"changed-existing-file").unwrap();
         assert_eq!(
             inspect_reserved_destination_recovery_receipt(
-                &source, &backup, &destination, &destination, &[], &[],
-            ).unwrap(),
+                &source,
+                &backup,
+                &destination,
+                &destination,
+                &[],
+                &[],
+            )
+            .unwrap(),
             ReceiptInspection::Unverified,
         );
         fs::remove_dir_all(root).unwrap();
@@ -691,9 +716,9 @@ mod tests {
         fs::write(&backup, b"other layout of a caller-verified backup").unwrap();
         // The receipt layer records raw bytes; SQLite logical equality is
         // already established by the higher-level migration guard.
-        let record = fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).unwrap();
+        let record =
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
+                .unwrap();
         assert_ne!(record.source_sha256, record.backup_sha256);
         let reserved = reserve_destination_recovery_receipt(&destination, &record).unwrap();
         assert!(reserved.receipt_path.is_file());

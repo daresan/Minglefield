@@ -4,6 +4,10 @@ use crate::legacy_alpha_constraints::add_selected_registered_schema_objects;
 use crate::migration_destination::{
     preview_migration_destination, same_underlying_file, PinnedDestinationParent,
 };
+use crate::recovery_receipt::{
+    fixture_recovery_receipt, inspect_reserved_destination_recovery_receipt,
+    reserve_destination_recovery_receipt, sync_published_destination_parent, ReceiptInspection,
+};
 use crate::migration_dry_run::{
     apply_staged_to_isolated_copy, table_counts, validate_alpha_schema, ReviewCorrection,
 };
@@ -29,6 +33,9 @@ pub struct EncryptedTestCopy {
     pub tables_checked: usize,
     pub schema_entries_checked: usize,
     pub added_schema_objects: Vec<String>,
+    pub recovery_operation_id: Option<String>,
+    pub recovery_receipt_directory_synced: bool,
+    pub destination_directory_synced: bool,
     pub temporary_files_removed: bool,
     pub destination_created: bool,
     pub encrypted_destination_verified: bool,
@@ -218,6 +225,7 @@ enum CopyCheckpoint {
     BeforeStaging,
     AfterEncryptedExport,
     BeforeFinalPublication,
+    AfterReceiptReserved,
     AfterFinalPublication,
     DuringFinalVerification,
 }
@@ -258,6 +266,7 @@ fn rehearse_encrypted_test_copy_under_with_schema(
         staging_parent,
         publication_target,
         schema_additions,
+        None,
         |_| Ok(()),
     )
 }
@@ -273,6 +282,7 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
     staging_parent: Option<&Path>,
     publication_target: Option<&Path>,
     schema_additions: &[String],
+    receipt_backup: Option<&Path>,
     mut checkpoint: impl FnMut(CopyCheckpoint) -> Result<(), String>,
 ) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
@@ -401,10 +411,34 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
     // Only explicitly gated callers may request a final-name publication.
     // No hard-link operation may overwrite an existing destination file.
     // Full handle-relative and crash-durable release gates remain separate.
+    let mut recovery_operation_id = None;
+    let mut recovery_receipt_directory_synced = false;
+    let mut destination_directory_synced = false;
     let fixture_created = if let Some(target) = publication_target {
         checkpoint(CopyCheckpoint::BeforeFinalPublication)?;
+        if let Some(backup) = receipt_backup {
+            // This verified and flushed ciphertext is the exact inode later
+            // published under the final name. Reserve a unique operation
+            // slot BEFORE linking it. An earlier operation (even interrupted
+            // before publication) must prevent an unannounced second try.
+            let record = fixture_recovery_receipt(
+                source_path, backup, target, &staged, corrections, schema_additions,
+            )?;
+            let reserved = reserve_destination_recovery_receipt(target, &record)?;
+            if inspect_reserved_destination_recovery_receipt(
+                source_path, backup, target, &staged, corrections, schema_additions,
+            )? != ReceiptInspection::Matched {
+                return Err("Recovery receipt failed immediate staged-file verification".into());
+            }
+            recovery_operation_id = Some(reserved.operation_id);
+            recovery_receipt_directory_synced = reserved.directory_entry_synced;
+            checkpoint(CopyCheckpoint::AfterReceiptReserved)?;
+        }
         fs::hard_link(&staged, target)
             .map_err(|_| "Cannot exclusively publish fixture ciphertext")?;
+        if receipt_backup.is_some() {
+            destination_directory_synced = sync_published_destination_parent(target)?;
+        }
         checkpoint(CopyCheckpoint::AfterFinalPublication)?;
         let published_fixture =
             Connection::open_with_flags(target, OpenFlags::SQLITE_OPEN_READ_ONLY)
@@ -418,6 +452,13 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
             return Err("Published fixture data differs from verified stage".to_owned());
         }
         drop(published_fixture);
+        if let Some(backup) = receipt_backup {
+            if inspect_reserved_destination_recovery_receipt(
+                source_path, backup, target, target, corrections, schema_additions,
+            )? != ReceiptInspection::Matched {
+                return Err("Published ciphertext does not match reserved recovery record".into());
+            }
+        }
         true
     } else {
         false
@@ -437,6 +478,9 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
         tables_checked: fidelity.tables_checked,
         schema_entries_checked: fidelity.schema_entries_checked,
         added_schema_objects,
+        recovery_operation_id,
+        recovery_receipt_directory_synced,
+        destination_directory_synced,
         temporary_files_removed: true,
         destination_created: fixture_created,
         encrypted_destination_verified: fixture_created,
@@ -531,7 +575,7 @@ pub fn execute_reviewed_encrypted_copy_with_schema(
     // Explicitly request a durable output filename only after consent and
     // the independent source/backup comparison; use the proven same-volume
     // encrypted staging and exclusive hard-link copy.
-    let report = rehearse_encrypted_test_copy_under_with_schema(
+    let report = rehearse_encrypted_test_copy_under_with_checkpoints(
         source,
         existing_password,
         new_password,
@@ -539,6 +583,8 @@ pub fn execute_reviewed_encrypted_copy_with_schema(
         Some(parent),
         Some(&before.destination),
         schema_additions,
+        Some(&backup),
+        |_| Ok(()),
     )?;
     guard.revalidate_identity()?;
     if !report.destination_created
@@ -975,6 +1021,7 @@ mod tests {
             "after_export" => CopyCheckpoint::AfterEncryptedExport,
             "before_publish" => CopyCheckpoint::BeforeFinalPublication,
             "after_publish" => CopyCheckpoint::AfterFinalPublication,
+            "after_receipt" => CopyCheckpoint::AfterReceiptReserved,
             "final_verify" => CopyCheckpoint::DuringFinalVerification,
             _ => panic!("Unknown test-only interruption checkpoint"),
         };
@@ -988,6 +1035,7 @@ mod tests {
             Some(&parent),
             Some(&target),
             &[],
+            None,
             |point| {
                 if point == selected {
                     process::exit(77);
@@ -1120,6 +1168,7 @@ mod tests {
                 Some(&parent),
                 Some(&destination),
                 &[],
+                None,
                 |point| {
                     if point == fault {
                         intercepted += 1;
@@ -1180,6 +1229,7 @@ mod tests {
             Some(&parent),
             Some(&destination),
             &[],
+            None,
             |point| {
                 if point == CopyCheckpoint::DuringFinalVerification {
                     Err("synthetic post-link interruption".to_owned())
@@ -1333,7 +1383,7 @@ mod tests {
         assert_eq!(fs::read(&source).unwrap(), original);
         assert!(args(&backup, EXPERIMENTAL_COPY_CONFIRMATION).is_err());
         assert!(destination.exists());
-        assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 3);
         fs::remove_dir_all(parent).unwrap();
         fs::remove_file(source).unwrap();
     }
@@ -1371,7 +1421,7 @@ mod tests {
         assert!(!result.execution_enabled);
         assert_eq!(fs::read(&source).unwrap(), source_bytes);
         assert_eq!(fs::read(&backup).unwrap(), source_bytes);
-        assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 3);
         fs::remove_dir_all(parent).unwrap();
         fs::remove_file(source).unwrap();
     }

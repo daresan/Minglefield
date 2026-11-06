@@ -401,11 +401,8 @@ pub fn execute_reviewed_encrypted_copy(
     if backup_meta.file_type().is_symlink() || !backup_meta.is_file() {
         return Err("Backup must be an existing regular file, not a symlink".into());
     }
-    let backup = fs::canonicalize(backup_path)
-        .map_err(|_| "Cannot identify backup file")?;
-    if backup == source || backup == before.destination
-        || same_underlying_file(source, &backup)?
-    {
+    let backup = fs::canonicalize(backup_path).map_err(|_| "Cannot identify backup file")?;
+    if backup == source || backup == before.destination || same_underlying_file(source, &backup)? {
         return Err("Backup must be a physically separate file from source and destination".into());
     }
     // A backup is not considered verified because a checkbox was selected.
@@ -416,7 +413,8 @@ pub fn execute_reviewed_encrypted_copy(
         .map_err(|_| "Cannot verify original source for backup comparison")?;
     let (backup_db, backup_info) = open_inspected_snapshot(&backup, existing_password)
         .map_err(|_| "Cannot open verified source backup")?;
-    if !source_info.integrity_ok || !backup_info.integrity_ok
+    if !source_info.integrity_ok
+        || !backup_info.integrity_ok
         || source_info.foreign_key_violations != 0
         || backup_info.foreign_key_violations != 0
     {
@@ -427,19 +425,27 @@ pub fn execute_reviewed_encrypted_copy(
     }
     drop(backup_db);
     drop(source_db);
-    let parent = before.destination.parent()
+    let parent = before
+        .destination
+        .parent()
         .ok_or("Destination parent unavailable")?;
     let guard = PinnedDestinationParent::open(&before)?;
     // Explicitly request a durable output filename only after consent and
     // the independent source/backup comparison; use the proven same-volume
     // encrypted staging and exclusive hard-link copy.
     let report = rehearse_encrypted_test_copy_under(
-        source, existing_password, new_password, corrections,
-        Some(parent), Some(&before.destination),
+        source,
+        existing_password,
+        new_password,
+        corrections,
+        Some(parent),
+        Some(&before.destination),
     )?;
     guard.revalidate_identity()?;
-    if !report.destination_created || !report.encrypted_destination_verified
-        || !report.full_disk_copy_verified || !report.temporary_files_removed
+    if !report.destination_created
+        || !report.encrypted_destination_verified
+        || !report.full_disk_copy_verified
+        || !report.temporary_files_removed
     {
         return Err("Experimental encrypted copy was not verified".into());
     }
@@ -555,7 +561,12 @@ mod tests {
         let destination = parent.join("approved-encrypted.sqlite3");
         let args = |backup: &Path, confirmation: &str| {
             execute_reviewed_encrypted_copy(
-                &source, &destination, backup, "", "NewKey123!", &changes(),
+                &source,
+                &destination,
+                backup,
+                "",
+                "NewKey123!",
+                &changes(),
                 confirmation,
             )
         };
@@ -593,13 +604,22 @@ mod tests {
         let destination = parent.join("new-encrypted.sqlite3");
         fs::copy(&source, &backup).unwrap();
         let db = Connection::open(&backup).unwrap();
-        db.execute("UPDATE alpha_users SET disabled=1 WHERE user_id='alice'", [])
-            .unwrap();
+        db.execute(
+            "UPDATE alpha_users SET disabled=1 WHERE user_id='alice'",
+            [],
+        )
+        .unwrap();
         drop(db);
         assert!(execute_reviewed_encrypted_copy(
-            &source, &destination, &backup, "", "NewKey123!", &[],
+            &source,
+            &destination,
+            &backup,
+            "",
+            "NewKey123!",
+            &[],
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).is_err());
+        )
+        .is_err());
         assert!(!destination.exists());
         assert_eq!(fs::read(&source).unwrap(), original);
         fs::remove_dir_all(parent).unwrap();

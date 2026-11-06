@@ -10,6 +10,7 @@ import { renderDomainDatabaseReview } from "./domain-database-review.js";
 import { groupReviewedTables } from "./database-review-categories.js";
 import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js";
 import { validateExperimentalCopyRequest } from "./experimental-copy-review.js";
+import { validateSchemaAdditionSelection } from "./schema-addition-selection.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -303,6 +304,56 @@ let lastTemporaryEncryptedProof = null;
 let temporaryEncryptedRequestSequence = 0;
 let experimentalCopyRequestSequence = 0;
 let lastExperimentalCopy = null;
+let detectedMissingSchemaObjects = [];
+function selectedMissingSchemaObjects() {
+  const checked = [...document.querySelectorAll("#missing-schema-choices input:checked")];
+  return validateSchemaAdditionSelection(detectedMissingSchemaObjects, checked.map(node => node.value));
+}
+function updateMissingSchemaStatus() {
+  const selected = selectedMissingSchemaObjects();
+  document.querySelector("#missing-schema-status").textContent = selected.length
+    ? selected.length + " Schemaobjekt(e) für die neue verschlüsselte Kopie ausgewählt: " + selected.join(", ")
+    : "Keine Schemaergänzung ausgewählt; vorhandenes Schema wird unverändert übernommen.";
+}
+function renderMissingSchemaOptions(audit) {
+  const root = document.querySelector("#missing-schema-choices");
+  const section = document.querySelector("#missing-schema-section");
+  root.replaceChildren();
+  const missing = Array.isArray(audit?.missingObjects) ? audit.missingObjects : [];
+  detectedMissingSchemaObjects = validateSchemaAdditionSelection(missing, []);
+  section.hidden = missing.length === 0;
+  document.querySelector("#missing-schema-description").textContent =
+    "Es fehlen " + missing.length + " registrierte(s) Schemaobjekt(e). " +
+    "Dies kann auf eine ältere Datenbankversion hinweisen. Sollen einzelne oder alle " +
+    "fehlenden Objekte in der NEUEN verschlüsselten Kopie ergänzt werden? " +
+    "Standard: keine Ergänzungen. Die Quelldatenbank bleibt unverändert. " +
+    "Unbekannte oder inkompatible Objekte benötigen weiterhin Prüfung.";
+  for (const name of missing) {
+    const label = document.createElement("label");
+    label.style.margin = "8px 0";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = name;
+    input.style.width = "auto";
+    input.addEventListener("change", () => {
+      invalidateMigrationRehearsal();
+      updateMissingSchemaStatus();
+    });
+    label.append(input, document.createTextNode(" " + name));
+    root.append(label);
+  }
+  updateMissingSchemaStatus();
+}
+document.querySelector("#select-all-missing-schema").addEventListener("click", () => {
+  for (const input of document.querySelectorAll("#missing-schema-choices input")) input.checked = true;
+  invalidateMigrationRehearsal();
+  updateMissingSchemaStatus();
+});
+document.querySelector("#select-no-missing-schema").addEventListener("click", () => {
+  for (const input of document.querySelectorAll("#missing-schema-choices input")) input.checked = false;
+  invalidateMigrationRehearsal();
+  updateMissingSchemaStatus();
+});
 function invalidateMigrationRehearsal() {
   experimentalCopyRequestSequence += 1;
   lastExperimentalCopy = null;
@@ -326,6 +377,7 @@ function resetDatabaseReview() {
   invalidateMigrationRehearsal();
   originalFullDb = null;
   editedFullDb = null;
+  renderMissingSchemaOptions(null);
   renderDomainDatabaseReview(document, () => editedFullDb, editDatabaseCell, reviewError);
   document.querySelector("#data-editor-status").textContent =
     "No verified database records loaded. Migration remains disabled.";
@@ -439,6 +491,7 @@ async function inspectSelectedSqlite() {
     renderGroupedDatabase();
     updateReviewSummary();
     const objectAudit = databaseReviewEvidence(preview).schemaObjectAssessment;
+    renderMissingSchemaOptions(objectAudit);
     const objectCounts = Number.isSafeInteger(objectAudit.matchedSchemaEntryCount) &&
       Number.isSafeInteger(objectAudit.expectedSchemaEntryCount)
       ? " (" + objectAudit.matchedSchemaEntryCount + "/" +
@@ -447,7 +500,10 @@ async function inspectSelectedSqlite() {
     output.textContent = "Database integrity verified. " +
       records.tables.length + " complete SQLite table(s) loaded in the five review areas." +
       " SQLite schema-object audit: " + objectAudit.reason + objectCounts + "." +
-      " Unrecognized extensions are listed separately. Migration remains disabled.";
+      (objectAudit.missingObjects?.length
+        ? " Fehlende Schemaobjekte können auf eine ältere Version hinweisen; optionale Ergänzung auswählen."
+        : "") +
+      " Unrecognized extensions are listed separately. Full application installation remains disabled.";
   } catch (error) {
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
     retainedSourceUnlockPassword = "";
@@ -687,6 +743,9 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
         newDbPassword.value, confirmDbPassword.value
       ).valid
     });
+    // Never execute UI-supplied SQL; Rust resolves selected identifiers
+    // against the registered schema and validates a new isolated copy.
+    request.schemaAdditions = selectedMissingSchemaObjects();
     const proof = await invoke("create_experimental_encrypted_copy", {
       ...request, ...credentials
     });
@@ -694,6 +753,10 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
       experimentalResult.textContent =
         "Operation finished, but the review changed. Inspect the selected destination before proceeding.";
       return;
+    }
+    if (!Array.isArray(proof.addedSchemaObjects) ||
+        request.schemaAdditions.some(name => !proof.addedSchemaObjects.includes(name))) {
+      throw new Error("Not every selected schema object was added and verified.");
     }
     if (proof.status !== "experimental_encrypted_copy_created" ||
         proof.sourcePreserved !== true || proof.backupVerified !== true ||

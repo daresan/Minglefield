@@ -131,7 +131,7 @@ pub fn rehearse_encrypted_test_copy(
         existing_password,
         new_password,
         corrections,
-        &std::env::temp_dir(),
+        None,
     )
 }
 
@@ -161,7 +161,7 @@ pub fn rehearse_encrypted_test_copy_on_destination_volume(
         existing_password,
         new_password,
         corrections,
-        parent,
+        Some(parent),
     )?;
     let after = preview_migration_destination(source_path, destination_path)
         .map_err(|_| "Destination-volume rehearsal path changed")?;
@@ -176,7 +176,7 @@ fn rehearse_encrypted_test_copy_under(
     existing_password: &str,
     new_password: &str,
     corrections: &[ReviewCorrection],
-    staging_parent: &Path,
+    staging_parent: Option<&Path>,
 ) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
         .map_err(|_| "A strong new SQLCipher password is required")?;
@@ -211,7 +211,10 @@ fn rehearse_encrypted_test_copy_under(
             true,
         )?;
     }
-    let private = PrivateTempDir::create_under(&source, staging_parent)?;
+    let private = match staging_parent {
+        Some(parent) => PrivateTempDir::create_under(&source, parent)?,
+        None => PrivateTempDir::create(&source)?,
+    };
     let staged = private.path.join("temporary-encrypted.sqlite3");
     export(&corrected_memory, &staged, new_password)?;
     let mut header = [0_u8; 16];

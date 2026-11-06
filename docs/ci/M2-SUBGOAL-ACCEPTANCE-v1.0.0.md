@@ -59,6 +59,20 @@ login secrets, session tokens or raw rows in CI logs.
 
 ### M2.06 — Exclusive durable encrypted database publication
 
+**Verified intermediate T2/T3 evidence (not full M2.06 acceptance):**
+At source commit `b136fbfb5d16134916ddb68a0dbbc189293bc06c`,
+the Rust-test-only fixture path creates a real SQLCipher file at a
+previously unoccupied selected test filename, reopens and compares its
+contents, and independently opens it with the operational Python runtime.
+Plain/encrypted source, edited values, source preservation, occupied output,
+weak key, stale review and absent parent cases passed on
+[Ubuntu](https://github.com/daresan/Minglefield/actions/runs/42162575420)
+and [Windows/macOS](https://github.com/daresan/Minglefield/actions/runs/42162575471).
+This is **real file creation in CI, not a usable GUI migration command**;
+`execution_enabled` and public rehearsal flags remain false.
+The next acceptance gate is an explicitly authorized/limited Tauri
+migration path and separate real-user backup safeguards.
+
 - On a **disposable representative fixture**, require positive user approval,
   strong new SQLCipher key and a verified full-source review before mutation.
 - Stage on the target volume, pin/check native parent identity at mutation

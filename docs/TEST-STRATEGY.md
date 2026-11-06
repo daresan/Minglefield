@@ -9,6 +9,16 @@ Decision: 2026-11-02. Applies to local development, agent contributions and CI. 
 | T3 Full conformance | Before PR merge, milestone acceptance, release; earlier for significant architectural/security changes | `python -B -m unittest discover -s tests/conformance -p "test_*.py"` |
 | T4 End-to-end | Functional milestone with real external dependencies | Manual or automated real workflow, explicit environment, observable outcome |
 
+## CI implementation profile
+
+**Minglefield Development CI (MDCI) v1.0.0**:
+[versioned CI policy and milestone acceptance](ci/MINGLEFIELD-DEVELOPMENT-CI-POLICY-v1.0.0.md).
+T1 generally runs scoped Ubuntu checks; T2/T3 expand to Windows/macOS for
+relevant native security, pull-request and milestone gates; T4 produces
+portable Setup Manager artifacts **only after an explicit subgoal request**.
+Actual OS-specific failure and recovery evidence remains mandatory.
+This policy does not govern ComfyUI node-graph workflows.
+
 ## Rules
 
 - Select tests by changed behavior and risk, not just filenames. Auth, authorization, payments, job execution, asset isolation and persistent state may require T2/T3 immediately.

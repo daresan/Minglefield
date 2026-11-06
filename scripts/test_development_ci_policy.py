@@ -77,5 +77,57 @@ class DevelopmentCIPolicyTests(unittest.TestCase):
         self.assertIn("M2.15", policy)
 
 
+class PortableAgentOnboardingTemplateTests(unittest.TestCase):
+    """Static checks only; actual new-agent behavior requires an adoption review."""
+
+    def template(self, name):
+        return (ROOT / "templates" / "MF_AGENTS_TEMPLATE_V1" /
+                name).read_text(encoding="utf-8")
+
+    def test_template_has_one_copyable_entry_and_separate_core_profile(self):
+        entry = self.template("AGENTS.md")
+        core = self.template("MDCI-CORE-v1.1.0.md")
+        profile = self.template("PROJECT-CI-PROFILE.template.md")
+        self.assertIn("AGENTS.md or SOUL.md", entry)
+        self.assertIn("resumed chat", entry)
+        self.assertIn("MDCI Core v1.1.0", entry)
+        self.assertIn("GitHub Actions", core)
+        self.assertIn("ComfyUI node-graph workflows", core)
+        self.assertIn("project roadmap", core.lower())
+        self.assertIn("Previous CI implementation SHA", profile)
+        self.assertIn("Project CI policy version", profile)
+
+    def test_existing_and_missing_roadmap_scenarios_remain_distinct(self):
+        readme = self.template("README.md")
+        entry = self.template("AGENTS.md")
+        self.assertIn("Roadmap found", readme)
+        self.assertIn("No usable milestone Roadmap found", readme)
+        self.assertIn("Roadmap found but versioned MDCI policy/profile missing", readme)
+        self.assertIn("Both missing", readme)
+        self.assertIn("M0.1", readme)
+        self.assertIn("Do not reset the roadmap", entry)
+        self.assertIn("owner", entry.lower())
+        self.assertIn("no file on its own", readme.lower())
+
+    def test_acceptance_and_game_example_are_non_installing(self):
+        acceptance = self.template("MILESTONE-ACCEPTANCE.template.md")
+        game = self.template("GAME-REPO-EXAMPLE.md")
+        self.assertIn("Positive", acceptance)
+        self.assertIn("Negative", acceptance)
+        self.assertIn("Recovery", acceptance)
+        self.assertIn("T1", acceptance)
+        self.assertIn("T4", acceptance)
+        self.assertIn("MDCI", game)
+        self.assertIn("ComfyUI workflow", game)
+        self.assertIn("If a roadmap exists", game)
+        self.assertIn("not alter a Game repository", game)
+
+    def test_existing_minglefield_agent_contract_is_not_replaced(self):
+        root_agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("MF_AGENTS_TEMPLATE_V1", root_agents)
+        self.assertIn("existing root AGENTS.md remains", root_agents)
+        self.assertIn("MDCI policy remains v1.0.0", root_agents)
+
+
 if __name__ == "__main__":
     unittest.main()

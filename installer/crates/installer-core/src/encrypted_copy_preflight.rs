@@ -532,8 +532,14 @@ pub fn inspect_encrypted_copy_recovery(
                     verify_snapshot_equality(&expected, &copy)?;
                     Ok(())
                 })();
+                #[cfg(test)]
+                if let Err(error) = &check {
+                    eprintln!("Fixture recovery content check rejected: {error}");
+                }
                 check.is_ok()
             } else {
+                #[cfg(test)]
+                eprintln!("Fixture recovery prerequisites: distinct={distinct}, encrypted_header={ciphertext_header}");
                 false
             };
             if verified {

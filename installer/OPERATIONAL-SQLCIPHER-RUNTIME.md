@@ -526,60 +526,93 @@ This deliberately forces a process termination **without unwinding**.
 It is not a simulated power cut, kernel crash, `SIGKILL`, Windows
 `TerminateProcess` or proof of directory-entry persistence.
 
-### M2.07 receipt v1: fixture-only persisted operation correlation
+### M2.07: exclusive operation receipt before encrypted final-file publication
 
-The installer core now has a small, dependency-free
-`recovery_receipt.rs` implementation, reusing the existing
-`integrity::sha256_hex` code (no new crates or lockfile changes).
-A random SQLite `randomblob(16)` correlation ID names a newly
-created `minglefield-recovery-<id>.receipt` file. The bounded v1
-record stores **only digests and counts**: fingerprints of the source
-file, separate byte-equivalent backup, selected *destination pathname*,
-verified ciphertext file, staged typed corrections and operator-selected
-registered schema-object names, plus ciphertext byte length. Raw paths,
-passwords, login details, plaintext rows and capability tokens are not
-serialized.
+**Development milestone (2026-11-06):** The initial isolated
+`recovery_receipt.rs` primitive has now been connected to the
+**controlled Alpha SQLCipher destination-creation path** in
+`encrypted_copy_preflight.rs`. The prior fixture-only receipt and
+fresh-process tests remain. No new crates were added and none of the
+existing schema-selection, source-integrity, independent backup or
+typed-correction approvals were removed.
 
-The test implementation rejects non-regular files, hardlink-alias
-backups, changed backup bytes, plain SQLite ciphertext, duplicate
-schema selections, malformed/oversized/extra receipt fields and
-occupied receipt names; on Unix it sets a 0600 creation mode.
-It uses `create_new` and `sync_all` for the receipt file itself.
-The **read-only** inspector returns `Missing`, `Matched`, or
-`Unverified` and never permits retry, automatic delete or restore.
+The normal ordered path is now:
 
-An end-to-end test reuses the **real SQLCipher export**, creates
-the receipt for the resulting ciphertext and opens both the receipt
-and the encrypted destination from a **fresh test subprocess**.
-The reader rejects altered receipts and a wrong/altered content
-context. This passed [Ubuntu Rust CI](https://github.com/daresan/Minglefield/actions/runs/42273342933)
-and [Windows/macOS native security CI](https://github.com/daresan/Minglefield/actions/runs/42273342890).
-The normal Rust suite has 119 passing tests on Ubuntu/macOS, 116 on
-Windows; two runtime integration tests are separately invoked and
-both pass on all three platforms.
+1. Verify read-only source snapshot and separate existing backup for
+   complete logical SQLite/SQLCipher equality, and validate the
+   explicit operator consent and selected registered DDL additions.
+2. Create an isolated corrected in-memory snapshot; export SQLCipher
+   to same-volume private staging, reopen with correct key, reject
+   wrong key, compare all values and metadata, and flush the verified
+   ciphertext bytes.
+3. Generate a **non-authorizing** random 128-bit operation ID. Compute
+   streaming SHA-256 fingerprints for physical source and backup files,
+   canonical destination path, staged ciphertext and selected edits
+   and schema objects. The two logically equivalent databases may have
+   different physical file bytes, which are recorded independently.
+4. Exclusively create
+   `minglefield-target-<SHA256-of-canonical-destination-path>.receipt`
+   alongside the destination using `create_new`. A prior operation
+   with the same selected destination, even if it never published a
+   final database file, **blocks a second operation**. Never silently
+   overwrite/delete/reuse such a receipt. The file is flushed and the
+   containing directory synced on Unix; Windows directory-entry
+   durability remains unproven and is reported as false.
+5. Reopen and verify the receipt against the staged ciphertext and
+   the same source, independent backup, corrections, schema additions
+   and destination path. Only then perform no-overwrite final-name
+   hard-link creation. On Unix attempt a final destination-directory
+   sync; on Windows report `destinationDirectorySynced=false`.
+6. Reopen the actual target with the NEW SQLCipher key, compare its
+   complete contents with the corrected isolated snapshot, and recheck
+   the same reserved receipt against the **final file** before
+   reporting success and removing test staging.
+7. Return `recoveryOperationId`,
+   `recoveryReceiptDirectorySynced` and
+   `destinationDirectorySynced` alongside the prior verified-copy
+   flags. These are *evidence fields*, never permission to install,
+   claim a Host, run unattended retry or remove any file.
 
-**Important limits:** This is a **test-scoped primitive**, not a
-receipt automatically emitted by the Tauri migration or CLI. The
-initial SHA-256 file helper deliberately accepts fixtures at most
-64 MiB and materializes them in memory. Real-world DB sizes need a
-streaming implementation. A raw SHA-256 fingerprint of corrections
-is local and unkeyed and is not sufficient confidential protection
-if receipts will become widely readable. File-level `sync_all` does
-not guarantee durability of a directory entry across all supported
-filesystems; Windows inherited file ACLs and adverse directory swaps
-also need explicit review. The correlation ID and hashes are NOT
-a signature, authentic provenance, installer claim, source-owner
-identity, user authorization or approval to delete anything.
+**New fault-injection tests** use real worker-process termination via
+`std::process::exit(77)` immediately after exclusive receipt
+reservation **before** final-name publication and immediately after
+publication. Subsequent read-only recovery checks confirm that the
+receipt remains bound to the surviving verified staged or final
+ciphertext. A missing target in the presence of a receipt is
+**reserved/not published**, never automatically available for retry.
+Interleaved operation attempts and occupied receipt names fail
+closed. The original Alpha source and backup remain unchanged; only
+isolated test-owned fixture directories are removed by tests.
 
-**Next bounded integration:** create and durably commit the receipt
-BEFORE exclusive final-file publication on a user-approved destination,
-bind it to a verified staged ciphertext and the backed-up source,
-and classify any final target after restart against both the receipt
-and a fresh read-only SQLCipher comparison. Until exclusive ownership,
-parent-directory durability, abnormal termination and idempotency
-checks pass, do **not** enable real-use automated recovery, directory
-cleanup, rollback or re-publication. No portable build is triggered
-by this test-only change.
+SHA-256 now uses a streaming implementation with **64-KiB chunks**;
+even databases larger than the old 64-MiB fixture limit can be
+fingerprinted without loading the entire database into memory.
+The hash remains an **unkeyed integrity fingerprint**, not a secure
+proof of author identity or a confidential commitment. The receipt
+contains no raw data rows, plain file paths, SQLCipher passwords,
+authentication tokens or user credentials.
+
+**Evidence:** [Ubuntu Installer Rust CI](https://github.com/daresan/Minglefield/actions/runs/42291412639),
+[Windows/macOS native security CI](https://github.com/daresan/Minglefield/actions/runs/42291412669).
+Existing earlier controls were already proven by
+[Ubuntu](https://github.com/daresan/Minglefield/actions/runs/42273342933)
+and [Windows/macOS](https://github.com/daresan/Minglefield/actions/runs/42273342890).
+No new portable packages have been requested for this development gate.
+
+**Deliberate remaining limitations:** This is still an **Alpha-only,
+operator-consented database copy**, not production crash recovery or
+a finished Minglefield installation. The Windows parent-directory
+flush/metadata durability strategy is not verified; Unix directory
+`sync_all` is not itself proof of whole-system power-loss safety.
+Native race-resistant handle-relative publication, operation
+authentication, securely owned/read-restricted receipts on each OS,
+persisted journal state transitions, safe manual recover/rollback
+choices, `SIGKILL`/`TerminateProcess` and power-loss simulations
+remain separate mandatory work. A failed attempt may leave a reserved
+receipt and/or fully published ciphertext. Neither may be removed or
+overwritten automatically; inspect them before making an explicit
+recovery decision. A matching hash alone does not authorize
+reinstallation, Host provisioning or access to the database.
 
 The Shadow M2.06 Alpha acceptance and the generic, operator-selected
 missing-schema addition contract are documented in

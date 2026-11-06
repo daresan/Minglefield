@@ -150,6 +150,30 @@ The existing successful portable M2.07 artifacts
 precede this additional GUI behavior and do not constitute its manual acceptance.
 No further portable milestone build is requested by these technical commits.
 
+**Three-OS Rust restart-triage cross-check (2026-11-06, no additional
+portable package):** The existing actual-file recovery fixtures now also
+call `inspect_interrupted_encrypted_copy` with **empty source and backup
+paths and no SQLCipher credentials**, mirroring the new destination-only
+GUI mode. They cover an absent receipt and target, an unrecorded occupied
+target, a receipt reserved before publication, verified ciphertext that
+must be downgraded to manual review without keys, and interrupted
+separate-process execution. All responses keep automatic retry, delete
+and installation disabled and preserve the source and unrelated files.
+Source commit `597bd4e1897fd1120d1a969cf8189a0391ca4282` passed
+[Ubuntu installer Rust checks](https://github.com/daresan/Minglefield/actions/runs/42308522803)
+and [Windows/macOS native security checks](https://github.com/daresan/Minglefield/actions/runs/42308522721).
+Each reported successful `cargo fmt -- --check`, Cargo check/clippy,
+Rust tests and the two explicitly invoked Python SQLCipher interoperability
+checks. Ubuntu reported 128/128 core tests; Windows reported 125/125 core
+tests and 2/2 separately invoked cross-runtime tests. The latest
+[Ubuntu frontend check](https://github.com/daresan/Minglefield/actions/runs/42308372006)
+for `7fa2771d3417cb8469c084bbde553442a0e50663` passed 85/85 tests
+and the Vite build. The frontend now rejects **all** unreviewed response
+fields instead of silently accepting unknown permission or metadata flags.
+This is a verified read-only partial M2.07 subgoal, **not** an authorized
+rollback, a crash-durable native publish protocol or manual GUI acceptance.
+
+
 **M2.07 read-only operator recovery triage — implemented in the
 shared core and Tauri GUI; manual portable acceptance pending:**
 The installer can now inspect a user-selected interrupted Alpha

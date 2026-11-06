@@ -459,8 +459,14 @@ pub fn execute_reviewed_encrypted_copy(
     confirmation: &str,
 ) -> Result<EncryptedTestCopy, String> {
     execute_reviewed_encrypted_copy_with_schema(
-        source_path, destination_path, backup_path, existing_password,
-        new_password, corrections, &[], confirmation,
+        source_path,
+        destination_path,
+        backup_path,
+        existing_password,
+        new_password,
+        corrections,
+        &[],
+        confirmation,
     )
 }
 
@@ -935,7 +941,8 @@ mod tests {
         crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
         {
             let db = Connection::open(&source).unwrap();
-            db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+            db.execute_batch("DROP INDEX uq_game_install_one_active_project;")
+                .unwrap();
         }
         let source_bytes = fs::read(&source).unwrap();
         let parent = target_volume_fixture();
@@ -944,13 +951,21 @@ mod tests {
         fs::copy(&source, &backup).unwrap();
         let wanted = vec!["uq_game_install_one_active_project".to_owned()];
         let proof = execute_reviewed_encrypted_copy_with_schema(
-            &source, &target, &backup, "", "NewKey123!", &[], &wanted,
+            &source,
+            &target,
+            &backup,
+            "",
+            "NewKey123!",
+            &[],
+            &wanted,
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(proof.destination_created);
         assert_eq!(proof.added_schema_objects, wanted);
         assert_eq!(proof.schema_entries_checked, 59);
-        let output = Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let output =
+            Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         output.pragma_update(None, "key", "NewKey123!").unwrap();
         let found: i64 = output
             .query_row(
@@ -979,7 +994,8 @@ mod tests {
                  VALUES
                  ('a','host-one','owner','game-one','prepared','digest-one'),
                  ('b','host-one','owner','game-one','prepared','digest-two');",
-            ).unwrap();
+            )
+            .unwrap();
         }
         let parent = target_volume_fixture();
         let backup = parent.join("source-backup.sqlite3");
@@ -987,10 +1003,16 @@ mod tests {
         fs::copy(&source, &backup).unwrap();
         let before = fs::read(&source).unwrap();
         assert!(execute_reviewed_encrypted_copy_with_schema(
-            &source, &target, &backup, "", "NewKey123!", &[],
+            &source,
+            &target,
+            &backup,
+            "",
+            "NewKey123!",
+            &[],
             &["uq_game_install_one_active_project".to_owned()],
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).is_err());
+        )
+        .is_err());
         assert!(!target.exists());
         assert_eq!(fs::read(&source).unwrap(), before);
         assert_eq!(fs::read(&backup).unwrap(), before);

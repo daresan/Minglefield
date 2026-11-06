@@ -99,6 +99,35 @@ The host-policy tables are optional in older Alpha databases. Absent tables, fai
 
 Frontend correction guards have Node regression tests in `legacy-record-review.test.js` and `alpha-user-review.test.js`; Tauri reader tests verify available/missing schemas and source preservation. A green CI run proves only automated checks; a real DB migration and installation acceptance test remains outstanding.
 
+## Experimental SQLCipher copy on the final Review page (not application installation)
+
+A controlled Alpha **database-copy-only** execution command is available
+after the existing full database review, in-memory migration rehearsal and
+temporary SQLCipher copy verification. It creates the new encrypted database
+at the selected target filename only after the operator enters a separate,
+verified backup path and types exactly
+`CREATE EXPERIMENTAL ENCRYPTED COPY`. The pre-existing source is never
+overwritten and all existing target collisions fail closed.
+
+The Rust core independently verifies that the backup is a real, distinct
+regular file (not a symlink or hardlink alias), compares the source and
+backup contents, checks the staged edits and new SQLCipher key, exports
+encrypted ciphertext to private same-volume staging, flushes it and
+publishes the final filename via a no-overwrite hard link. The GUI displays
+whether the final target was actually created; temporary rehearsal
+results remain non-executing and their flags remain false.
+
+**Only for explicitly consented Alpha tests on stopped databases with a
+known-good independent backup.** This is not a complete transactional
+migration/rollback mechanism under hostile filesystem races or power loss.
+If a late verification fails, the destination may remain and must be
+inspected before retrying. No Python application is installed, no Host is
+claimed, no `mingleadmin` is created, and full general installation
+execution remains disabled. This capability has targeted CI tests but
+requires a separately requested portable milestone build for human GUI
+acceptance. See [the SQLCipher runtime notes]
+(../OPERATIONAL-SQLCIPHER-RUNTIME.md) for the precise security boundary.
+
 ## Verified migration rehearsal (dry-run only)
 
 The **Data Review → Migration rehearsal** action now uses a backend-enforced preflight, not only a frontend summary:

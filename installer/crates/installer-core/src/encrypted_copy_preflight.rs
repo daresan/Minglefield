@@ -1090,7 +1090,7 @@ mod tests {
             fs::remove_file(fixture_path).unwrap();
             fs::copy(&source, &backup).unwrap();
             let original = fs::read(&source).unwrap();
-            let worker = std::process::Command::new(std::env::current_exe().unwrap())
+            let worker = Command::new(std::env::current_exe().unwrap())
                 .arg("--exact")
                 .arg("encrypted_copy_preflight::tests::m207_abrupt_exit_worker")
                 .arg("--nocapture")

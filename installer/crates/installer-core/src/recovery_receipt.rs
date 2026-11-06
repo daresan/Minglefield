@@ -452,7 +452,7 @@ fn read_receipt(path: &Path) -> Result<RecoveryReceiptV1, String> {
         return Err("Recovery receipt changed before reading".into());
     }
     let mut bytes = Vec::new();
-    file.by_ref()
+    Read::by_ref(&mut file)
         .take(MAX_RECEIPT_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "Cannot read bounded recovery receipt")?;

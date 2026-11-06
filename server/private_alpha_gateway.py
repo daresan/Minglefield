@@ -2845,6 +2845,53 @@ def default_alpha_database():
     return str(directory/"alpha.sqlite3")
 
 
+
+def create_installed_local_alpha_server(database, *, key_provider, port=8767):
+    """Build the *existing* loopback gateway on an already encrypted Alpha DB.
+
+    This is a native-launcher integration point, not an HTTP provisioning API.
+    The launcher must obtain the database key through its own authenticated
+    local unlock UI and hold it only in process memory; this function never
+    acquires or persists credentials, runs invitations, or claims a Host.
+
+    The old plaintext run_local() developer entrypoint remains separate.
+    """
+    from pathlib import Path
+    from alpha_sqlcipher_runtime import AlphaDatabaseOpenError, open_alpha_database
+    from private_alpha_auth import AlphaAuthStore
+    from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+    from sec01_host_commit_policy_sim import HostCommitPolicy
+
+    path = Path(database)
+    if (not path.is_absolute() or not path.is_file() or path.is_symlink()
+            or type(port) is not int or not 0 <= port <= 65535):
+        raise AlphaDatabaseOpenError("installed_database_path_invalid")
+    if not callable(key_provider):
+        raise AlphaDatabaseOpenError("installed_database_key_required")
+    try:
+        key = key_provider()
+    except BaseException:
+        raise AlphaDatabaseOpenError("database_key_unavailable") from None
+    if type(key) is not str or not 1 <= len(key) <= 4096 or "\x00" in key:
+        raise AlphaDatabaseOpenError("database_key_unavailable")
+
+    # A wrong key or plaintext source must fail before the gateway can listen,
+    # create any schema, or expose authentication. Reuse the reviewed driver.
+    unlocked = open_alpha_database(path, key_provider=lambda: key)
+    try:
+        unlocked.execute("SELECT count(*) FROM sqlite_schema").fetchone()
+    finally:
+        unlocked.close()
+
+    store = AlphaAuthStore(path, sqlcipher_key_provider=lambda: key)
+    store._host_policy = HostCommitPolicy(IntegratedAlphaAdmission(store))
+    # No bootstrap secret is issued or accepted. Local ownership must have
+    # been established in the separately authorized installer transaction.
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", port), handler_for(store, local_bootstrap_secret=None))
+    server.daemon_threads = True
+    return server
+
 def run_local():
     parser = argparse.ArgumentParser(description="LOCAL simulation only; NEVER publish as-is")
     parser.add_argument("--port", type=int, default=8767)

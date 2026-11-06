@@ -316,8 +316,8 @@ pub fn sync_published_destination_parent(destination: &Path) -> Result<bool, Str
     let parent = destination
         .parent()
         .ok_or("Published destination parent is missing")?;
-    let meta = fs::symlink_metadata(parent)
-        .map_err(|_| "Cannot inspect published destination parent")?;
+    let meta =
+        fs::symlink_metadata(parent).map_err(|_| "Cannot inspect published destination parent")?;
     if meta.file_type().is_symlink() || !meta.is_dir() {
         return Err("Published destination parent changed or is a symlink".into());
     }

@@ -1,5 +1,7 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
-use minglefield_installer_core::encrypted_copy_preflight::rehearse_encrypted_test_copy;
+use minglefield_installer_core::encrypted_copy_preflight::{
+    execute_reviewed_encrypted_copy, rehearse_encrypted_test_copy,
+};
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
     rehearse_migration, GamePathField, GitProfileField, ReviewCorrection,
@@ -387,4 +389,82 @@ pub async fn verify_temporary_encrypted_copy(
     })
     .await
     .map_err(|_| "Temporary encrypted copy rehearsal worker failed".to_owned())?
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExperimentalEncryptedCopyResult {
+    status: &'static str,
+    source_preserved: bool,
+    backup_verified: bool,
+    destination_created: bool,
+    encrypted_destination_verified: bool,
+    full_disk_copy_verified: bool,
+    checked_rows: u64,
+    checked_tables: usize,
+    checked_schema_entries: usize,
+    verified_staged_changes: usize,
+    temporary_files_removed: bool,
+    application_installation_enabled: bool,
+    host_provisioning_enabled: bool,
+}
+
+/// A locally consented *database-copy-only* Alpha action. The core validates
+/// an existing independent backup against the current source and refuses
+/// collisions before generating an encrypted destination. No Host claim or
+/// app install is performed; this is not a general-purpose migration API.
+#[tauri::command]
+pub async fn create_experimental_encrypted_copy(
+    source_path: String,
+    destination_path: String,
+    backup_path: String,
+    existing_password: String,
+    new_password: String,
+    corrections: Vec<StagedCorrection>,
+    confirmation: String,
+) -> Result<ExperimentalEncryptedCopyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let changes: Vec<ReviewCorrection> = corrections
+            .into_iter()
+            .map(ReviewCorrection::from)
+            .collect();
+        let source = Path::new(&source_path);
+        let destination = Path::new(&destination_path);
+        let backup = Path::new(&backup_path);
+        let baseline = rehearse_migration(source, &existing_password, &changes)?;
+        if !baseline.fidelity.values_verified || baseline.source_records_written {
+            return Err("Current source rehearsal must verify before execution".to_owned());
+        }
+        let proof = execute_reviewed_encrypted_copy(
+            source, destination, backup, &existing_password, &new_password,
+            &changes, &confirmation,
+        )?;
+        if !proof.full_source_verified || !proof.full_disk_copy_verified
+            || !proof.encrypted_destination_verified || !proof.destination_created
+            || !proof.temporary_files_removed || proof.execution_enabled
+            || proof.staged_changes_verified != changes.len()
+            || proof.rows_checked != baseline.fidelity.rows_checked
+            || proof.tables_checked != baseline.fidelity.tables_checked
+            || proof.schema_entries_checked != baseline.fidelity.schema_entries_checked
+        {
+            return Err("Experimental encrypted destination did not satisfy verification".into());
+        }
+        Ok(ExperimentalEncryptedCopyResult {
+            status: "experimental_encrypted_copy_created",
+            source_preserved: true,
+            backup_verified: true,
+            destination_created: true,
+            encrypted_destination_verified: true,
+            full_disk_copy_verified: true,
+            checked_rows: proof.rows_checked,
+            checked_tables: proof.tables_checked,
+            checked_schema_entries: proof.schema_entries_checked,
+            verified_staged_changes: proof.staged_changes_verified,
+            temporary_files_removed: true,
+            application_installation_enabled: false,
+            host_provisioning_enabled: false,
+        })
+    })
+    .await
+    .map_err(|_| "Experimental encrypted copy worker failed".to_owned())?
 }

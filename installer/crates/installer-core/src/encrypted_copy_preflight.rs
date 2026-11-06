@@ -934,6 +934,138 @@ mod tests {
     }
 
     #[test]
+    fn interrupted_copy_status_is_read_only_for_unknown_verified_and_tampered_states() {
+        use crate::recovery_receipt::reserved_destination_receipt_path;
+        use std::io::Write;
+
+        let source = fixture(false);
+        let before = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let backup = parent.join("backup.sqlite3");
+        let destination = parent.join("encrypted-final.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        let check = |destination_password: &str| {
+            inspect_interrupted_encrypted_copy(
+                &source, &backup, &destination, "", destination_password, &[], &[],
+            ).unwrap()
+        };
+        let absent = check("NewKey123!");
+        assert_eq!(absent.state, InterruptedEncryptedCopyState::NoRecordedOperation);
+        assert!(!absent.automatic_retry_permitted && !absent.automatic_delete_permitted);
+        fs::write(&destination, b"unrelated-occupied-file").unwrap();
+        assert_eq!(
+            check("NewKey123!").state,
+            InterruptedEncryptedCopyState::UnrecordedDestination
+        );
+        assert_eq!(fs::read(&destination).unwrap(), b"unrelated-occupied-file");
+        fs::remove_file(&destination).unwrap();
+
+        let proof = execute_reviewed_encrypted_copy(
+            &source, &destination, &backup, "", "NewKey123!", &[],
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        ).unwrap();
+        assert!(proof.encrypted_destination_verified);
+        let correct = check("NewKey123!");
+        assert_eq!(correct.state, InterruptedEncryptedCopyState::PublishedContentMatches);
+        assert_eq!(correct.operation_id, proof.recovery_operation_id);
+        assert!(!correct.automatic_retry_permitted);
+        assert!(!correct.automatic_delete_permitted);
+        assert!(!correct.installation_enabled);
+        assert_eq!(
+            check("WrongNewKey123!").state,
+            InterruptedEncryptedCopyState::ManualReviewRequired
+        );
+        fs::write(&backup, b"corrupted-backup").unwrap();
+        assert_eq!(
+            check("NewKey123!").state,
+            InterruptedEncryptedCopyState::ManualReviewRequired
+        );
+        fs::copy(&source, &backup).unwrap();
+        let receipt = reserved_destination_receipt_path(&destination).unwrap();
+        fs::OpenOptions::new()
+            .append(true).open(&receipt).unwrap()
+            .write_all(b"unexpected=yes\n").unwrap();
+        let tampered = check("NewKey123!");
+        assert_eq!(tampered.state, InterruptedEncryptedCopyState::ManualReviewRequired);
+        assert_eq!(tampered.operation_id, None);
+        assert_eq!(fs::read(&source).unwrap(), before);
+        assert_eq!(fs::read(&backup).unwrap(), before);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn interrupted_copy_status_recognizes_receipt_without_target_and_blocks_retry() {
+        let source = fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let backup = parent.join("backup.sqlite3");
+        let destination = parent.join("final.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        assert!(rehearse_encrypted_test_copy_under_with_checkpoints(
+            &source, "", "NewKey123!", &[], Some(&parent), Some(&destination),
+            &[], Some(&backup), |point| {
+                if point == CopyCheckpoint::AfterReceiptReserved {
+                    Err("injected interrupted receipt reservation".to_owned())
+                } else {
+                    Ok(())
+                }
+            },
+        ).is_err());
+        assert!(!destination.exists());
+        let status = inspect_interrupted_encrypted_copy(
+            &source, &backup, &destination, "", "NewKey123!", &[], &[],
+        ).unwrap();
+        assert_eq!(status.state, InterruptedEncryptedCopyState::ReservationWithoutDestination);
+        assert!(status.operation_id.is_some());
+        assert!(!status.automatic_retry_permitted);
+        assert!(!status.automatic_delete_permitted);
+        assert!(!status.installation_enabled);
+        assert!(execute_reviewed_encrypted_copy(
+            &source, &destination, &backup, "", "NewKey123!", &[],
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        ).is_err());
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read(&backup).unwrap(), original);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn interrupted_copy_status_verifies_selected_missing_schema_objects() {
+        let parent = target_volume_fixture();
+        let source = parent.join("registered-source.sqlite3");
+        crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+        }
+        let backup = parent.join("backup.sqlite3");
+        let target = parent.join("encrypted-with-selected-index.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        let selected = vec!["uq_game_install_one_active_project".to_owned()];
+        let published = execute_reviewed_encrypted_copy_with_schema(
+            &source, &target, &backup, "", "NewKey123!", &[], &selected,
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        ).unwrap();
+        assert_eq!(published.added_schema_objects, selected);
+        let verified = inspect_interrupted_encrypted_copy(
+            &source, &backup, &target, "", "NewKey123!", &[], &selected,
+        ).unwrap();
+        assert_eq!(verified.state, InterruptedEncryptedCopyState::PublishedContentMatches);
+        assert_eq!(verified.operation_id, published.recovery_operation_id);
+        let missing_selection = inspect_interrupted_encrypted_copy(
+            &source, &backup, &target, "", "NewKey123!", &[], &[],
+        ).unwrap();
+        assert_eq!(
+            missing_selection.state,
+            InterruptedEncryptedCopyState::ManualReviewRequired
+        );
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
     fn recovery_distinguishes_absent_matching_and_unverified_destinations_without_writes() {
         let source = fixture(false);
         let original = fs::read(&source).unwrap();

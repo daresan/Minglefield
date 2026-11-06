@@ -147,6 +147,30 @@ by this inspection. Run T1–T3 with portable packaging disabled.
 Provenance-bound journal records, durable directory updates and
 interruption fault injection remain mandatory subsequent M2.07 work.
 
+**M2.07 deterministic interruption checkpoints — implemented and T2-verified
+(2026-11-06; commit `5e8e791b65f1be3ce4347d51ff70324e512a979f`):**
+The existing core's staging and final-name publication path now exposes
+private, non-user-configurable checkpoint callbacks. Ordinary production
+callers invoke only the no-op wrapper; unit tests inject one controlled
+failure at each of five boundaries: before staging, after SQLCipher export,
+before exclusive final-name creation, immediately after final-name creation
+and during final-ciphertext verification. Tests additionally cover one
+reviewed-edit scenario interrupted after publication. After the
+**caught synthetic error** they invoke the independent read-only
+recovery classifier again. Expected outcome: absent destination before
+publication; intact, inspectable encrypted destination after publication;
+original source bytes and unrelated occupied files preserved; no
+automatic deletion or retry; no residual staging directories following
+RAII cleanup. The edit-aware recovery classifies the correctly edited
+file as matching, but rejects interpreting it as an unedited copy.
+
+**Actual confirmed CI:** [Ubuntu Rust](https://github.com/daresan/Minglefield/actions/runs/42246330621)
+and [Windows/macOS native security](https://github.com/daresan/Minglefield/actions/runs/42246330676)
+(all successful). **These are caught, deterministic errors, not abrupt
+process termination, power-loss durability, a persistent operation journal,
+or user-facing recovery/rollback.** Those remain open before M2.07 and
+full M2.06 acceptance. No new portable artifact was requested.
+
 - Inject interruption before staging, after encrypted export, before exclusive
   publication, just after publication and during post-publish verification.
 - Restart and inspect for an intact prior source, absence of partial target,

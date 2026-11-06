@@ -503,9 +503,10 @@ safe, reproducible actual-process-exit fixtures; directory-fsync and
 crash-consistency evidence on supported OS filesystems; explicit,
 non-destructive recovery decisions. None is yet a production promise.
 
-The Shadow M2.06 Alpha manual acceptance and lone missing
-`uq_game_install_one_active_project` source-schema index are
-documented in
+The Shadow M2.06 Alpha acceptance and the generic, operator-selected
+missing-schema addition contract are documented in
 [registered Alpha schema notes](REGISTERED-ALPHA-SCHEMA.md).
-Index repair is a separately verified versioned transformation,
-not an effect of read-only recovery inspection.
+Schema additions are applied only to the new isolated SQLCipher copy
+after an explicit choice; they do not alter the original, grant Host
+ownership, or authorize an unverified operational runtime. This generic
+copy-time option is distinct from M2.07 read-only recovery inspection.

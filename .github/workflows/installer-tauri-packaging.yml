@@ -1,24 +1,10 @@
 name: Tauri portable manager smoke builds
 
-# Portable release artifacts are built on demand during feature development.
-# Main-branch changes still produce the OS build artifacts automatically.
+# Minglefield Development CI Policy v1: expensive portable release
+# packaging is strictly opt-in (milestone marker -> workflow_call, or
+# maintainer workflow_dispatch). Never package on ordinary push or PR.
+# These are application setup-manager artifacts, NOT ComfyUI workflows.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "installer/gui/**"
-      - "installer/crates/**"
-      - "README.md"
-      - "LICENSE"
-      - ".github/workflows/installer-tauri-packaging.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "installer/gui/**"
-      - "installer/crates/**"
-      - "README.md"
-      - "LICENSE"
-      - ".github/workflows/installer-tauri-packaging.yml"
   workflow_dispatch:
   workflow_call:
 

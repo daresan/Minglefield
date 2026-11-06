@@ -64,3 +64,21 @@ test("rejects state and operation-ID contradictions without authorizing recovery
     assert.equal(assessed.automaticRetryPermitted, false);
   }
 });
+
+test("rejects unexpected future mutation-capability flags in a read-only response", () => {
+  for (const field of [
+    "executionEnabled", "migrationEnabled", "applicationInstallationEnabled",
+    "hostProvisioningEnabled", "automaticResumePermitted", "automaticRollbackPermitted",
+    "automaticCleanupPermitted", "receiptTrusted", "recoveryAuthorized"
+  ]) {
+    assert.throws(
+      () => assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: true }),
+      /Recovery response attempted to grant execution authority/
+    );
+    assert.throws(
+      () => assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: "yes" }),
+      /Recovery response attempted to grant execution authority/
+    );
+    assert.equal(assessReadOnlyRecoveryStatus({ ...valid("reserved_without_destination"), [field]: false }).automaticRetryPermitted, false);
+  }
+});

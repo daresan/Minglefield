@@ -40,7 +40,7 @@
   *proposal*, not an automatically authorized new roadmap or product plan.
 - **MDCI policy/profile missing while roadmap exists:** propose a small MDCI
   adoption subgoal within the active milestone (or its owner-selected
-  predecessor). Do **not** reset the roadmap or invent a second M0.
+  predecessor). Do not reset the roadmap or invent a second M0.
 - **Both missing:** propose one combined M0, not two separate onboarding
   milestones. Always ask for the owner-approved priority before committing
   previously nonexistent milestones.

@@ -56,15 +56,24 @@ class AlphaPayloadTests(unittest.TestCase):
         with TemporaryDirectory() as temp:
             directory = Path(temp) / "server"
             directory.mkdir()
-            (directory / "installed_alpha_launch.py").write_text(
-                "import private_alpha_gateway\n", encoding="utf-8")
-            (directory / "private_alpha_gateway.py").write_text(
-                "import pathlib\n", encoding="utf-8")
+            chain = [
+                ("installed_alpha_launch", "private_alpha_gateway"),
+                ("private_alpha_gateway", "private_alpha_auth"),
+                ("private_alpha_auth", "alpha_sqlcipher_runtime"),
+                ("alpha_sqlcipher_runtime", "sec01_integrated_alpha_admission"),
+                ("sec01_integrated_alpha_admission", "sec01_host_commit_policy_sim"),
+                ("sec01_host_commit_policy_sim", "pathlib"),
+            ]
+            for name, imported in chain:
+                (directory / (name + ".py")).write_text(
+                    "import " + imported + "\n", encoding="utf-8")
             (directory / "unrelated.py").write_text(
                 "raise RuntimeError('not part of application')\n", encoding="utf-8")
             manifest, modules = _source_inventory(directory)
             self.assertEqual(set(modules), {
-                "server/installed_alpha_launch.py", "server/private_alpha_gateway.py"})
+                "server/" + name + ".py" for name, _ in chain
+            })
+            self.assertEqual(len(manifest["modules"]), 6)
             (directory / "private_alpha_gateway.py").unlink()
             with self.assertRaises(ValueError):
                 _source_inventory(directory)

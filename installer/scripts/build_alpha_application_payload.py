@@ -31,6 +31,15 @@ def _source_inventory(server_dir):
     report = audit(server_dir, entrypoint=ENTRYPOINT)
     if report["errors"]:
         raise ValueError("unresolved Alpha application import graph")
+    # A missing local import can be classified as external by the generic
+    # auditor. The fixed gateway/auth/Host application modules are mandatory.
+    required = {
+        "installed_alpha_launch", "private_alpha_gateway",
+        "private_alpha_auth", "alpha_sqlcipher_runtime",
+        "sec01_integrated_alpha_admission", "sec01_host_commit_policy_sim"
+    }
+    if not required.issubset(report["scanned_modules"]):
+        raise ValueError("required installed Alpha module missing from import closure")
     blobs = {}
     for name in report["scanned_modules"]:
         # An imported name comes only from the audited, top-level .py inventory.

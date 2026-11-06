@@ -122,8 +122,8 @@ fn export(source: &Connection, path: &Path, key: &str) -> Result<(), String> {
 /// This establishes a file-data flush barrier only; directory-entry
 /// durability, path-handle pinning and crash recovery remain separate gates.
 fn sync_verified_ciphertext_stage(path: &Path) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| "Cannot inspect verified encrypted stage")?;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| "Cannot inspect verified encrypted stage")?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err("Verified encrypted stage is not a regular file".to_owned());
     }
@@ -134,7 +134,11 @@ fn sync_verified_ciphertext_stage(path: &Path) -> Result<(), String> {
         .write(true)
         .open(path)
         .map_err(|_| "Cannot reopen verified encrypted stage for flush")?;
-    if !file.metadata().map_err(|_| "Cannot inspect encrypted stage handle")?.is_file() {
+    if !file
+        .metadata()
+        .map_err(|_| "Cannot inspect encrypted stage handle")?
+        .is_file()
+    {
         return Err("Encrypted stage handle is not a regular file".to_owned());
     }
     file.sync_all()

@@ -16,6 +16,7 @@ pub mod manifest;
 pub mod migration_destination;
 pub mod migration_dry_run;
 pub mod publisher;
+pub mod recovery_receipt;
 pub mod release_source;
 pub mod schema_compatibility;
 pub mod schema_versions;

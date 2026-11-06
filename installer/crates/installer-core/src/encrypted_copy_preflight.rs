@@ -262,6 +262,9 @@ fn rehearse_encrypted_test_copy_under_with_schema(
     )
 }
 
+// Keep authorization, source/target keys, and staged adjustments separate
+// at this security boundary rather than silently introducing defaults.
+#[allow(clippy::too_many_arguments)]
 fn rehearse_encrypted_test_copy_under_with_checkpoints(
     source_path: &Path,
     existing_password: &str,
@@ -472,6 +475,9 @@ pub fn execute_reviewed_encrypted_copy(
 
 /// Operator-selected schema additions are confined to the same verified
 /// isolated encrypted-copy path. The original/backup remain byte-preserved.
+// Keep authorization, source/target keys, and staged adjustments separate
+// at this security boundary rather than silently introducing defaults.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_reviewed_encrypted_copy_with_schema(
     source_path: &Path,
     destination_path: &Path,

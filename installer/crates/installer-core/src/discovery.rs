@@ -45,7 +45,10 @@ pub fn inspect_source_directory(path: &Path) -> Candidate {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static NEXT_TEST_DIR: AtomicU64 = AtomicU64::new(0);
 
     fn test_root() -> std::path::PathBuf {
         let unique = SystemTime::now()
@@ -53,8 +56,9 @@ mod tests {
             .unwrap()
             .as_nanos();
         let root = std::env::temp_dir().join(format!(
-            "minglefield-discovery-{}-{unique}",
-            std::process::id()
+            "minglefield-discovery-{}-{unique}-{}",
+            std::process::id(),
+            NEXT_TEST_DIR.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&root).unwrap();
         root

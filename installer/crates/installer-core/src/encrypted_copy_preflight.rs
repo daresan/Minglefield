@@ -608,6 +608,7 @@ pub fn execute_reviewed_encrypted_copy_with_schema(
         || !report.encrypted_destination_verified
         || !report.full_disk_copy_verified
         || !report.temporary_files_removed
+        || report.recovery_operation_id.is_none()
     {
         return Err("Experimental encrypted copy was not verified".into());
     }

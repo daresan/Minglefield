@@ -452,6 +452,98 @@ pub fn execute_reviewed_encrypted_copy(
     Ok(report)
 }
 
+/// M2.07: read-only classification of an interrupted Alpha-copy attempt.
+/// A matching existing file proves only byte-value/schema equivalence at
+/// inspection time, NOT installer provenance, recovery authorization, or
+/// durable transaction completion. Never delete/replace a target from this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EncryptedCopyRecoveryState {
+    DestinationAbsent,
+    ExistingMatchesExpected,
+    ExistingUnverified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EncryptedCopyRecoveryAssessment {
+    pub state: EncryptedCopyRecoveryState,
+    pub automatic_retry_permitted: bool,
+    pub automatic_delete_permitted: bool,
+}
+
+pub fn inspect_encrypted_copy_recovery(
+    source_path: &Path,
+    destination_path: &Path,
+    source_password: &str,
+    destination_password: &str,
+    corrections: &[ReviewCorrection],
+) -> Result<EncryptedCopyRecoveryAssessment, String> {
+    // Require a fresh, integrity-checked read-only source snapshot. The
+    // expected result is produced in private memory using existing typed
+    // correction validation; source and target files are never modified.
+    let (source, inspected) = open_inspected_snapshot(source_path, source_password)
+        .map_err(|_| "Cannot inspect original source for recovery")?;
+    if !inspected.integrity_ok || inspected.foreign_key_violations != 0 {
+        return Err("Recovery source failed integrity verification".into());
+    }
+    let source_key = if inspected.source_encrypted {
+        source_password
+    } else {
+        ""
+    };
+    let (mut expected, fidelity) = create_verified_memory_copy(&source, source_key)?;
+    if !fidelity.values_verified {
+        return Err("Cannot verify recovery source snapshot".into());
+    }
+    if !corrections.is_empty() {
+        validate_alpha_schema(&inspected)?;
+        let original_counts = table_counts(&source, &inspected)?;
+        apply_staged_to_isolated_copy(
+            &mut expected,
+            &inspected,
+            &original_counts,
+            corrections,
+            true,
+        )?;
+    }
+    let state = match fs::symlink_metadata(destination_path) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            EncryptedCopyRecoveryState::DestinationAbsent
+        }
+        Err(_) => return Err("Cannot inspect recovery destination".into()),
+        Ok(meta) if meta.file_type().is_symlink() || !meta.is_file() => {
+            EncryptedCopyRecoveryState::ExistingUnverified
+        }
+        Ok(_) => {
+            let distinct = same_underlying_file(source_path, destination_path)?;
+            let verified = if distinct && !destination_password.is_empty() {
+                let check = (|| -> Result<(), String> {
+                    let copy = Connection::open_with_flags(
+                        destination_path,
+                        OpenFlags::SQLITE_OPEN_READ_ONLY,
+                    ).map_err(|_| "Cannot read existing recovery destination")?;
+                    copy.pragma_update(None, "key", destination_password)
+                        .map_err(|_| "Cannot unlock existing recovery destination")?;
+                    verify_snapshot_equality(&expected, &copy)?;
+                    Ok(())
+                })();
+                check.is_ok()
+            } else {
+                false
+            };
+            if verified {
+                EncryptedCopyRecoveryState::ExistingMatchesExpected
+            } else {
+                EncryptedCopyRecoveryState::ExistingUnverified
+            }
+        }
+    };
+    Ok(EncryptedCopyRecoveryAssessment {
+        state,
+        automatic_retry_permitted: false,
+        automatic_delete_permitted: false,
+    })
+}
+
 #[cfg(test)]
 fn publish_disposable_fixture_copy(
     source_path: &Path,
@@ -550,6 +642,63 @@ mod tests {
         ));
         fs::create_dir(&directory).unwrap();
         directory
+    }
+
+    #[test]
+    fn recovery_distinguishes_absent_matching_and_unverified_destinations_without_writes() {
+        let source = fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let target = parent.join("recovery-target.sqlite3");
+        let inspect = |password: &str| {
+            inspect_encrypted_copy_recovery(&source, &target, "", password, &[]).unwrap()
+        };
+        let absent = inspect("NewKey123!");
+        assert_eq!(absent.state, EncryptedCopyRecoveryState::DestinationAbsent);
+        assert!(!absent.automatic_retry_permitted && !absent.automatic_delete_permitted);
+
+        fs::write(&target, b"existing-user-file").unwrap();
+        let collision = inspect("NewKey123!");
+        assert_eq!(collision.state, EncryptedCopyRecoveryState::ExistingUnverified);
+        assert_eq!(fs::read(&target).unwrap(), b"existing-user-file");
+        fs::remove_file(&target).unwrap();
+
+        let proof = publish_disposable_fixture_copy(
+            &source, &target, "", "NewKey123!", &[],
+        ).unwrap();
+        assert!(proof.encrypted_destination_verified);
+        let verified = inspect("NewKey123!");
+        assert_eq!(verified.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
+        assert!(!verified.automatic_retry_permitted && !verified.automatic_delete_permitted);
+        let wrong_key = inspect("WrongKey123!");
+        assert_eq!(wrong_key.state, EncryptedCopyRecoveryState::ExistingUnverified);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn recovery_detects_a_published_copy_that_does_not_match_staged_changes() {
+        let source = editable_alpha_fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let target = parent.join("recovery-edits.sqlite3");
+        publish_disposable_fixture_copy(
+            &source, &target, "", "NewKey123!", &changes(),
+        ).unwrap();
+        let with_edits = inspect_encrypted_copy_recovery(
+            &source, &target, "", "NewKey123!", &changes(),
+        ).unwrap();
+        assert_eq!(with_edits.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
+        let without_edits = inspect_encrypted_copy_recovery(
+            &source, &target, "", "NewKey123!", &[],
+        ).unwrap();
+        assert_eq!(without_edits.state, EncryptedCopyRecoveryState::ExistingUnverified);
+        assert!(!without_edits.automatic_delete_permitted);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
     }
 
     #[test]

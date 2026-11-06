@@ -127,6 +127,57 @@ proof that first-run authorization is complete.**
 - `requirements-ci.txt` is **not** a complete runtime dependency manifest.
 - Existing SQLite user data and configured Hosts must survive install, repair, update, and failed migration; platform update must be distinguished from game/integration updates.
 
+## M2.06 priority correction: executable migration before further hardening (2026-11-06)
+
+**Approved development direction:** A true SQLCipher migration must be exercised
+by the installer and tested on an **explicitly chosen, disposable destination**.
+GitHub Actions runners can create, close, reopen and delete real fixture
+databases within isolated runner workspaces. GitHub infrastructure does not
+prevent such integration tests. The existing proof of encrypted staging,
+full-value/schema comparison, wrong-key rejection, Rust-to-Python opening,
+source preservation and exclusive temporary publication should be reused
+rather than indefinitely extending standalone preflight checks.
+
+**Next smallest end-to-end slice:** Connect the existing verified export to
+an explicitly requested, **non-overwriting final filename in a controlled
+test directory**; read the resulting SQLCipher file using the operational
+Python runtime and confirm integrity, metadata, exact rows and unchanged
+source bytes. On CI use only freshly created disposable fixtures. Test
+pre-existing target collision, bad key, invalid paths and failed verification
+without modifying the original or an unrelated file. Reject unattended
+implicit destructive actions and ensure logs contain no credentials.
+
+**Alpha Setup Manager acceptance:** Once the controlled file-writing path,
+minimum atomic/non-overwrite and failure-safety checks, explicit user
+approval, and current CI platform tests succeed, an **explicit milestone
+testbuild** may expose the migration behind an unmistakable
+experimental/fixture-or-backed-up-data gate. The test must be able to use
+the user-selected destination path where OS permissions permit, report
+exact success/failure and leave the original database intact. Before anyone
+uses a non-disposable source, require an independent backup and explicit
+risk acknowledgement. A portable testbuild is **not** automatic permission
+to migrate a real installation or advertise general production readiness.
+
+**Separate hardening/release gate:** Handle-relative native publication on
+all supported OSs, malicious concurrent path-swap defenses, crash-durable
+directory synchronization, full interruption/recovery matrix and
+installation-bound first-run Host authorization remain required for the
+appropriate general-release acceptance. They are not prerequisites for
+proving ordinary database creation in an isolated runner or for evaluating
+a clearly bounded Alpha fixture migration. Existing first-run account and
+Host ownership security must never be bypassed; a database-only test does
+not implicitly activate the installed runtime. Maintain the present
+`destinationCreated=false` / `migrationEnabled=false` /
+`executionEnabled=false` contract for **existing rehearsal APIs**;
+a future separately gated execution API must report its actual state
+truthfully rather than repurposing a rehearsal success as real publication.
+
+**MDCI:** Use narrowly triggered T1–T3 Rust/Python conformance for this
+slice; request platform package builds only after the named Alpha test
+acceptance gate, never on routine commits. Return to the approved installer
+roadmap immediately after this slice; do not let speculative adversarial
+hardening grow into an unrelated permanent workstream.
+
 ## Ordered implementation gates
 
 1. **Product architecture inventory (not operator environment replication):** trace the supported application launch contract, Host claim/auth/persistence interfaces, update UI/API, dependency declarations, OS-specific data paths, licensing and existing tests. Produce a gap/compatibility matrix before choosing installer tooling. Do **not** derive installer defaults from the developer's personal launch commands, local Conda environment or machine paths; use that machine only as a preexisting-installation detection test case.

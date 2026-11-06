@@ -219,7 +219,29 @@ impl PinnedDestinationParent {
         Ok(guard)
     }
 
+    /// Check the pinned parent even after the target has legitimately been
+    /// created. The full preview check below intentionally rejects occupied
+    /// final targets and is therefore only valid *before* publication.
+    pub(crate) fn revalidate_identity(&self) -> Result<(), String> {
+        let parent = self
+            .preview
+            .destination
+            .parent()
+            .ok_or("Destination directory unavailable")?;
+        let meta = fs::symlink_metadata(parent)
+            .map_err(|_| "Destination directory disappeared")?;
+        if meta.file_type().is_symlink() || !meta.is_dir() {
+            return Err("Destination directory changed or is a symlink".to_owned());
+        }
+        let path_handle = open_directory(parent)?;
+        if directory_identity(&path_handle)? != self.identity {
+            return Err("Destination directory identity changed".to_owned());
+        }
+        Ok(())
+    }
+
     pub(crate) fn revalidate(&self) -> Result<(), String> {
+        self.revalidate_identity()?;
         let parent = self
             .preview
             .destination

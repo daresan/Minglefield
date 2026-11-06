@@ -94,6 +94,157 @@ pub fn preview_migration_destination(
     })
 }
 
+
+/// A *rehearsal-only* pinned parent identity. The open directory handle
+/// survives path changes; revalidation checks that the selected path still
+/// names the same directory. This is not directory-relative publication:
+/// path-based creation still has TOCTOU exposure and remains disabled.
+pub(crate) struct PinnedDestinationParent {
+    preview: MigrationDestinationPreview,
+    _directory: fs::File,
+    identity: DirectoryIdentity,
+}
+
+#[cfg(unix)]
+type DirectoryIdentity = (u64, u64);
+#[cfg(windows)]
+type DirectoryIdentity = (u32, u64);
+
+#[cfg(unix)]
+fn open_directory(path: &Path) -> Result<fs::File, String> {
+    fs::File::open(path).map_err(|_| "Cannot pin destination directory".to_owned())
+}
+
+#[cfg(windows)]
+fn open_directory(path: &Path) -> Result<fs::File, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    // FILE_FLAG_BACKUP_SEMANTICS permits a directory handle. Refusing
+    // FILE_SHARE_DELETE helps prevent rename on Windows while it is held.
+    // This is still not a handle-relative directory operation.
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(0x0200_0000)
+        .share_mode(0x0000_0001 | 0x0000_0002)
+        .open(path)
+        .map_err(|_| "Cannot pin destination directory".to_owned())
+}
+
+#[cfg(unix)]
+fn directory_identity(file: &fs::File) -> Result<DirectoryIdentity, String> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = file
+        .metadata()
+        .map_err(|_| "Cannot identify destination directory")?;
+    if !meta.is_dir() {
+        return Err("Destination handle is not a directory".to_owned());
+    }
+    Ok((meta.dev(), meta.ino()))
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct WindowsFileTime {
+    low: u32,
+    high: u32,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct WindowsFileInformation {
+    attributes: u32,
+    created: WindowsFileTime,
+    accessed: WindowsFileTime,
+    modified: WindowsFileTime,
+    volume_serial: u32,
+    file_size_high: u32,
+    file_size_low: u32,
+    number_of_links: u32,
+    index_high: u32,
+    index_low: u32,
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    #[link_name = "GetFileInformationByHandle"]
+    fn get_file_information_by_handle(
+        handle: *mut std::ffi::c_void,
+        info: *mut WindowsFileInformation,
+    ) -> i32;
+}
+
+#[cfg(windows)]
+fn directory_identity(file: &fs::File) -> Result<DirectoryIdentity, String> {
+    use std::os::windows::io::AsRawHandle;
+    if !file
+        .metadata()
+        .map_err(|_| "Cannot identify destination directory")?
+        .is_dir()
+    {
+        return Err("Destination handle is not a directory".to_owned());
+    }
+    // Stable Windows file-volume/index identity through native file handle;
+    // std::os::windows::fs::MetadataExt::file_index is unstable on stable Rust.
+    let mut info = std::mem::MaybeUninit::<WindowsFileInformation>::uninit();
+    let success = unsafe { get_file_information_by_handle(file.as_raw_handle(), info.as_mut_ptr()) };
+    if success == 0 {
+        return Err("Cannot read destination directory file ID".to_owned());
+    }
+    let info = unsafe { info.assume_init() };
+    Ok((
+        info.volume_serial,
+        (u64::from(info.index_high) << 32) | u64::from(info.index_low),
+    ))
+}
+
+impl PinnedDestinationParent {
+    pub(crate) fn open(preview: &MigrationDestinationPreview) -> Result<Self, String> {
+        let parent = preview
+            .destination
+            .parent()
+            .ok_or("Destination directory unavailable")?;
+        let meta = fs::symlink_metadata(parent)
+            .map_err(|_| "Cannot inspect destination directory")?;
+        if meta.file_type().is_symlink() || !meta.is_dir() {
+            return Err("Destination directory changed or is a symlink".to_owned());
+        }
+        let directory = open_directory(parent)?;
+        let identity = directory_identity(&directory)?;
+        let guard = Self {
+            preview: preview.clone(),
+            _directory: directory,
+            identity,
+        };
+        guard.revalidate()?;
+        Ok(guard)
+    }
+
+    pub(crate) fn revalidate(&self) -> Result<(), String> {
+        let parent = self
+            .preview
+            .destination
+            .parent()
+            .ok_or("Destination directory unavailable")?;
+        let meta = fs::symlink_metadata(parent)
+            .map_err(|_| "Destination directory disappeared")?;
+        if meta.file_type().is_symlink() || !meta.is_dir() {
+            return Err("Destination directory changed or is a symlink".to_owned());
+        }
+        let path_handle = open_directory(parent)?;
+        if directory_identity(&path_handle)? != self.identity {
+            return Err("Destination directory identity changed".to_owned());
+        }
+        // This check also rejects an occupied final name or a changed source.
+        if preview_migration_destination(&self.preview.source, &self.preview.destination)
+            .map_err(|_| "Migration destination no longer valid")?
+            != self.preview
+        {
+            return Err("Migration destination preview changed".to_owned());
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,6 +280,54 @@ mod tests {
         assert!(!preview.execution_enabled);
         assert_eq!(fs::read(&source).unwrap(), b"fixture");
         assert!(!destination.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pins_destination_directory_without_creating_final_output() {
+        let root = temp_root();
+        let from = root.join("source");
+        let to = root.join("target");
+        fs::create_dir_all(&from).unwrap();
+        fs::create_dir_all(&to).unwrap();
+        let source = from.join("alpha.sqlite3");
+        let target = to.join("encrypted.sqlite3");
+        fs::write(&source, b"unchanged").unwrap();
+        let preview = preview_migration_destination(&source, &target).unwrap();
+        let guard = PinnedDestinationParent::open(&preview).unwrap();
+        guard.revalidate().unwrap();
+        assert!(!target.exists());
+        assert_eq!(fs::read(&source).unwrap(), b"unchanged");
+        // An occupied target is never permitted, even with a pinned parent.
+        fs::write(&target, b"existing").unwrap();
+        assert!(guard.revalidate().is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"existing");
+        drop(guard);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detects_replaced_directory_even_if_path_text_is_identical() {
+        let root = temp_root();
+        let from = root.join("source");
+        let parent = root.join("target");
+        let moved = root.join("moved");
+        fs::create_dir_all(&from).unwrap();
+        fs::create_dir_all(&parent).unwrap();
+        let source = from.join("alpha.sqlite3");
+        fs::write(&source, b"unchanged").unwrap();
+        let target = parent.join("encrypted.sqlite3");
+        let preview = preview_migration_destination(&source, &target).unwrap();
+        let guard = PinnedDestinationParent::open(&preview).unwrap();
+        fs::rename(&parent, &moved).unwrap();
+        fs::create_dir(&parent).unwrap();
+        // Canonical path strings still match; the pinned inode does not.
+        assert!(guard.revalidate().is_err());
+        fs::remove_dir(&parent).unwrap();
+        fs::rename(&moved, &parent).unwrap();
+        guard.revalidate().unwrap();
+        drop(guard);
         fs::remove_dir_all(root).unwrap();
     }
 

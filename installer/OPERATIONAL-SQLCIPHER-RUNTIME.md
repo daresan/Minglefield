@@ -464,12 +464,59 @@ equivalence at the time of inspection*, not a proof that this file came
 from a particular installer attempt, that the parent directory is
 durable on disk, or that a Host/application has been installed.
 Unknown source data, paths or failed inspection do not authorize
-mutation. No cleanup or overwrite is performed. This function has
-no GUI action yet, does not update the owner database, and is not
-general crash recovery. The next M2.07 slices still need
-provenance-bound publication journals, injected interruption
-points before/after publication, durable directory synchronization,
-classification after restart, and safe explicit recovery decisions.
+mutation. No cleanup or overwrite is performed. The original
+core-only function has been extended by the later M2.07 read-only
+receipt-aware classification documented below. Neither function
+updates the owner database or constitutes general crash recovery.
+
+### Restart-safe read-only recovery status in Tauri (M2.07 development gate)
+
+The shared core now exposes
+`inspect_interrupted_encrypted_copy`, combining the existing
+independent receipt reader, source/backup verification, registered
+schema-addition review and full read-only SQLCipher data comparison.
+The final Tauri Review page provides a **Recovery-Zustand prüfen
+(nur lesen)** action using the already selected original database,
+existing independent backup, proposed encrypted destination and
+corresponding DB passwords. Unlike execution, this command does
+not require a fresh in-memory rehearsal to have survived the
+process restart.
+
+The function returns exactly one of these informational states:
+
+- `NoRecordedOperation` — neither the destination name nor the
+  reserved receipt is present; this grants **no automatic retry**.
+- `UnrecordedDestination` — a target exists without its expected
+  reserved receipt; it must not be overwritten.
+- `ReservationWithoutDestination` — a validly shaped receipt
+  reserves the target path, but the final encrypted file is absent;
+  no replay, cleanup or rollback is authorized.
+- `PublishedContentMatches` — saved receipt fingerprint, source,
+  separate backup, reviewed corrections/schema additions and
+  **actual SQLCipher contents** match on read-only inspection.
+  This is *not* authenticated provenance or application installation.
+- `ManualReviewRequired` — malformed receipt, changed backup,
+  mismatched edits/schema selection, incorrect destination key,
+  plaintext/foreign target or other verification failure.
+
+Every result always reports
+`automaticRetryPermitted=false`,
+`automaticDeletePermitted=false` and
+`installationEnabled=false`. The UI independently validates these
+flags and refuses to display an unexpected response as success.
+The Tauri command does not invoke any write-capable migration,
+claim or Host-provisioning function. This new feature has
+focused automated CI tests but awaits a separately authorized
+portable GUI milestone build for real-world visual acceptance.
+
+**Security limitations:** The receipt is still a self-asserted,
+unkeyed hash record, not an authorization token, trusted signature
+or proof that a particular installer process created the file.
+Checking the receipt and re-opening the SQLCipher file are read-only
+operations but not an atomic cross-file transaction; concurrent
+adversarial filesystem substitutions and unsupported native
+directory durability remain separate M2.07 gates. Do not infer a
+right to delete or retry from any status.
 
 ### Verified deterministic fault-injection follow-up
 

@@ -1,11 +1,35 @@
 name: Game installation cross-platform security
 
+# CI Policy v1: game-installation tests are not a gate for unrelated
+# platform-installer commits. Shared Alpha/Host/security changes still trigger.
 on:
   push:
     branches:
       - main
       - 'feat/game-integration-updates'
+    paths:
+      - "server/game_*.py"
+      - "server/game_installation/**"
+      - "server/sec01_*.py"
+      - "server/private_alpha_gateway.py"
+      - "server/private_alpha_auth.py"
+      - "server/alpha_sqlcipher_runtime.py"
+      - "server/host_runtime_config.py"
+      - "tests/conformance/test_game_integration_install*.py"
+      - "requirements-ci.txt"
+      - ".github/workflows/game-installation-security.yml"
   pull_request:
+    paths:
+      - "server/game_*.py"
+      - "server/game_installation/**"
+      - "server/sec01_*.py"
+      - "server/private_alpha_gateway.py"
+      - "server/private_alpha_auth.py"
+      - "server/alpha_sqlcipher_runtime.py"
+      - "server/host_runtime_config.py"
+      - "tests/conformance/test_game_integration_install*.py"
+      - "requirements-ci.txt"
+      - ".github/workflows/game-installation-security.yml"
   workflow_dispatch:
 
 permissions:

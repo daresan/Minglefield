@@ -120,6 +120,47 @@ migration path and separate real-user backup safeguards.
 
 ### M2.07 — Crash recovery and rollback
 
+**M2.07 operation receipt v1 — test-scoped implementation (2026-11-06):**
+The installer core now contains `recovery_receipt.rs`, a bounded,
+**non-authorizing** versioned recovery receipt contract. A randomized
+128-bit operation correlation ID identifies the candidate receipt;
+SHA-256 fingerprints bind the source file, separate backup, exact chosen
+destination path, encrypted file bytes, staged typed corrections and
+chosen registered schema-object names. No plaintext row values, DB keys,
+login credentials or capability tokens are serialized. A new receipt is
+created only with create-if-absent semantics and flushed using
+`File::sync_all`; a reused operation ID, malformed/missing/extra
+fields, foreign filename, changed file, changed schema selection,
+mismatching backup, plaintext copy and hard-linked backup are denied.
+The reader reports `Missing`, `Matched` or `Unverified`, never an
+instruction to retry, delete or deploy. A matching receipt proves
+**byte consistency, not authenticated provenance or operator approval**.
+
+The new test path creates a **real SQLCipher target** using the
+existing verified export, records the fixture digest, and launches
+a **separate test process** to reopen both the persisted receipt and
+the SQLCipher destination without inheriting the writer's memory.
+This complements the previous real-process termination checkpoints.
+[Ubuntu Rust checks](https://github.com/daresan/Minglefield/actions/runs/42273342933)
+passed all 119 regular core tests, including the separate reader.
+[Windows/macOS native checks](https://github.com/daresan/Minglefield/actions/runs/42273342890)
+also exercise the same tests.
+
+**Not yet operationally wired:** This initial receipt is a
+**fixture-only** capability and does not write sidecars from the
+regular Tauri/CLI migration command. It currently caps fixture
+file fingerprints at 64 MiB and hashes them in memory; larger real
+databases require a streaming verifier. It does **not** prove
+exclusive trustworthy process ownership, authenticated record origin,
+directory-entry crash durability, safe adversarial path resolution,
+or privacy-safe production ACLs on every OS. A raw data-dependent
+hash of corrections is local diagnostic metadata, not a substitute
+for confidential or keyed commitments. These boundaries must be
+resolved when integrating the receipt with the real publish operation,
+including recording it **before** final-file creation and verifying
+the state in a later process after interruption. M2.07 remains OPEN;
+no automatic retry/cleanup/rollback or portable build is authorized.
+
 **M2.06 controlled Alpha acceptance evidence (2026-11-06):**
 Owner confirmed the portable Windows GUI from
 [run 42164863176](https://github.com/daresan/Minglefield/actions/runs/42164863176)

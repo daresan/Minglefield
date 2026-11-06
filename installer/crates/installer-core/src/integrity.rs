@@ -24,8 +24,8 @@ impl Sha256State {
     fn new() -> Self {
         Self {
             state: [
-                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-                0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
             ],
             partial: [0; 64],
             partial_len: 0,
@@ -165,7 +165,9 @@ mod tests {
                 self.0.read(&mut buf[..len])
             }
         }
-        for len in [0usize, 1, 13, 55, 56, 63, 64, 65, 100, 119, 120, 128, 1024, 65_537] {
+        for len in [
+            0usize, 1, 13, 55, 56, 63, 64, 65, 100, 119, 120, 128, 1024, 65_537,
+        ] {
             let bytes: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
             let expected = sha256_hex(&bytes);
             let (hash, size) = sha256_reader_hex(ShortReads(Cursor::new(&bytes))).unwrap();
@@ -182,11 +184,16 @@ mod tests {
             "mf-sha256-stream-{}-{:x}.fixture",
             std::process::id(),
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
         ));
         let len = 64 * 1024 * 1024 + 19;
         let mut file = std::fs::OpenOptions::new()
-            .write(true).create_new(true).open(&path).unwrap();
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
         file.set_len(len).unwrap();
         file.seek(SeekFrom::Start(len - 3)).unwrap();
         file.write_all(b"END").unwrap();

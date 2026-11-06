@@ -13,6 +13,8 @@ on:
       - "requirements-ci.txt"
       - "server/alpha_sqlcipher_runtime.py"
       - "server/private_alpha_auth.py"
+      - "server/private_alpha_gateway.py"
+      - "tests/conformance/test_installed_local_alpha_gateway.py"
       - "server/sec01_host_commit_policy_sim.py"
       - "server/sec01_integrated_alpha_admission.py"
       - ".github/workflows/installer-rust.yml"
@@ -25,6 +27,8 @@ on:
       - "requirements-ci.txt"
       - "server/alpha_sqlcipher_runtime.py"
       - "server/private_alpha_auth.py"
+      - "server/private_alpha_gateway.py"
+      - "tests/conformance/test_installed_local_alpha_gateway.py"
       - "server/sec01_host_commit_policy_sim.py"
       - "server/sec01_integrated_alpha_admission.py"
       - ".github/workflows/installer-rust.yml"
@@ -77,6 +81,8 @@ jobs:
         run: python -m pip install -r ../requirements-ci.txt
       - name: Verify Rust exported and final fixture ciphertext with Python login and Host ownership
         run: cargo test -p minglefield-installer-core --locked cross_runtime_ -- --ignored
+      - name: Verify installed encrypted Alpha login and Host scope over loopback
+        run: python -B -m unittest discover -s ../tests/conformance -p "test_installed_local_alpha_gateway.py" -v
       - name: Offline installer release preparation tests
         run: python -m unittest discover -s scripts -p "test_*.py" -v
       - name: Inspect transitive Alpha runtime imports (read-only)

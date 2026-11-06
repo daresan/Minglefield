@@ -18,6 +18,8 @@ on:
       - "installer/crates/installer-core/src/legacy_alpha_constraints.rs"
       - "server/alpha_sqlcipher_runtime.py"
       - "server/private_alpha_auth.py"
+      - "server/private_alpha_gateway.py"
+      - "tests/conformance/test_installed_local_alpha_gateway.py"
       - "server/sec01_host_commit_policy_sim.py"
       - "server/sec01_integrated_alpha_admission.py"
       - "requirements-ci.txt"
@@ -64,3 +66,5 @@ jobs:
         run: python -m pip install -r ../requirements-ci.txt
       - name: Verify Rust staged and published fixture ciphertext with Python Host ownership
         run: cargo test -p minglefield-installer-core --locked cross_runtime_ -- --ignored
+      - name: Verify installed encrypted Alpha login and Host scope over loopback
+        run: python -B -m unittest discover -s ../tests/conformance -p "test_installed_local_alpha_gateway.py" -v

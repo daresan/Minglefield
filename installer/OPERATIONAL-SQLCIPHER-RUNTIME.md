@@ -498,10 +498,45 @@ Verified by [Ubuntu Rust](https://github.com/daresan/Minglefield/actions/runs/42
 and [Windows/macOS native security](https://github.com/daresan/Minglefield/actions/runs/42246330676)
 at implementation SHA
 `5e8e791b65f1be3ce4347d51ff70324e512a979f`.
-Next M2.07 requirements: provenance-bound, non-secret operation journal;
-safe, reproducible actual-process-exit fixtures; directory-fsync and
-crash-consistency evidence on supported OS filesystems; explicit,
-non-destructive recovery decisions. None is yet a production promise.
+### Verified actual subprocess termination and post-exit inspection
+
+The next slice invokes the existing SQLCipher stage/publish path from a
+**separate copy of the Rust test binary**, configured only through its
+private test fixture. It deliberately exits via
+`std::process::exit(77)` at five pre-existing checkpoints: before
+staging, after ciphertext export, before target publication, after
+target publication, and during target verification. Unlike the prior
+caught-error tests, **no `Drop` cleanup runs in the terminated
+worker**. The test parent verifies the worker exit code, byte-identical
+source, unchanged unrelated sentinel and precise file state; it then
+reopens the independent recovery inspector without reusing the worker
+database connection. Before publication the final path is absent;
+after publication the complete encrypted file is readable with
+the expected key and refuses a wrong key. Private staged material may
+remain on disk after the process exit; this is **expected** and no
+production cleanup of unknown directories or retries is authorized.
+Only the test parent deletes its entire self-owned fixture directory
+after examining the residue.
+
+Verified in [Ubuntu Rust CI](https://github.com/daresan/Minglefield/actions/runs/42264191700)
+and [Windows/macOS native CI](https://github.com/daresan/Minglefield/actions/runs/42264192011)
+at implementation commit
+`bd79683145152b2ed6b2674b4594e384bbe1794b`.
+This deliberately forces a process termination **without unwinding**.
+It is not a simulated power cut, kernel crash, `SIGKILL`, Windows
+`TerminateProcess` or proof of directory-entry persistence.
+
+**Next bounded M2.07 requirement:** Design and implement an operation
+receipt/journal bound to a specific source, distinct backup, selected
+registered schema additions and staged corrections, approved target
+and expected ciphertext fingerprint. The receipt must contain **no DB
+passwords, credentials, row values or authorization tokens** and must
+be stored with verified durability and exclusive ownership; it can
+only inform a read-only post-restart classification, not authorize
+deletion or rollback by itself. Actual authorization still belongs
+to the operator. Native directory-flush, crash-consistency and
+hard-kill test evidence and non-destructive recovery UX remain open.
+None is a production promise.
 
 The Shadow M2.06 Alpha acceptance and the generic, operator-selected
 missing-schema addition contract are documented in

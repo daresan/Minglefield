@@ -7,8 +7,10 @@ const statuses = [
   "reserved_without_destination", "published_content_matches_untrusted_receipt",
   "manual_review_required"
 ];
+const operationId = "0123456789abcdef0123456789abcdef";
 const valid = (status) => ({
-  status, operationId: null, automaticRetryPermitted: false,
+  status, operationId: ["reserved_without_destination", "published_content_matches_untrusted_receipt"].includes(status) ? operationId : null,
+  automaticRetryPermitted: false,
   automaticDeletePermitted: false, installationEnabled: false
 });
 
@@ -37,10 +39,28 @@ test("rejects any attempt to turn a receipt into installation or deletion author
     }));
   }
   assert.equal(
-    assessReadOnlyRecoveryStatus({
-      ...valid("published_content_matches_untrusted_receipt"),
-      operationId: "0123456789abcdef0123456789abcdef"
-    }).operationId,
-    "0123456789abcdef0123456789abcdef"
+    assessReadOnlyRecoveryStatus(valid("published_content_matches_untrusted_receipt")).operationId,
+    operationId
   );
+});
+
+test("rejects state and operation-ID contradictions without authorizing recovery", () => {
+  for (const status of ["reserved_without_destination", "published_content_matches_untrusted_receipt"]) {
+    assert.throws(() => assessReadOnlyRecoveryStatus({ ...valid(status), operationId: null }),
+      /Inconsistent recovery status/);
+    assert.throws(() => assessReadOnlyRecoveryStatus({ ...valid(status), operationId: undefined }),
+      /Inconsistent recovery status/);
+  }
+  for (const status of ["no_recorded_operation", "unrecorded_destination"]) {
+    assert.throws(() => assessReadOnlyRecoveryStatus({ ...valid(status), operationId }),
+      /Inconsistent recovery status/);
+  }
+  // Corrupted or mismatched receipts may be classed for manual review
+  // before or after an ID was read; neither case grants recovery rights.
+  for (const id of [null, operationId]) {
+    const assessed = assessReadOnlyRecoveryStatus({ ...valid("manual_review_required"), operationId: id });
+    assert.equal(assessed.installationEnabled, false);
+    assert.equal(assessed.automaticDeletePermitted, false);
+    assert.equal(assessed.automaticRetryPermitted, false);
+  }
 });

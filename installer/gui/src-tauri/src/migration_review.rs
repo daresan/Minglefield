@@ -432,6 +432,9 @@ pub struct ExperimentalEncryptedCopyResult {
     checked_tables: usize,
     checked_schema_entries: usize,
     added_schema_objects: Vec<String>,
+    recovery_operation_id: Option<String>,
+    recovery_receipt_directory_synced: bool,
+    destination_directory_synced: bool,
     verified_staged_changes: usize,
     temporary_files_removed: bool,
     application_installation_enabled: bool,
@@ -485,6 +488,7 @@ pub async fn create_experimental_encrypted_copy(
             || proof.staged_changes_verified != changes.len()
             || proof.rows_checked != baseline.fidelity.rows_checked
             || proof.tables_checked < baseline.fidelity.tables_checked
+            || proof.recovery_operation_id.is_none()
             || proof.schema_entries_checked
                 != baseline.fidelity.schema_entries_checked + proof.added_schema_objects.len()
             || schema_additions
@@ -504,6 +508,9 @@ pub async fn create_experimental_encrypted_copy(
             checked_tables: proof.tables_checked,
             checked_schema_entries: proof.schema_entries_checked,
             added_schema_objects: proof.added_schema_objects,
+            recovery_operation_id: proof.recovery_operation_id,
+            recovery_receipt_directory_synced: proof.recovery_receipt_directory_synced,
+            destination_directory_synced: proof.destination_directory_synced,
             verified_staged_changes: proof.staged_changes_verified,
             temporary_files_removed: true,
             application_installation_enabled: false,

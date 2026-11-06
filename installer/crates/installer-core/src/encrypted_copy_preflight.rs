@@ -142,7 +142,7 @@ fn sync_verified_ciphertext_stage(path: &Path) -> Result<(), String> {
         return Err("Encrypted stage handle is not a regular file".to_owned());
     }
     file.sync_all()
-        .map_err(|_| "Cannot flush verified encrypted stage to storage")
+        .map_err(|_| "Cannot flush verified encrypted stage to storage".to_owned())
 }
 
 /// A real ciphertext file is created ONLY in a private randomized temp dir,

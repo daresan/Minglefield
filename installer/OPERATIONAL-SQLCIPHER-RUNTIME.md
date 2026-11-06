@@ -266,3 +266,31 @@ There is no final user-selected target creation, no application first-run
 authorization, no recovery journal and no GUI/CLI migration execution.
 The existing four fail-closed installer result flags stay unchanged.
 Cross-platform CI evidence for this incremental step is recorded separately.
+
+## Destination-parent file-identity rehearsal (M2.06 prerequisite)
+
+The isolated destination-volume rehearsal now holds a native open handle to
+the **canonical destination parent** throughout the SQLCipher export,
+full-content verification, file flush and test-only hard-link promotion.
+It compares the directory's OS identity with a newly opened handle before
+and after rehearsal (Unix device/inode; Windows volume serial/file index via
+the Windows system API). On Windows the directory handle is opened with
+backup-directory semantics and without delete sharing, so ordinary parent
+rename attempts are prevented while the handle is live.
+
+A replaced parent that preserves the same pathname must fail identity
+revalidation; occupied final target names are also rejected. Focused
+regressions cover unchanged files, an existing output collision and Unix
+parent-directory substitution. The canonical path already used by the
+preflight preserves the macOS /var-to-/private/var normalization rule.
+The original operating-system-temporary GUI rehearsal is unchanged.
+
+**Security limit:** the subsequent scratch file operations still use
+pathnames, not directory-relative native operations. A malicious actor may
+race those pathname operations between checks, particularly on Unix and
+when an ancestor component changes. Holding and checking a handle is a
+useful *detection and refusal gate*, not a guarantee of no TOCTOU and not
+a permission to publish a real destination. The final atomic
+directory-relative create-if-absent operation, appropriate parent
+directory sync, crash recovery and first-run owner authorization are
+separate unfinished requirements. No selected final destination is written.

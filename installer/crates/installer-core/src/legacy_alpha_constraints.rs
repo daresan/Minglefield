@@ -676,7 +676,7 @@ mod tests {
         assert!(report
             .missing_objects
             .contains(&"uq_game_install_one_active_project".to_owned()));
-        assert!(schema_objects(&db).unwrap().get("alpha_users").is_none());
+        assert!(!schema_objects(&db).unwrap().contains_key("alpha_users"));
     }
 
     #[test]
@@ -691,10 +691,9 @@ mod tests {
         ] {
             assert!(add_selected_registered_schema_objects(&mut db, &selection).is_err());
         }
-        assert!(schema_objects(&db)
+        assert!(!schema_objects(&db)
             .unwrap()
-            .get("uq_game_install_one_active_project")
-            .is_none());
+            .contains_key("uq_game_install_one_active_project"));
     }
 
     #[test]

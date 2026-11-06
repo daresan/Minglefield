@@ -405,7 +405,9 @@ fn verify_local_experimental_approval(backup_path: &str, confirmation: &str) -> 
 fn valid_recovery_operation_id(operation_id: Option<&str>) -> bool {
     operation_id.is_some_and(|id| {
         id.len() == 32
-            && id.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            && id
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
     })
 }
 
@@ -421,8 +423,12 @@ mod experimental_copy_approval_tests {
         assert!(!valid_recovery_operation_id(None));
         assert!(!valid_recovery_operation_id(Some("")));
         assert!(!valid_recovery_operation_id(Some("not-a-receipt")));
-        assert!(!valid_recovery_operation_id(Some("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")));
-        assert!(valid_recovery_operation_id(Some("0123456789abcdef0123456789abcdef")));
+        assert!(!valid_recovery_operation_id(Some(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        )));
+        assert!(valid_recovery_operation_id(Some(
+            "0123456789abcdef0123456789abcdef"
+        )));
     }
 
     #[test]

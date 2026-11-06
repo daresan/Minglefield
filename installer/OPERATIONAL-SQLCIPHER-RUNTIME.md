@@ -321,3 +321,51 @@ MDCI acceptance for this test-only step: Ubuntu/macOS run the Unix
 relative-link collision/cleanup test; Windows continues to compile
 and exercise its existing destination identity, SQLCipher, and Host
 tests. Do not request portable GUI artifacts for this technical gate.
+
+## Verified real-file fixture migration on chosen destination (M2.06 development gate)
+
+**Implementation/test commit:** `b136fbfb5d16134916ddb68a0dbbc189293bc06c`
+(after applying GitHub's exact rustfmt diff).
+
+A Rust-test-only `publish_disposable_fixture_copy` now drives the **same
+verified export and staging implementation** used by existing preflight,
+but requests an actual output file at an explicitly selected and previously
+absent filename within a disposable target directory. It verifies the
+encrypted stage, flushes ciphertext, then uses a no-overwrite hard-link
+promotion to the real fixture destination. The reopened **destination**,
+not just the temporary stage, is checked against the expected corrected
+RAM snapshot. The randomized staging directory is removed and the final
+fixture database remains until the caller's test cleanup.
+
+The tests cover plaintext and SQLCipher sources, metadata and BLOB fidelity,
+seven reviewed changes, stale-review rejection, weak password, occupied
+target, missing parent, unchanged source bytes and no residual staging.
+An **ignored-by-default Python 3.11 integration test**, invoked explicitly by
+existing installer CI after `sqlcipher3` installation, opens the **final
+published fixture path** through `server/alpha_sqlcipher_runtime.py`,
+confirms data/metadata/integrity, and rejects a wrong key.
+
+**Verified three-OS CI evidence** (including real Python runtime):
+- Ubuntu core: https://github.com/daresan/Minglefield/actions/runs/42162575420
+- Windows and macOS native security:
+  https://github.com/daresan/Minglefield/actions/runs/42162575471
+- AGENTS security: https://github.com/daresan/Minglefield/actions/runs/42162575388
+
+**Critical separation:** The actual final-name publication is guarded
+by Rust `#[cfg(test)]` and is not compiled into normal installer builds.
+Existing public rehearsal results still return
+`destination_created=false`, `encrypted_destination_verified=false`
+and `execution_enabled=false`. The synthetic fixture test truthfully
+reports its own created-and-verified output but
+`execution_enabled=false`, meaning the general application migration
+path is **not** exposed. No GUI or CLI command, first-run Host claim,
+operational installation, or real user database migration is enabled.
+
+This demonstrates that **GitHub Actions and the supported operating systems
+do permit actual selected-path SQLCipher creation** in an isolated test
+directory. It is not yet evidence of a production-safe, path-race-resistant,
+crash-recoverable installation. The next bounded milestone task is the
+**explicit-consent, tightly scoped installer execution command**, reusing
+this proven core path and preserving no-overwrite, source-safety and
+backup/rollback requirements before any real user-data test. Never weaken
+the existing Python login/Host authorization boundary.

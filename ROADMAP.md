@@ -25,6 +25,31 @@ This is a direction of travel, **not** a delivery promise. Milestones and techni
 
 **Completion gate:** runnable, independently tested installers on all three platforms, secure local Host onboarding, optional component workflows, recovery, and documented usability evidence. No implementation or acceptance is implied by this roadmap entry.
 
+## Deferred, cross-project initiative — Request / Incident / Change / Security Governance
+
+- [ ] **Implementation deferred until the complete Minglefield Platform Installer
+  milestone is accepted** (M2.15 / installable Alpha release, **not** the
+  interim M2.06 SQLCipher migration testbuild). This is an independent,
+  reusable initiative for **all present and future projects of the maintainer**,
+  not a feature of the Installer, Game integrations or ComfyUI.
+- [ ] After that gate and a separate maintainer review, consider GitHub Issues
+  for incidents/problems/change requests/CI failures/non-sensitive audits;
+  confidential security reporting for vulnerabilities; isolated per-request
+  fork/branches for humans and agents; and PR review with MDCI evidence.
+  Classify requests by project, subsystem/component and optionally verified
+  code locations (file, function, commit-pinned lines). Reporter categories
+  and optional explainable agent-suggested routing must coexist.
+- [ ] Integrate an **optional, project-independent** extension with
+  `MF_AGENTS_TEMPLATE_V1`, respecting existing AGENTS.md/SOUL.md and each
+  repository's governance. Begin with the smallest approved proof; do not
+  create standing audit/incident branches, forms, labels, new CI jobs,
+  agent write permissions or a service-management system now.
+
+**Complete design and explicit deferral:** [Project-wide Request / Incident /
+Change / Security Governance v0.1](docs/PROJECT-WIDE-REQUEST-INCIDENT-CHANGE-SECURITY-GOVERNANCE-v0.1-DRAFT.md).
+This is ITIL-4-oriented planning, not an implemented or certified process,
+and introduces **no prerequisite** for the current Installer milestone.
+
 ## Stage 0 — Public foundation (in progress)
 - [x] Establish the public repository.
 - [x] Publish the initial project vision, roadmap and contribution guidelines.

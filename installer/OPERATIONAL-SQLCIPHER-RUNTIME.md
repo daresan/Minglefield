@@ -143,3 +143,39 @@ authorized merely by knowing the username, possession of a database
 password or a client-controlled boolean. No `migrationEnabled` or
 `executionEnabled` flag has changed.
 
+
+## Installer-produced ciphertext → real Python login/Host integration
+
+The installer now includes an **explicit opt-in integration test** in
+`installer/crates/installer-core/src/encrypted_copy_preflight.rs` named
+`cross_runtime_sqlcipher_export_python_first_run`. It is run by the
+**existing three-platform Installer Rust checks** workflow after installing
+the reviewed `sqlcipher3==0.6.4` Python wheel on Python 3.11.
+
+The test reuses the real Rust `sqlcipher_export` operation to create a
+randomly staged SQLCipher database, then starts a real Python subprocess
+using the existing `AlphaAuthStore` / `HostCommitPolicy` architecture.
+It transmits the temporary database path and **both separate** in-memory
+test passwords through a private stdin pipe, not argv, environment,
+HTTP, logs, or persisted configuration. Python must:
+
+- decrypt the actual Rust-written file and verify preexisting fixture values;
+- reject a wrong SQLCipher key;
+- create `mingleadmin`, its separately salted password verifier, and
+  one local Host owner using the existing encrypted-only trusted transaction;
+- reject replay, create no invitation, authenticate via the ordinary
+  `AlphaAuthStore.login` path, reject login using the database key, and
+  deny authority on an unrelated Host.
+
+After Python exits, Rust reopens the **same file** with its original
+SQLCipher key, verifies the inserted owner and original BLOB, performs
+an integrity check, and removes the entire private staging directory.
+No real source database, final destination or permanent operational
+application data is modified by this test.
+
+This test validates the **cross-language ciphertext and application
+storage compatibility gate**, not yet installer authorization, native
+destination-creation/publishing semantics, production release packaging,
+key-unlock UX or lifecycle recovery. It runs only inside CI / an
+explicit developer invocation. The normal app and setup-manager
+`executionEnabled` flags remain false.

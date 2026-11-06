@@ -420,4 +420,153 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), before);
         fs::remove_file(path).unwrap();
     }
+    /// Cross-implementation acceptance: the exact SQLCipher ciphertext written
+    /// by the Rust export code must be usable for real Alpha transactions by
+    /// the pinned Python runtime. Secrets travel over a child-process pipe,
+    /// never via command-line arguments, the environment or debug output.
+    ///
+    /// Ignored in the default Rust suite because it needs Python 3.11 and the
+    /// separately locked sqlcipher3 wheel. Explicitly enabled by the existing
+    /// three-OS installer CI job after installing that wheel.
+    #[test]
+    #[ignore = "requires Python 3.11 and real sqlcipher3 DB-API runtime"]
+    fn cross_runtime_sqlcipher_export_python_first_run() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let source = Connection::open_in_memory().unwrap();
+        source
+            .execute_batch(
+                "CREATE TABLE original_fixture(
+                    id INTEGER PRIMARY KEY, note TEXT NOT NULL, payload BLOB);
+                 INSERT INTO original_fixture VALUES(1,'source preserved',x'00ff');
+                 PRAGMA user_version=0; PRAGMA application_id=0;",
+            )
+            .unwrap();
+        let temporary = PrivateTempDir::create(&source).unwrap();
+        let stage = temporary.path.join("rust-export-for-python.sqlite3");
+        let cipher_password = "RustCrossRuntime9!'cipher";
+        let login_password = "IndependentLoginTest9!password";
+        export(&source, &stage, cipher_password).unwrap();
+        let mut header = [0_u8; 16];
+        fs::File::open(&stage)
+            .unwrap()
+            .read_exact(&mut header)
+            .unwrap();
+        assert_ne!(&header, b"SQLite format 3\0");
+
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let python = r#"
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "server"))
+from alpha_sqlcipher_runtime import open_alpha_database, AlphaDatabaseOpenError
+from private_alpha_auth import AlphaAuthStore
+from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+from sec01_host_commit_policy_sim import HostCommitPolicy
+
+values = sys.stdin.buffer.read().split(b"\0")
+assert len(values) == 4 and values[-1] == b"", "invalid test-only pipe"
+database, cipher_key, login_key = [v.decode("utf-8") for v in values[:-1]]
+assert cipher_key != login_key
+def unlock():
+    return cipher_key
+
+runtime = open_alpha_database(database, key_provider=unlock)
+assert runtime.execute("SELECT note,hex(payload) FROM original_fixture").fetchone() == (
+    "source preserved", "00FF")
+runtime.close()
+try:
+    open_alpha_database(database, key_provider=lambda: "WrongKey123!")
+except AlphaDatabaseOpenError:
+    pass
+else:
+    raise AssertionError("wrong SQLCipher password accepted")
+
+store = AlphaAuthStore(database, sqlcipher_key_provider=unlock)
+policy = HostCommitPolicy(IntegratedAlphaAdmission(store))
+provision = policy.provision_first_run_local_host_admin_trusted(
+    "host.cross-runtime", login_key, login_user_id="mingleadmin")
+assert (provision.state, provision.reason) == (
+    "created", "first_run_local_host_admin_created")
+repeat = policy.provision_first_run_local_host_admin_trusted(
+    "host.cross-runtime", login_key, login_user_id="mingleadmin")
+assert repeat.state == "denied"
+session = store.login("mingleadmin", login_key)
+assert session
+assert store.login("mingleadmin", cipher_key) is None
+assert store.principal("Bearer " + session).user_id == "mingleadmin"
+with store._tx() as db:
+    assert db.execute("SELECT count(*) FROM alpha_invites").fetchone() == (0,)
+    assert db.execute("SELECT count(*) FROM sec01_host_owners").fetchone() == (1,)
+    assert policy._admin(db, "host.cross-runtime", "mingleadmin")
+    assert not policy._admin(db, "host.other", "mingleadmin")
+print("python_runtime_verified")
+"#;
+        let mut child = Command::new("python")
+            .arg("-B")
+            .arg("-c")
+            .arg(python)
+            .arg(repo)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Python 3.11 must be installed for cross-runtime acceptance");
+        {
+            let mut stdin = child.stdin.take().unwrap();
+            let stage_text = stage.to_string_lossy().to_string();
+            for value in [stage_text.as_str(), cipher_password, login_password] {
+                stdin.write_all(value.as_bytes()).unwrap();
+                stdin.write_all(&[0]).unwrap();
+            }
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "Python SQLCipher cross-runtime acceptance failed (output redacted)"
+        );
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            "python_runtime_verified"
+        );
+
+        let reopened = Connection::open_with_flags(&stage, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+        reopened.pragma_update(None, "key", cipher_password).unwrap();
+        let (login, host): (String, String) = reopened
+            .query_row(
+                "SELECT u.user_id,o.host_id
+                 FROM alpha_users u
+                 JOIN sec01_host_owners o ON o.owner_id=u.user_id",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(login, "mingleadmin");
+        assert_eq!(host, "host.cross-runtime");
+        let old_fixture: Vec<u8> = reopened
+            .query_row(
+                "SELECT payload FROM original_fixture WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(old_fixture, vec![0, 255]);
+        let integrity: String = reopened
+            .query_row("PRAGMA quick_check", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(integrity, "ok");
+        drop(reopened);
+        temporary.remove().unwrap();
+        assert!(!stage.exists());
+    }
+
 }

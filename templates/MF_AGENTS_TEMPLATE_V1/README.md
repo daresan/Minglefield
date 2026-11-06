@@ -28,6 +28,24 @@ workflow, a Minglefield Game/Jobs execution plan or a MAP protocol version.
 - [Minglefield Game repository example](GAME-REPO-EXAMPLE.md): illustrative
   mapping for a Game repository, not a mandatory game-engine choice.
 
+## Future optional request governance (design only)
+
+A [project-independent Request / Incident / Change / Security Governance
+design](../../docs/PROJECT-WIDE-REQUEST-INCIDENT-CHANGE-SECURITY-GOVERNANCE-v0.1-DRAFT.md)
+is reserved for a **future, separately approved template extension**.
+It covers repository/component/code-location classification of reports and
+change proposals, GitHub Issues/PRs, sensitive security reporting, and
+isolated small-agent analysis branches. It applies to any future project,
+not just Minglefield or its Installer.
+
+**Not adopted in MF_AGENTS_TEMPLATE_V1 today:** do not automatically create
+new branches, labels, forms, Issue/PR processes, agent privileges or CI
+checks during project onboarding based on this draft. The maintainer
+has deferred implementation until **after the fully accepted Minglefield
+Platform Installer milestone (M2.15)**; the interim migration testbuild is
+not this milestone. Current MDCI Core v1.1.0 and AGENTS/SOUL onboarding
+contracts remain authoritative and unchanged.
+
 ## Adoption without overwriting a preexisting agent contract
 
 1. Read any root AGENTS.md, SOUL.md, README, ROADMAP and existing project CI

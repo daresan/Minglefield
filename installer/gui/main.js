@@ -11,6 +11,7 @@ import { groupReviewedTables } from "./database-review-categories.js";
 import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js";
 import { validateExperimentalCopyRequest } from "./experimental-copy-review.js";
 import { validateSchemaAdditionSelection } from "./schema-addition-selection.js";
+import { assessReadOnlyRecoveryStatus } from "./read-only-recovery-status.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -303,6 +304,7 @@ let rehearsalRequestSequence = 0;
 let lastTemporaryEncryptedProof = null;
 let temporaryEncryptedRequestSequence = 0;
 let experimentalCopyRequestSequence = 0;
+let recoveryStatusRequestSequence = 0;
 let lastExperimentalCopy = null;
 let detectedMissingSchemaObjects = [];
 function selectedMissingSchemaObjects() {
@@ -355,6 +357,9 @@ document.querySelector("#select-no-missing-schema").addEventListener("click", ()
   updateMissingSchemaStatus();
 });
 function invalidateMigrationRehearsal() {
+  recoveryStatusRequestSequence += 1;
+  document.querySelector("#read-only-recovery-result").textContent =
+    "Eingaben verändert. Recovery-Zustand bei Bedarf erneut nur lesend prüfen.";
   experimentalCopyRequestSequence += 1;
   lastExperimentalCopy = null;
   document.querySelector("#experimental-copy-result").textContent =
@@ -621,6 +626,9 @@ for (const entry of [newDbPassword, confirmDbPassword, existingDbPassword]) {
     lastTemporaryEncryptedProof = null;
     lastExperimentalCopy = null;
     experimentalCopyRequestSequence += 1;
+    recoveryStatusRequestSequence += 1;
+    document.querySelector("#read-only-recovery-result").textContent =
+      "Schlüssel geändert. Recovery-Status bei Bedarf erneut prüfen.";
     document.querySelector("#experimental-copy-result").textContent =
       "Credentials changed; reverify before creating any experimental database copy.";
     tempDiskResult.textContent = "Database credentials changed; reverify the encrypted temporary copy.";
@@ -777,6 +785,55 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
       "before another attempt. A receipt may already reserve this destination even if no encrypted " +
       "file was published. Do not delete or overwrite receipts, source files, backups or existing " +
       "destination files automatically; manual inspection is required.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// M2.07: Inspect existing recovery evidence without any write authority.
+// This does not require the earlier copy/rehearsal success flags because
+// interrupted processes and restarted Setup Managers no longer have them.
+const recoveryResult = document.querySelector("#read-only-recovery-result");
+document.querySelector("#inspect-interrupted-copy").addEventListener("click", async () => {
+  const button = document.querySelector("#inspect-interrupted-copy");
+  if (button.disabled) return;
+  const sequence = ++recoveryStatusRequestSequence;
+  button.disabled = true;
+  recoveryResult.textContent = "Prüfe vorhandenen Recovery-Beleg und SQLCipher-Ziel nur lesend…";
+  try {
+    const sourcePath = selectedDatabase;
+    const destinationPath = migrationDestinationInput.value.trim();
+    const backupPath = experimentalBackup.value.trim();
+    if (!sourcePath || !destinationPath || !backupPath) {
+      throw new Error("Quelle, Ziel und bestehendes separates Backup auswählen.");
+    }
+    const credentials = selectTemporaryCopyCredentials({
+      newPassword: newDbPassword.value,
+      confirmation: confirmDbPassword.value,
+      existingSourcePassword: retainedSourceUnlockPassword
+    });
+    const params = {
+      sourcePath, backupPath, destinationPath,
+      ...credentials,
+      corrections: allStagedMigrationChanges(),
+      schemaAdditions: selectedMissingSchemaObjects()
+    };
+    const raw = await invoke("inspect_interrupted_encrypted_copy_status", params);
+    if (sequence !== recoveryStatusRequestSequence ||
+        selectedDatabase !== sourcePath ||
+        migrationDestinationInput.value.trim() !== destinationPath ||
+        experimentalBackup.value.trim() !== backupPath) {
+      recoveryResult.textContent = "Eingaben während der Prüfung geändert. Recovery-Status erneut prüfen.";
+      return;
+    }
+    const checked = assessReadOnlyRecoveryStatus(raw);
+    recoveryResult.textContent =
+      checked.message + "\n" +
+      JSON.stringify(checked, null, 2) + "\n" +
+      "Niemals automatisch überschreiben, löschen, zurückrollen oder Installation freigeben.";
+  } catch (error) {
+    recoveryResult.textContent = "Recovery-Status nicht verifizierbar: " + String(error) +
+      ". Keine automatische Wiederholung, Löschung oder Host-Aktivierung erlaubt.";
   } finally {
     button.disabled = false;
   }

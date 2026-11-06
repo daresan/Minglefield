@@ -19,6 +19,11 @@ portable Setup Manager artifacts **only after an explicit subgoal request**.
 Actual OS-specific failure and recovery evidence remains mandatory.
 This policy does not govern ComfyUI node-graph workflows.
 
+For other projects and new agents, use the [portable MF_AGENTS_TEMPLATE_V1](../templates/MF_AGENTS_TEMPLATE_V1/README.md)
+with **MDCI Core v1.1.0** and an adapted project CI profile. Minglefield's
+existing project CI v1.0.0 remains active; the portable template is not a
+replacement workflow and does not automatically create release artifacts.
+
 ## Rules
 
 - Select tests by changed behavior and risk, not just filenames. Auth, authorization, payments, job execution, asset isolation and persistent state may require T2/T3 immediately.

@@ -197,6 +197,43 @@ fn directory_identity(file: &fs::File) -> Result<DirectoryIdentity, String> {
     ))
 }
 
+/// Compare native file identities, not just two path strings. A
+/// hard-linked copy is not a separate backup.
+#[cfg(unix)]
+pub(crate) fn same_underlying_file(a: &Path, b: &Path) -> Result<bool, String> {
+    use std::os::unix::fs::MetadataExt;
+    let left = fs::metadata(a).map_err(|_| "Cannot identify source file")?;
+    let right = fs::metadata(b).map_err(|_| "Cannot identify backup file")?;
+    Ok(left.dev() == right.dev() && left.ino() == right.ino())
+}
+
+#[cfg(windows)]
+pub(crate) fn same_underlying_file(a: &Path, b: &Path) -> Result<bool, String> {
+    use std::os::windows::io::AsRawHandle;
+    fn identity(path: &Path) -> Result<DirectoryIdentity, String> {
+        let f = fs::File::open(path).map_err(|_| "Cannot open backup identity handle")?;
+        if !f
+            .metadata()
+            .map_err(|_| "Cannot inspect backup identity")?
+            .is_file()
+        {
+            return Err("Backup identity is not a regular file".to_owned());
+        }
+        let mut info = std::mem::MaybeUninit::<WindowsFileInformation>::uninit();
+        let success =
+            unsafe { get_file_information_by_handle(f.as_raw_handle(), info.as_mut_ptr()) };
+        if success == 0 {
+            return Err("Cannot identify backup file".to_owned());
+        }
+        let info = unsafe { info.assume_init() };
+        Ok((
+            info.volume_serial,
+            (u64::from(info.index_high) << 32) | u64::from(info.index_low),
+        ))
+    }
+    Ok(identity(a)? == identity(b)?)
+}
+
 impl PinnedDestinationParent {
     pub(crate) fn open(preview: &MigrationDestinationPreview) -> Result<Self, String> {
         let parent = preview

@@ -117,6 +117,30 @@ fn export(source: &Connection, path: &Path, key: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Sync a *previously verified* encrypted stage before the existing
+/// test-only hard-link rehearsal. Never open a directory/symlink as data.
+/// This establishes a file-data flush barrier only; directory-entry
+/// durability, path-handle pinning and crash recovery remain separate gates.
+fn sync_verified_ciphertext_stage(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| "Cannot inspect verified encrypted stage")?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("Verified encrypted stage is not a regular file".to_owned());
+    }
+    // A writable handle is required for FlushFileBuffers on Windows.
+    // Do not change the ciphertext; only flush its already-verified bytes.
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|_| "Cannot reopen verified encrypted stage for flush")?;
+    if !file.metadata().map_err(|_| "Cannot inspect encrypted stage handle")?.is_file() {
+        return Err("Encrypted stage handle is not a regular file".to_owned());
+    }
+    file.sync_all()
+        .map_err(|_| "Cannot flush verified encrypted stage to storage")
+}
+
 /// A real ciphertext file is created ONLY in a private randomized temp dir,
 /// reopened with the supplied NEW key, compared, and deleted. The proposed
 /// final destination and the existing Alpha source are never written.
@@ -254,6 +278,12 @@ fn rehearse_encrypted_test_copy_under(
     // the independently checked corrected RAM copy is the expected target.
     let fidelity = verify_snapshot_equality(&corrected_memory, &reopened)?;
     drop(reopened);
+    if !fidelity.values_verified {
+        return Err("Verified encrypted stage did not preserve all source values".to_owned());
+    }
+    // Fail closed before creating even the temporary promotion link if
+    // ciphertext cannot be flushed. This is not final publish durability.
+    sync_verified_ciphertext_stage(&staged)?;
 
     // Verify the native create-if-absent publication primitive in the SAME
     // private temporary directory. A hard link either publishes a complete
@@ -379,6 +409,27 @@ mod tests {
         ));
         fs::create_dir(&directory).unwrap();
         directory
+    }
+
+    #[test]
+    fn verified_stage_flush_requires_regular_file_and_preserves_bytes() {
+        let parent = target_volume_fixture();
+        let staged = parent.join("stage.sqlite3");
+        let bytes = b"verified-fixture-data";
+        fs::write(&staged, bytes).unwrap();
+        sync_verified_ciphertext_stage(&staged).unwrap();
+        assert_eq!(fs::read(&staged).unwrap(), bytes);
+        assert!(sync_verified_ciphertext_stage(&parent).is_err());
+        assert!(sync_verified_ciphertext_stage(&parent.join("missing")).is_err());
+        #[cfg(unix)]
+        {
+            let alias = parent.join("alias.sqlite3");
+            std::os::unix::fs::symlink(&staged, &alias).unwrap();
+            assert!(sync_verified_ciphertext_stage(&alias).is_err());
+            fs::remove_file(alias).unwrap();
+        }
+        assert_eq!(fs::read(&staged).unwrap(), bytes);
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]

@@ -538,9 +538,11 @@ print("python_runtime_verified")
             "python_runtime_verified"
         );
 
-        let reopened = Connection::open_with_flags(&stage, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        let reopened =
+            Connection::open_with_flags(&stage, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        reopened
+            .pragma_update(None, "key", cipher_password)
             .unwrap();
-        reopened.pragma_update(None, "key", cipher_password).unwrap();
         let (login, host): (String, String) = reopened
             .query_row(
                 "SELECT u.user_id,o.host_id
@@ -568,5 +570,4 @@ print("python_runtime_verified")
         temporary.remove().unwrap();
         assert!(!stage.exists());
     }
-
 }

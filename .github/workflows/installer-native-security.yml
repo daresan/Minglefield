@@ -1,0 +1,64 @@
+name: Installer native security checks
+
+# Minglefield Development CI Policy v1. A risk-based supplement to Ubuntu
+# core checks: native path/SQLCipher/Host trust changes also test Windows
+# and macOS without packaging an EXE, AppImage or macOS application.
+on:
+  push:
+    paths:
+      - "installer/crates/installer-core/src/encrypted_copy_preflight.rs"
+      - "installer/crates/installer-core/src/migration_destination.rs"
+      - "installer/crates/installer-core/src/sqlite_inspection.rs"
+      - "installer/crates/installer-core/src/snapshot_fidelity.rs"
+      - "installer/crates/installer-core/src/migration_dry_run.rs"
+      - "installer/crates/installer-core/src/database_password.rs"
+      - "installer/crates/installer-core/src/legacy_alpha_mapping.rs"
+      - "installer/crates/installer-core/src/legacy_alpha_constraints.rs"
+      - "server/alpha_sqlcipher_runtime.py"
+      - "server/private_alpha_auth.py"
+      - "server/sec01_host_commit_policy_sim.py"
+      - "server/sec01_integrated_alpha_admission.py"
+      - "requirements-ci.txt"
+      - ".github/workflows/installer-native-security.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-native-security-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  native-security:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: installer
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache shared installer Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "installer -> target"
+          shared-key: installer-core
+      - run: cargo fmt --all -- --check
+      - run: cargo check --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install pinned real Python SQLCipher test runtime
+        run: python -m pip install -r ../requirements-ci.txt
+      - name: Verify Rust ciphertext and Python Host ownership handoff
+        run: cargo test -p minglefield-installer-core --locked cross_runtime_sqlcipher_export_python_first_run -- --ignored

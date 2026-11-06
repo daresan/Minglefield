@@ -826,6 +826,162 @@ mod tests {
         fs::remove_file(source).unwrap();
     }
 
+    /// A separate test-binary process uses the existing SQLCipher stage/
+    /// publication implementation and exits without unwinding at one private
+    /// checkpoint. This worker is inert in ordinary test runs.
+    #[test]
+    fn m207_abrupt_exit_worker() {
+        use std::process;
+
+        let parent = match std::env::var_os("MINGLEFIELD_M207_TEST_CHILD_PARENT") {
+            Some(value) => PathBuf::from(value),
+            None => return,
+        };
+        let fault = std::env::var("MINGLEFIELD_M207_TEST_CHILD_CHECKPOINT")
+            .expect("A fixture checkpoint must be provided");
+        // Constrain this test-only subprocess to a freshly created disposable
+        // directory. Never accept source/target paths from a real installation.
+        let temp = fs::canonicalize(std::env::temp_dir()).unwrap();
+        let parent = fs::canonicalize(&parent).unwrap();
+        assert_eq!(parent.parent(), Some(temp.as_path()));
+        assert!(parent.file_name().unwrap().to_string_lossy().starts_with(
+            "minglefield-target-volume-"
+        ));
+        let source = parent.join("source.sqlite3");
+        let target = parent.join("target.sqlite3");
+        assert!(source.is_file());
+        assert!(!target.exists());
+        let selected = match fault.as_str() {
+            "before_staging" => CopyCheckpoint::BeforeStaging,
+            "after_export" => CopyCheckpoint::AfterEncryptedExport,
+            "before_publish" => CopyCheckpoint::BeforeFinalPublication,
+            "after_publish" => CopyCheckpoint::AfterFinalPublication,
+            "final_verify" => CopyCheckpoint::DuringFinalVerification,
+            _ => panic!("Unknown test-only interruption checkpoint"),
+        };
+        // No errors or panic: process::exit closes OS handles but does not
+        // run destructors, unlike the earlier controlled interruption tests.
+        let _ = rehearse_encrypted_test_copy_under_with_checkpoints(
+            &source,
+            "",
+            "NewKey123!",
+            &[],
+            Some(&parent),
+            Some(&target),
+            &[],
+            |point| {
+                if point == selected {
+                    process::exit(77);
+                }
+                Ok(())
+            },
+        );
+        panic!("Selected process-termination checkpoint was not reached");
+    }
+
+    #[test]
+    fn m207_real_subprocess_exit_and_fresh_process_recovery() {
+        use std::process::{Command, Stdio};
+
+        let cases = [
+            ("before_staging", false, false),
+            ("after_export", false, true),
+            ("before_publish", false, true),
+            ("after_publish", true, true),
+            ("final_verify", true, true),
+        ];
+        let worker_binary = std::env::current_exe().unwrap();
+        for (checkpoint, should_publish, should_leave_stage) in cases {
+            let parent = target_volume_fixture();
+            let original_fixture = fixture(false);
+            let source = parent.join("source.sqlite3");
+            fs::copy(&original_fixture, &source).unwrap();
+            fs::remove_file(original_fixture).unwrap();
+            let source_bytes = fs::read(&source).unwrap();
+            let target = parent.join("target.sqlite3");
+            let sentinel = parent.join("untouched-preexisting.dat");
+            fs::write(&sentinel, b"do not mutate").unwrap();
+            let exit = Command::new(&worker_binary)
+                .arg("--exact")
+                .arg("encrypted_copy_preflight::tests::m207_abrupt_exit_worker")
+                .arg("--nocapture")
+                .env("MINGLEFIELD_M207_TEST_CHILD_PARENT", &parent)
+                .env("MINGLEFIELD_M207_TEST_CHILD_CHECKPOINT", checkpoint)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .expect("Could not start the isolated fixture test process");
+            assert_eq!(exit.code(), Some(77), "{checkpoint}: no actual process exit");
+            assert_eq!(fs::read(&source).unwrap(), source_bytes, "{checkpoint}");
+            assert_eq!(
+                fs::read(&sentinel).unwrap(),
+                b"do not mutate",
+                "{checkpoint}"
+            );
+            assert_eq!(target.exists(), should_publish, "{checkpoint}");
+            let stages: Vec<_> = fs::read_dir(&parent)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .filter(|path| {
+                    path.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with("minglefield-stage-")
+                })
+                .collect();
+            assert_eq!(
+                stages.len(),
+                usize::from(should_leave_stage),
+                "{checkpoint}: actual process exit must not pretend RAII cleanup ran"
+            );
+            for path in &stages {
+                assert!(path.is_dir(), "{checkpoint}");
+            }
+            // This executes in the test parent, after the child is gone:
+            // the recovery reader is newly opened and may never mutate an
+            // existing target, delete staging, or enable an automatic retry.
+            let status = inspect_encrypted_copy_recovery(
+                &source,
+                &target,
+                "",
+                "NewKey123!",
+                &[],
+            )
+            .unwrap();
+            assert_eq!(
+                status.state,
+                if should_publish {
+                    EncryptedCopyRecoveryState::ExistingMatchesExpected
+                } else {
+                    EncryptedCopyRecoveryState::DestinationAbsent
+                },
+                "{checkpoint}"
+            );
+            assert!(!status.automatic_retry_permitted, "{checkpoint}");
+            assert!(!status.automatic_delete_permitted, "{checkpoint}");
+            if should_publish {
+                let bad_key = inspect_encrypted_copy_recovery(
+                    &source,
+                    &target,
+                    "",
+                    "WrongKey123!",
+                    &[],
+                )
+                .unwrap();
+                assert_eq!(
+                    bad_key.state,
+                    EncryptedCopyRecoveryState::ExistingUnverified,
+                    "{checkpoint}"
+                );
+            }
+            assert_eq!(fs::read(&source).unwrap(), source_bytes, "{checkpoint}");
+            assert_eq!(fs::read(&sentinel).unwrap(), b"do not mutate");
+            // Test-owned files ONLY: explicit cleanup after observing the
+            // real post-exit staging residue. No production sweep exists.
+            fs::remove_dir_all(&parent).unwrap();
+        }
+    }
+
     #[test]
     fn injected_interruption_at_every_publication_boundary_keeps_source_and_occupied_files() {
         // Returning an error models a controlled process interruption and

@@ -773,8 +773,10 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
     experimentalConfirmation.value = "";
   } catch (error) {
     experimentalResult.textContent = "Experimental database copy rejected or incomplete: " +
-      String(error) + ". Inspect the chosen destination before retrying; a failed post-publication " +
-      "verification may leave a complete encrypted file that must not be overwritten.";
+      String(error) + ". Inspect the chosen destination AND any Minglefield recovery receipt " +
+      "before another attempt. A receipt may already reserve this destination even if no encrypted " +
+      "file was published. Do not delete or overwrite receipts, source files, backups or existing " +
+      "destination files automatically; manual inspection is required.";
   } finally {
     button.disabled = false;
   }

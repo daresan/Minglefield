@@ -133,6 +133,39 @@ the encrypted publication path. This feature requires a new
 explicitly authorized portable testbuild before end-user GUI
 acceptance; ordinary CI does not package installers.
 
+## Read-only recovery status after interrupted SQLCipher copy (M2.07)
+
+The final Review page now includes **Recovery-Zustand prüfen (nur lesen)**,
+separate from the experimental SQLCipher creation button. After
+restarting the portable Setup Manager, select the original Alpha
+database, independent verified backup, original target path,
+corresponding existing and new database keys and the same staged
+corrections and optional missing-schema additions. No previously
+cached rehearsal state or additional confirmation is needed to
+**inspect** existing recovery evidence. This is not an installation
+step and does not write a new database, change the backup or delete
+leftover staging.
+
+Possible informational outcomes:
+
+- No recorded operation — no reserved receipt or final target
+- Unrecorded target — occupied destination without a valid receipt
+- Reserved without target — receipt exists but final database is absent
+- Matching published contents — source, backup, receipt fingerprints and
+  SQLCipher data including selected corrections/schema additions
+  compare successfully
+- Manual review required — unreadable/modified record, unknown file,
+  wrong password, mismatched backup or other failed verification
+
+Every result explicitly disables automatic retry, deletion and
+installation. Even if the ciphertext matches the unkeyed receipt,
+the result does not establish trusted process provenance or permission
+to resume. Operators must not delete/overwrite a reserved receipt
+or destination merely to retry an interrupted copy. The controlled
+Alpha capability still requires manually accepted platform builds
+before general user release; the ordinary Rust/Tauri/frontend CI
+checks do not produce portable installer artifacts.
+
 ## Experimental SQLCipher copy on the final Review page (not application installation)
 
 A controlled Alpha **database-copy-only** execution command is available

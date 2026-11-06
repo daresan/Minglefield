@@ -346,6 +346,20 @@ pub fn add_selected_registered_schema_objects(
     let reference = known_reference()?;
     let expected = schema_objects(&reference)?;
     let current = schema_objects(target)?;
+    // Preserve arbitrary SQLite source schemas in the ordinary no-selection
+    // migration path. Registered-DDL restrictions apply only to requested
+    // changes, never to unchanged legacy copies or unrelated test fixtures.
+    if selected.is_empty() {
+        return Ok(SelectedSchemaAdditions {
+            added_objects: Vec::new(),
+            still_missing_objects: expected
+                .keys()
+                .filter(|name| !current.contains_key(*name))
+                .cloned()
+                .collect(),
+            complete_registered_schema: current == expected,
+        });
+    }
     if current.iter().any(
         |(name, row)| !matches!(expected.get(name), Some(reference_row) if reference_row == row),
     ) {
@@ -361,13 +375,6 @@ pub fn add_selected_registered_schema_objects(
         return Err(
             "Schema additions must be distinct, currently missing registered objects".into(),
         );
-    }
-    if selected.is_empty() {
-        return Ok(SelectedSchemaAdditions {
-            added_objects: Vec::new(),
-            still_missing_objects: missing.into_iter().collect(),
-            complete_registered_schema: current == expected,
-        });
     }
     // A transaction means a failed UNIQUE index, missing dependency, or
     // invalid DDL cannot leave *part* of a chosen group behind.

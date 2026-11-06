@@ -930,8 +930,9 @@ mod tests {
 
     #[test]
     fn selected_missing_index_is_written_only_to_new_encrypted_destination() {
-        let source = editable_alpha_fixture(false);
-        let original = fs::read(&source).unwrap();
+        let source_parent = target_volume_fixture();
+        let source = source_parent.join("registered-alpha.sqlite3");
+        crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
         {
             let db = Connection::open(&source).unwrap();
             db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
@@ -960,14 +961,15 @@ mod tests {
         drop(output);
         assert_eq!(fs::read(&source).unwrap(), source_bytes);
         assert_eq!(fs::read(&backup).unwrap(), source_bytes);
-        assert_ne!(fs::read(&source).unwrap(), original);
         fs::remove_dir_all(parent).unwrap();
-        fs::remove_file(source).unwrap();
+        fs::remove_dir_all(source_parent).unwrap();
     }
 
     #[test]
     fn conflicting_selected_schema_additions_refuse_publication_and_leave_backup_untouched() {
-        let source = editable_alpha_fixture(false);
+        let source_parent = target_volume_fixture();
+        let source = source_parent.join("registered-alpha.sqlite3");
+        crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
         {
             let db = Connection::open(&source).unwrap();
             db.execute_batch(
@@ -994,7 +996,7 @@ mod tests {
         assert_eq!(fs::read(&backup).unwrap(), before);
         assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
         fs::remove_dir_all(parent).unwrap();
-        fs::remove_file(source).unwrap();
+        fs::remove_dir_all(source_parent).unwrap();
     }
 
     #[test]

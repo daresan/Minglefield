@@ -581,6 +581,7 @@ fn main() {
             full_database_review::inspect_full_database,
             migration_review::preview_migration_rehearsal,
             migration_review::verify_temporary_encrypted_copy,
+            migration_review::create_experimental_encrypted_copy,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

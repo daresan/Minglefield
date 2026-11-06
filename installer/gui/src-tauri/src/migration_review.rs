@@ -1,6 +1,7 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::encrypted_copy_preflight::{
-    execute_reviewed_encrypted_copy_with_schema, rehearse_encrypted_test_copy,
+    execute_reviewed_encrypted_copy_with_schema, inspect_interrupted_encrypted_copy,
+    rehearse_encrypted_test_copy, InterruptedEncryptedCopyState,
     EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::migration_destination::preview_migration_destination;
@@ -548,4 +549,94 @@ pub async fn create_experimental_encrypted_copy(
     })
     .await
     .map_err(|_| "Experimental encrypted copy worker failed".to_owned())?
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadOnlyRecoveryStatus {
+    status: &'static str,
+    operation_id: Option<String>,
+    automatic_retry_permitted: bool,
+    automatic_delete_permitted: bool,
+    installation_enabled: bool,
+}
+
+fn recovery_status_label(state: InterruptedEncryptedCopyState) -> &'static str {
+    match state {
+        InterruptedEncryptedCopyState::NoRecordedOperation => "no_recorded_operation",
+        InterruptedEncryptedCopyState::UnrecordedDestination => "unrecorded_destination",
+        InterruptedEncryptedCopyState::ReservationWithoutDestination => {
+            "reserved_without_destination"
+        }
+        InterruptedEncryptedCopyState::PublishedContentMatches => {
+            "published_content_matches_untrusted_receipt"
+        }
+        InterruptedEncryptedCopyState::ManualReviewRequired => "manual_review_required",
+    }
+}
+
+/// Pure read-only interrupted-copy triage. A matched receipt and SQLCipher
+/// file do not authorize recovery, deletion, Host claims or application install.
+#[tauri::command]
+pub async fn inspect_interrupted_encrypted_copy_status(
+    source_path: String,
+    backup_path: String,
+    destination_path: String,
+    existing_password: String,
+    new_password: String,
+    corrections: Vec<StagedCorrection>,
+    schema_additions: Vec<String>,
+) -> Result<ReadOnlyRecoveryStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let changes: Vec<ReviewCorrection> =
+            corrections.into_iter().map(ReviewCorrection::from).collect();
+        let checked = inspect_interrupted_encrypted_copy(
+            Path::new(&source_path),
+            Path::new(&backup_path),
+            Path::new(&destination_path),
+            &existing_password,
+            &new_password,
+            &changes,
+            &schema_additions,
+        )?;
+        Ok(ReadOnlyRecoveryStatus {
+            status: recovery_status_label(checked.state),
+            operation_id: checked.operation_id,
+            automatic_retry_permitted: checked.automatic_retry_permitted,
+            automatic_delete_permitted: checked.automatic_delete_permitted,
+            installation_enabled: checked.installation_enabled,
+        })
+    })
+    .await
+    .map_err(|_| "Read-only recovery inspection worker failed".to_owned())?
+}
+
+#[cfg(test)]
+mod recovery_status_command_tests {
+    use super::recovery_status_label;
+    use minglefield_installer_core::encrypted_copy_preflight::InterruptedEncryptedCopyState;
+
+    #[test]
+    fn recovery_status_labels_keep_unverified_states_distinct() {
+        assert_eq!(
+            recovery_status_label(InterruptedEncryptedCopyState::NoRecordedOperation),
+            "no_recorded_operation",
+        );
+        assert_eq!(
+            recovery_status_label(InterruptedEncryptedCopyState::UnrecordedDestination),
+            "unrecorded_destination",
+        );
+        assert_eq!(
+            recovery_status_label(InterruptedEncryptedCopyState::ReservationWithoutDestination),
+            "reserved_without_destination",
+        );
+        assert_eq!(
+            recovery_status_label(InterruptedEncryptedCopyState::PublishedContentMatches),
+            "published_content_matches_untrusted_receipt",
+        );
+        assert_eq!(
+            recovery_status_label(InterruptedEncryptedCopyState::ManualReviewRequired),
+            "manual_review_required",
+        );
+    }
 }

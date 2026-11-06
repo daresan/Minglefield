@@ -526,17 +526,60 @@ This deliberately forces a process termination **without unwinding**.
 It is not a simulated power cut, kernel crash, `SIGKILL`, Windows
 `TerminateProcess` or proof of directory-entry persistence.
 
-**Next bounded M2.07 requirement:** Design and implement an operation
-receipt/journal bound to a specific source, distinct backup, selected
-registered schema additions and staged corrections, approved target
-and expected ciphertext fingerprint. The receipt must contain **no DB
-passwords, credentials, row values or authorization tokens** and must
-be stored with verified durability and exclusive ownership; it can
-only inform a read-only post-restart classification, not authorize
-deletion or rollback by itself. Actual authorization still belongs
-to the operator. Native directory-flush, crash-consistency and
-hard-kill test evidence and non-destructive recovery UX remain open.
-None is a production promise.
+### M2.07 receipt v1: fixture-only persisted operation correlation
+
+The installer core now has a small, dependency-free
+`recovery_receipt.rs` implementation, reusing the existing
+`integrity::sha256_hex` code (no new crates or lockfile changes).
+A random SQLite `randomblob(16)` correlation ID names a newly
+created `minglefield-recovery-<id>.receipt` file. The bounded v1
+record stores **only digests and counts**: fingerprints of the source
+file, separate byte-equivalent backup, selected *destination pathname*,
+verified ciphertext file, staged typed corrections and operator-selected
+registered schema-object names, plus ciphertext byte length. Raw paths,
+passwords, login details, plaintext rows and capability tokens are not
+serialized.
+
+The test implementation rejects non-regular files, hardlink-alias
+backups, changed backup bytes, plain SQLite ciphertext, duplicate
+schema selections, malformed/oversized/extra receipt fields and
+occupied receipt names; on Unix it sets a 0600 creation mode.
+It uses `create_new` and `sync_all` for the receipt file itself.
+The **read-only** inspector returns `Missing`, `Matched`, or
+`Unverified` and never permits retry, automatic delete or restore.
+
+An end-to-end test reuses the **real SQLCipher export**, creates
+the receipt for the resulting ciphertext and opens both the receipt
+and the encrypted destination from a **fresh test subprocess**.
+The reader rejects altered receipts and a wrong/altered content
+context. This passed [Ubuntu Rust CI](https://github.com/daresan/Minglefield/actions/runs/42273342933)
+and [Windows/macOS native security CI](https://github.com/daresan/Minglefield/actions/runs/42273342890).
+The normal Rust suite has 119 passing tests on Ubuntu/macOS, 116 on
+Windows; two runtime integration tests are separately invoked and
+both pass on all three platforms.
+
+**Important limits:** This is a **test-scoped primitive**, not a
+receipt automatically emitted by the Tauri migration or CLI. The
+initial SHA-256 file helper deliberately accepts fixtures at most
+64 MiB and materializes them in memory. Real-world DB sizes need a
+streaming implementation. A raw SHA-256 fingerprint of corrections
+is local and unkeyed and is not sufficient confidential protection
+if receipts will become widely readable. File-level `sync_all` does
+not guarantee durability of a directory entry across all supported
+filesystems; Windows inherited file ACLs and adverse directory swaps
+also need explicit review. The correlation ID and hashes are NOT
+a signature, authentic provenance, installer claim, source-owner
+identity, user authorization or approval to delete anything.
+
+**Next bounded integration:** create and durably commit the receipt
+BEFORE exclusive final-file publication on a user-approved destination,
+bind it to a verified staged ciphertext and the backed-up source,
+and classify any final target after restart against both the receipt
+and a fresh read-only SQLCipher comparison. Until exclusive ownership,
+parent-directory durability, abnormal termination and idempotency
+checks pass, do **not** enable real-use automated recovery, directory
+cleanup, rollback or re-publication. No portable build is triggered
+by this test-only change.
 
 The Shadow M2.06 Alpha acceptance and the generic, operator-selected
 missing-schema addition contract are documented in

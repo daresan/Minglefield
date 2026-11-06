@@ -9,6 +9,7 @@ import { createFullReview, stageFullCell, fullRowCorrections, fullReviewSummary 
 import { renderDomainDatabaseReview } from "./domain-database-review.js";
 import { groupReviewedTables } from "./database-review-categories.js";
 import { assessTemporaryDiskCopy, selectTemporaryCopyCredentials } from "./temporary-encrypted-review.js";
+import { validateExperimentalCopyRequest } from "./experimental-copy-review.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -300,7 +301,11 @@ let lastMigrationRehearsal = null;
 let rehearsalRequestSequence = 0;
 let lastTemporaryEncryptedProof = null;
 let temporaryEncryptedRequestSequence = 0;
+let experimentalCopyRequestSequence = 0;
 function invalidateMigrationRehearsal() {
+  experimentalCopyRequestSequence += 1;
+  document.querySelector("#experimental-copy-result").textContent =
+    "Review or destination changed. Repeat both migration checks before any new experimental copy.";
   rehearsalRequestSequence += 1;
   temporaryEncryptedRequestSequence += 1;
   lastTemporaryEncryptedProof = null;
@@ -555,6 +560,9 @@ for (const entry of [newDbPassword, confirmDbPassword, existingDbPassword]) {
   entry.addEventListener("input", () => {
     temporaryEncryptedRequestSequence += 1;
     lastTemporaryEncryptedProof = null;
+    experimentalCopyRequestSequence += 1;
+    document.querySelector("#experimental-copy-result").textContent =
+      "Credentials changed; reverify before creating any experimental database copy.";
     tempDiskResult.textContent = "Database credentials changed; reverify the encrypted temporary copy.";
   });
 }
@@ -635,6 +643,74 @@ inspectDefaultUserData();
 loadDefault();
 loadFrameworkLicense();
 loadApplicationReadme();
+
+// Experimental database-only migration. This is not application install or
+// Host ownership setup. The Rust core independently validates the backup,
+// confirmation, source and typed staged corrections.
+const experimentalBackup = document.querySelector("#experimental-backup-path");
+const experimentalConfirmation = document.querySelector("#experimental-copy-confirmation");
+const experimentalResult = document.querySelector("#experimental-copy-result");
+document.querySelector("#browse-experimental-backup").addEventListener("click", async () => {
+  try {
+    const file = await invoke("browse_sqlite_file");
+    if (file) experimentalBackup.value = file;
+  } catch (error) {
+    experimentalResult.textContent = "Backup file selection failed: " + String(error);
+  }
+});
+document.querySelector("#create-experimental-copy").addEventListener("click", async () => {
+  const button = document.querySelector("#create-experimental-copy");
+  if (button.disabled) return;
+  const sequence = ++experimentalCopyRequestSequence;
+  button.disabled = true;
+  experimentalResult.textContent = "Checking consent, source backup and SQLCipher migration…";
+  try {
+    const credentials = selectTemporaryCopyCredentials({
+      newPassword: newDbPassword.value,
+      confirmation: confirmDbPassword.value,
+      existingSourcePassword: retainedSourceUnlockPassword
+    });
+    const corrections = allStagedMigrationChanges();
+    const request = validateExperimentalCopyRequest({
+      sourcePath: selectedDatabase,
+      destinationPath: migrationDestinationInput.value.trim(),
+      backupPath: experimentalBackup.value,
+      confirmation: experimentalConfirmation.value,
+      verifiedRehearsal: lastMigrationRehearsal,
+      temporaryProof: lastTemporaryEncryptedProof,
+      stagedCorrections: corrections,
+      credentialsValid: validateDestinationPassword(
+        newDbPassword.value, confirmDbPassword.value
+      ).valid
+    });
+    const proof = await invoke("create_experimental_encrypted_copy", {
+      ...request, ...credentials
+    });
+    if (sequence !== experimentalCopyRequestSequence) {
+      experimentalResult.textContent =
+        "Operation finished, but the review changed. Inspect the selected destination before proceeding.";
+      return;
+    }
+    if (proof.status !== "experimental_encrypted_copy_created" ||
+        proof.sourcePreserved !== true || proof.backupVerified !== true ||
+        proof.destinationCreated !== true || proof.encryptedDestinationVerified !== true ||
+        proof.fullDiskCopyVerified !== true || proof.temporaryFilesRemoved !== true ||
+        proof.applicationInstallationEnabled !== false ||
+        proof.hostProvisioningEnabled !== false) {
+      throw new Error("Unexpected experimental migration response; inspect destination manually.");
+    }
+    experimentalResult.textContent = "EXPERIMENTAL COPY CREATED. Minglefield application not installed. " +
+      "Source and verified backup remain unchanged.\n" +
+      JSON.stringify({ ...proof, destinationPath: request.destinationPath }, null, 2);
+    experimentalConfirmation.value = "";
+  } catch (error) {
+    experimentalResult.textContent = "Experimental database copy rejected or incomplete: " +
+      String(error) + ". Inspect the chosen destination before retrying; a failed post-publication " +
+      "verification may leave a complete encrypted file that must not be overwritten.";
+  } finally {
+    button.disabled = false;
+  }
+});
 
 // Wizard navigation preserves the existing form controls and their values.
 // No page transition authorizes a download, filesystem write, or installation.

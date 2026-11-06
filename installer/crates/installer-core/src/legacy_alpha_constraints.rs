@@ -426,7 +426,8 @@ mod tests {
     #[test]
     fn missing_active_game_index_with_duplicate_active_operations_is_not_repairable() {
         let db = known_reference().unwrap();
-        db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+        db.execute_batch("DROP INDEX uq_game_install_one_active_project;")
+            .unwrap();
         db.execute_batch(
             "INSERT INTO sec01_game_install_journal
              (operation_id,host_id,owner_id,project_id,state,plan_sha256)
@@ -450,7 +451,8 @@ mod tests {
     #[test]
     fn terminal_journal_entries_do_not_count_as_active_index_conflicts() {
         let db = known_reference().unwrap();
-        db.execute_batch("DROP INDEX uq_game_install_one_active_project;").unwrap();
+        db.execute_batch("DROP INDEX uq_game_install_one_active_project;")
+            .unwrap();
         db.execute_batch(
             "INSERT INTO sec01_game_install_journal
              (operation_id,host_id,owner_id,project_id,state,plan_sha256)

@@ -39,6 +39,13 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <p class="help">Nur Tabellen, die keinem der fünf Fachbereiche zugeordnet werden können, erscheinen hier. Auch Erweiterungstabellen verwenden denselben geprüften Bearbeitungs- und Migrationspfad.</p>
 <div id="data-fields-all"></div></section>
 <p id="data-editor-status" class="help" role="status">No verified records loaded. Migration remains disabled.</p>
+<fieldset id="missing-schema-section" hidden><legend>Fehlende Schemaobjekte – mögliche ältere Datenbankversion</legend>
+<p class="help" id="missing-schema-description" role="status">Fehlende registrierte Schemaobjekte können auf eine ältere Datenbankversion hinweisen. Die Auswahl ist optional. Ergänzungen werden nur auf der neuen isolierten SQLCipher-Kopie ausgeführt, niemals in der Quelldatenbank. SQLite prüft dabei Abhängigkeiten und vorhandene Daten; bei Konflikten wird die gesamte Auswahl zurückgerollt.</p>
+<div id="missing-schema-choices" role="group" aria-label="Fehlende Schemaobjekte auswählen"></div>
+<button id="select-all-missing-schema" type="button" class="secondary">Alle fehlenden auswählen</button>
+<button id="select-no-missing-schema" type="button" class="secondary">Keine Ergänzungen</button>
+<p class="help" id="missing-schema-status" role="status" aria-live="polite">Keine Ergänzungen ausgewählt.</p>
+</fieldset>
 <fieldset><legend>Migration rehearsal (no installation or data writes)</legend>
 <p class="help">Recheck the complete existing Alpha schema and all table row counts. Simulate staged changes on an in-memory snapshot, then roll them back. An existing destination directory is required; it may be the same directory as the source when the new filename differs. Existing files and SQLite sidecar names are rejected; no destination file is created.</p>
 <label for="migration-destination-path">Proposed new encrypted database file (absolute path)</label>

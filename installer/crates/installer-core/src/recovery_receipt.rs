@@ -37,7 +37,10 @@ pub enum ReceiptInspection {
 }
 
 fn valid_lower_hex(value: &str, n: usize) -> bool {
-    value.len() == n && value.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    value.len() == n
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 fn validate_receipt(record: &RecoveryReceiptV1) -> Result<(), String> {
@@ -75,8 +78,8 @@ pub fn new_recovery_operation_id() -> Result<String, String> {
 }
 
 fn checked_sha256_of_file(path: &Path) -> Result<(String, u64), String> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| "Cannot inspect recovery fixture file")?;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| "Cannot inspect recovery fixture file")?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
         || metadata.len() > MAX_FIXTURE_FILE_BYTES
@@ -119,7 +122,9 @@ fn schema_selection_digest(schema_additions: &[String]) -> Result<String, String
     if names.iter().any(|name| {
         name.is_empty()
             || name.len() > 128
-            || !name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
     }) {
         return Err("Invalid selected registered schema-object identifier".into());
     }
@@ -284,12 +289,9 @@ pub fn write_fixture_recovery_receipt(
 }
 
 fn read_receipt(path: &Path) -> Result<RecoveryReceiptV1, String> {
-    let meta = fs::symlink_metadata(path)
-        .map_err(|_| "Cannot inspect recovery receipt metadata")?;
-    if meta.file_type().is_symlink()
-        || !meta.is_file()
-        || meta.len() > MAX_RECEIPT_BYTES
-    {
+    let meta =
+        fs::symlink_metadata(path).map_err(|_| "Cannot inspect recovery receipt metadata")?;
+    if meta.file_type().is_symlink() || !meta.is_file() || meta.len() > MAX_RECEIPT_BYTES {
         return Err("Recovery receipt is not a small regular file".into());
     }
     let bytes = fs::read(path).map_err(|_| "Cannot read recovery receipt")?;
@@ -370,7 +372,11 @@ mod tests {
         let ciphertext = root.join("stage-sqlcipher.sqlite3");
         fs::write(&source, b"fixture-source-original").unwrap();
         fs::copy(&source, &backup).unwrap();
-        fs::write(&ciphertext, b"\x31\x07\xff\x12ciphertext fixture not actual SQLCipher").unwrap();
+        fs::write(
+            &ciphertext,
+            b"\x31\x07\xff\x12ciphertext fixture not actual SQLCipher",
+        )
+        .unwrap();
         (source, backup, destination, ciphertext)
     }
 
@@ -379,9 +385,9 @@ mod tests {
         let root = directory();
         let (source, backup, destination, ciphertext) = fixture(&root);
         let schema = ["uq_game_install_one_active_project".to_owned()];
-        let record = fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &schema,
-        ).unwrap();
+        let record =
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &schema)
+                .unwrap();
         let path = write_fixture_recovery_receipt(&root, &record).unwrap();
         let bytes = fs::read(&path).unwrap();
         assert!(std::str::from_utf8(&bytes).unwrap().starts_with(HEADER));
@@ -391,9 +397,16 @@ mod tests {
         assert!(write_fixture_recovery_receipt(&root, &record).is_err());
         let inspect = |backup_path: &Path, selected: &[String], target: &Path| {
             inspect_fixture_recovery_receipt(
-                &path, &record.operation_id, &source, backup_path, target,
-                &ciphertext, &[], selected,
-            ).unwrap()
+                &path,
+                &record.operation_id,
+                &source,
+                backup_path,
+                target,
+                &ciphertext,
+                &[],
+                selected,
+            )
+            .unwrap()
         };
         assert_eq!(
             inspect(&backup, &schema, &destination),
@@ -424,30 +437,44 @@ mod tests {
     fn receipt_rejects_backup_alias_mismatch_and_unrecognized_metadata() {
         let root = directory();
         let (source, backup, destination, ciphertext) = fixture(&root);
-        assert!(fixture_recovery_receipt(
-            &source, &source, &destination, &ciphertext, &[], &[],
-        ).is_err());
+        assert!(
+            fixture_recovery_receipt(&source, &source, &destination, &ciphertext, &[], &[],)
+                .is_err()
+        );
         let alias = root.join("backup-hardlink.sqlite3");
         fs::hard_link(&source, &alias).unwrap();
-        assert!(fixture_recovery_receipt(
-            &source, &alias, &destination, &ciphertext, &[], &[],
-        ).is_err());
+        assert!(
+            fixture_recovery_receipt(&source, &alias, &destination, &ciphertext, &[], &[],)
+                .is_err()
+        );
         fs::write(&backup, b"changed backup").unwrap();
-        assert!(fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).is_err());
+        assert!(
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[],)
+                .is_err()
+        );
         fs::copy(&source, &backup).unwrap();
-        let record = fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).unwrap();
+        let record =
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
+                .unwrap();
         let path = write_fixture_recovery_receipt(&root, &record).unwrap();
-        fs::OpenOptions::new().append(true).open(&path).unwrap()
-            .write_all(b"unexpected_field=yes\n").unwrap();
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(b"unexpected_field=yes\n")
+            .unwrap();
         assert_eq!(
             inspect_fixture_recovery_receipt(
-                &path, &record.operation_id, &source, &backup,
-                &destination, &ciphertext, &[], &[],
-            ).unwrap(),
+                &path,
+                &record.operation_id,
+                &source,
+                &backup,
+                &destination,
+                &ciphertext,
+                &[],
+                &[],
+            )
+            .unwrap(),
             ReceiptInspection::Unverified,
         );
         fs::remove_dir_all(root).unwrap();
@@ -458,14 +485,25 @@ mod tests {
         let root = directory();
         let (source, backup, destination, ciphertext) = fixture(&root);
         fs::write(&ciphertext, b"SQLite format 3\0plaintext fixture data").unwrap();
-        assert!(fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &[],
-        ).is_err());
-        fs::write(&ciphertext, b"\x31\x07\xff\x12ciphertext fixture not actual SQLCipher").unwrap();
+        assert!(
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[],)
+                .is_err()
+        );
+        fs::write(
+            &ciphertext,
+            b"\x31\x07\xff\x12ciphertext fixture not actual SQLCipher",
+        )
+        .unwrap();
         let duplicate = ["idx_name".to_owned(), "idx_name".to_owned()];
         assert!(fixture_recovery_receipt(
-            &source, &backup, &destination, &ciphertext, &[], &duplicate,
-        ).is_err());
+            &source,
+            &backup,
+            &destination,
+            &ciphertext,
+            &[],
+            &duplicate,
+        )
+        .is_err());
         fs::remove_dir_all(root).unwrap();
     }
 }

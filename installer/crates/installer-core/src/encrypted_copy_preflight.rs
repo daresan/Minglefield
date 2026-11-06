@@ -478,6 +478,222 @@ mod tests {
     }
 
     #[test]
+    fn disposable_fixture_publication_creates_real_ciphertext_on_selected_volume() {
+        for source_encrypted in [false, true] {
+            let source = fixture(source_encrypted);
+            let original = fs::read(&source).unwrap();
+            let target_parent = target_volume_fixture();
+            let target = target_parent.join("chosen-destination.sqlite3");
+            let source_key = if source_encrypted { "ExistingKey9!" } else { "" };
+            let report = publish_disposable_fixture_copy(
+                &source,
+                &target,
+                source_key,
+                "NewKey123!",
+                &[],
+            )
+            .unwrap();
+            assert!(report.destination_created && report.encrypted_destination_verified);
+            assert!(!report.execution_enabled);
+            assert!(report.temporary_files_removed && report.full_disk_copy_verified);
+            assert!(report.wrong_key_rejected && report.atomic_temporary_publication_verified);
+            assert_eq!(fs::read(&source).unwrap(), original);
+            assert_eq!(fs::read_dir(&target_parent).unwrap().count(), 1);
+            let mut header = [0_u8; 16];
+            fs::File::open(&target).unwrap().read_exact(&mut header).unwrap();
+            assert_ne!(&header, b"SQLite format 3\0");
+            let reopened =
+                Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+            reopened.pragma_update(None, "key", "NewKey123!").unwrap();
+            let row: (String, Vec<u8>) = reopened
+                .query_row(
+                    "SELECT name,payload FROM records WHERE id=1",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(row, ("first".to_owned(), vec![0, 255]));
+            let version: i64 = reopened
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(version, 17);
+            drop(reopened);
+            fs::remove_dir_all(target_parent).unwrap();
+            fs::remove_file(source).unwrap();
+        }
+    }
+
+    #[test]
+    fn disposable_fixture_publication_rejects_collision_and_invalid_inputs() {
+        let source = fixture(false);
+        let original = fs::read(&source).unwrap();
+        let target_parent = target_volume_fixture();
+        let target = target_parent.join("chosen-destination.sqlite3");
+        fs::write(&target, b"existing-user-data").unwrap();
+        assert!(publish_disposable_fixture_copy(
+            &source,
+            &target,
+            "",
+            "NewKey123!",
+            &[],
+        )
+        .is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"existing-user-data");
+        assert_eq!(fs::read_dir(&target_parent).unwrap().count(), 1);
+        let missing = target_parent.join("missing").join("chosen.sqlite3");
+        assert!(publish_disposable_fixture_copy(
+            &source,
+            &missing,
+            "",
+            "NewKey123!",
+            &[],
+        )
+        .is_err());
+        fs::remove_file(&target).unwrap();
+        assert!(publish_disposable_fixture_copy(
+            &source,
+            &target,
+            "",
+            "bad",
+            &[],
+        )
+        .is_err());
+        assert!(!target.exists());
+        assert!(fs::read_dir(&target_parent).unwrap().next().is_none());
+        assert_eq!(fs::read(&source).unwrap(), original);
+        fs::remove_dir_all(target_parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn disposable_fixture_publication_preserves_reviewed_edits_and_denies_stale_review() {
+        let source = editable_alpha_fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let target = parent.join("corrected.sqlite3");
+        let report = publish_disposable_fixture_copy(
+            &source,
+            &target,
+            "",
+            "NewKey123!",
+            &changes(),
+        )
+        .unwrap();
+        assert_eq!(report.staged_changes_verified, 7);
+        assert!(report.destination_created && report.staged_values_match_ciphertext);
+        let reopened =
+            Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        reopened.pragma_update(None, "key", "NewKey123!").unwrap();
+        let disabled: i64 = reopened
+            .query_row("SELECT disabled FROM alpha_users WHERE user_id='alice'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(disabled, 1);
+        let name: String = reopened
+            .query_row("SELECT name FROM alpha_game_projects WHERE project_id='g1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(name, "Updated game");
+        drop(reopened);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        let mut stale = changes();
+        if let ReviewCorrection::UserDisabled { before, .. } = &mut stale[0] {
+            *before = true;
+        }
+        let second = parent.join("should-not-exist.sqlite3");
+        assert!(publish_disposable_fixture_copy(
+            &source,
+            &second,
+            "",
+            "NewKey123!",
+            &stale,
+        )
+        .is_err());
+        assert!(!second.exists());
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires Python 3.11 and real sqlcipher3 DB-API runtime"]
+    fn cross_runtime_published_fixture_python_open() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let source = fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let target = parent.join("real-published-fixture.sqlite3");
+        let report = publish_disposable_fixture_copy(
+            &source,
+            &target,
+            "",
+            "NewKey123!",
+            &[],
+        )
+        .unwrap();
+        assert!(report.destination_created && report.encrypted_destination_verified);
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let python = r#"
+import sys
+sys.path.insert(0, sys.argv[1] + "/server")
+from alpha_sqlcipher_runtime import open_alpha_database, AlphaDatabaseOpenError
+values = sys.stdin.buffer.read().split(b"\0")
+assert len(values) == 3 and values[-1] == b""
+database, key = [v.decode("utf-8") for v in values[:-1]]
+db = open_alpha_database(database, key_provider=lambda: key)
+assert db.execute("SELECT name,hex(payload) FROM records WHERE id=1").fetchone() == ("first", "00FF")
+assert db.execute("PRAGMA user_version").fetchone() == (17,)
+assert db.execute("PRAGMA quick_check").fetchone() == ("ok",)
+db.close()
+try:
+    open_alpha_database(database, key_provider=lambda: "WrongKey123!")
+except AlphaDatabaseOpenError:
+    pass
+else:
+    raise AssertionError("wrong key accepted")
+print("published_fixture_runtime_verified")
+"#;
+        let mut child = Command::new("python")
+            .arg("-B")
+            .arg("-c")
+            .arg(python)
+            .arg(repo)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Python 3.11 must be installed for fixture acceptance");
+        {
+            let mut stdin = child.stdin.take().unwrap();
+            let target_text = target.to_string_lossy().to_string();
+            for value in [target_text.as_str(), "NewKey123!"] {
+                stdin.write_all(value.as_bytes()).unwrap();
+                stdin.write_all(&[0]).unwrap();
+            }
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "Python could not reopen the published fixture (output redacted)"
+        );
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            "published_fixture_runtime_verified"
+        );
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
     fn verified_stage_flush_requires_regular_file_and_preserves_bytes() {
         let parent = target_volume_fixture();
         let staged = parent.join("stage.sqlite3");

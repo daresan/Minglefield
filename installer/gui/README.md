@@ -151,6 +151,27 @@ publishes the final filename via a no-overwrite hard link. The GUI displays
 whether the final target was actually created; temporary rehearsal
 results remain non-executing and their flags remain false.
 
+**M2.07 recovery receipt (current development branch):** The
+experimental final encrypted-copy action now creates an exclusive
+`minglefield-target-<path-hash>.receipt` in the selected destination
+directory *before* creating the encrypted destination. The receipt
+records a random operation ID and SHA-256 fingerprints of the
+validated inputs, selected corrections/registered schema changes and
+verified SQLCipher ciphertext. The output includes the operation ID,
+and honest per-OS receipt/destination directory-sync flags. These
+checks do **not** enable complete installation or Host provisioning.
+
+If the operation is interrupted, a receipt may exist even if the
+target database file does not. **Do not retry, delete, rename or
+overwrite either file automatically.** A second copy attempt at the
+same destination is deliberately refused until an explicit,
+separately approved recovery process can classify the existing
+receipt and final target. Only test-owned ephemeral directories are
+cleaned up automatically in CI. Unix directory sync is attempted;
+durable Windows directory-entry publication is still unproven.
+This feature has cross-platform development tests but has **not**
+yet received a new portable Shadow GUI acceptance build.
+
 **Only for explicitly consented Alpha tests on stopped databases with a
 known-good independent backup.** This is not a complete transactional
 migration/rollback mechanism under hostile filesystem races or power loss.

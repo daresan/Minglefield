@@ -96,7 +96,7 @@ class InstalledAlphaProcessTests(unittest.TestCase):
             "host.local", LOGIN_KEY).state, "created")
         self.assertNotEqual(self.db.read_bytes()[:16], SQLITE_HEADER)
         self.assertFalse(list(self.db.parent.glob("*.secret")))
-        for _ in range(2):
+        for cycle in range(2):
             request = {
                 "version": 1, "databasePath": str(self.db),
                 "sqlcipherKey": DB_KEY, "port": 0
@@ -145,6 +145,65 @@ class InstalledAlphaProcessTests(unittest.TestCase):
             status, hosts = request_local("GET", "/api/hosts", token=login["session_token"])
             self.assertEqual(status, 200)
             self.assertEqual([h["host_id"] for h in hosts["hosts"]], ["host.local"])
+
+            # Exercise the actual installed HTTP API once, then query all
+            # persisted Host/Effect/Job/Game rows after the process restarts.
+            if cycle == 0:
+                effect_status, effect = request_local(
+                    "POST", "/api/host/effects",
+                    {"host_id": "host.local", "effect_id": "effect.local",
+                     "description": "local-only demo", "enabled": True},
+                    token=login["session_token"])
+                self.assertEqual(effect_status, 200)
+                self.assertEqual(effect["state"], "saved")
+                job_status, job = request_local(
+                    "POST", "/api/host/effects/manual",
+                    {"host_id": "host.local", "effect_id": "effect.local"},
+                    token=login["session_token"])
+                self.assertEqual(job_status, 200)
+                self.assertEqual(job["state"], "queued_mock")
+                root = str(self.db.parent / "project-root")
+                game_status, game = request_local(
+                    "POST", "/api/game/projects",
+                    {"host_id": "host.local", "project_id": "game.local",
+                     "name": "Local Alpha", "repository_root": root,
+                     "job_attachments_root": root, "output_root": root},
+                    token=login["session_token"])
+                self.assertEqual(game_status, 201)
+                self.assertEqual(game["state"], "created")
+                settings_status, _ = request_local(
+                    "POST", "/api/host/settings",
+                    {"host_id": "host.local",
+                     "settings": {"job_attachments_root": root,
+                                  "output_root": root,
+                                  "trusted_integration_sources": []}},
+                    token=login["session_token"])
+                self.assertEqual(settings_status, 200)
+
+            status, jobs = request_local(
+                "GET", "/api/host/jobs?host_id=host.local",
+                token=login["session_token"])
+            self.assertEqual(status, 200)
+            self.assertEqual(len(jobs["jobs"]), 1)
+            status, projects = request_local(
+                "GET", "/api/game/projects?host_id=host.local",
+                token=login["session_token"])
+            self.assertEqual(status, 200)
+            self.assertEqual(len(projects["projects"]), 1)
+            self.assertEqual(projects["projects"][0]["project_id"], "game.local")
+            status, settings = request_local(
+                "GET", "/api/host/settings?host_id=host.local",
+                token=login["session_token"])
+            self.assertEqual(status, 200)
+            self.assertEqual(settings["settings"]["trusted_integration_sources"], [])
+            for endpoint in (
+                "/api/host/jobs?host_id=host.remote",
+                "/api/game/projects?host_id=host.remote"
+            ):
+                denied_status, _ = request_local(
+                    "GET", endpoint, token=login["session_token"])
+                self.assertEqual(denied_status, 403)
+
             blocked, _ = request_local("POST", "/api/host/claim",
                               {"host_id": "host.remote", "bootstrap_secret": "anything"},
                               token=login["session_token"])
@@ -157,6 +216,12 @@ class InstalledAlphaProcessTests(unittest.TestCase):
                 "SELECT value FROM preserved_fixture").fetchone(), ("unchanged",))
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM sec01_host_owners").fetchone()[0], 1)
+            for table in (
+                "sec01_host_settings", "sec01_host_effect_definitions",
+                "sec01_host_jobs", "alpha_game_projects"
+            ):
+                self.assertEqual(db.execute(
+                    "SELECT COUNT(*) FROM " + table).fetchone()[0], 1)
 
     @unittest.skipUnless(driver_available(), "real SQLCipher wheel unavailable")
     def test_wrong_cipher_key_rejects_before_listening_without_leaking_it(self):

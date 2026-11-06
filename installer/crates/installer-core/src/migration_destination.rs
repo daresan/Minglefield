@@ -265,8 +265,7 @@ impl PinnedDestinationParent {
             .destination
             .parent()
             .ok_or("Destination directory unavailable")?;
-        let meta = fs::symlink_metadata(parent)
-            .map_err(|_| "Destination directory disappeared")?;
+        let meta = fs::symlink_metadata(parent).map_err(|_| "Destination directory disappeared")?;
         if meta.file_type().is_symlink() || !meta.is_dir() {
             return Err("Destination directory changed or is a symlink".to_owned());
         }

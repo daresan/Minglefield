@@ -1,7 +1,6 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::encrypted_copy_preflight::{
-    execute_reviewed_encrypted_copy, rehearse_encrypted_test_copy,
-    EXPERIMENTAL_COPY_CONFIRMATION,
+    execute_reviewed_encrypted_copy, rehearse_encrypted_test_copy, EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
@@ -392,10 +391,7 @@ pub async fn verify_temporary_encrypted_copy(
     .map_err(|_| "Temporary encrypted copy rehearsal worker failed".to_owned())?
 }
 
-fn verify_local_experimental_approval(
-    backup_path: &str,
-    confirmation: &str,
-) -> Result<(), String> {
+fn verify_local_experimental_approval(backup_path: &str, confirmation: &str) -> Result<(), String> {
     if confirmation != EXPERIMENTAL_COPY_CONFIRMATION {
         return Err("Exact experimental encrypted-copy confirmation is required".to_owned());
     }
@@ -417,7 +413,8 @@ mod experimental_copy_approval_tests {
         assert!(verify_local_experimental_approval(
             "backup.sqlite3",
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).is_ok());
+        )
+        .is_ok());
     }
 }
 

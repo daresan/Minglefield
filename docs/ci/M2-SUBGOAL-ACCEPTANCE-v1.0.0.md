@@ -69,9 +69,25 @@ login secrets, session tokens or raw rows in CI logs.
   rows/schema and verify registered migration metadata.
 - Negative: stale review, source change, access denial and directory
   substitution must fail closed. No partial destination or leaked key.
-- **Packaging:** one portable three-OS acceptance build when usable GUI
-  execution and rollback/authorization gates are ready; never test first
-  against an unbacked-up real user database.
+- **Controlled Alpha testbuild gate (before full M2.06 closure):**
+  publish a verified SQLCipher copy to a previously absent chosen test
+  filename, reopen it from Rust and Python, verify all source/staged values
+  and schema, and reject existing-file collision, wrong key, stale review
+  and denied access without touching the original. CI uses only disposable
+  fixtures. Installer exposure requires explicit user consent and a
+  clearly labeled test-only scope; any real-user source needs an
+  independently verified backup and explicit risk acknowledgement.
+  The controlled Alpha testbuild may precede complete hostile-directory
+  race hardening, but cannot bypass the basic exclusive-creation guarantee.
+- **Full M2.06 acceptance:** complete native handle-relative publication,
+  durability and relevant security boundaries for all supported OSs,
+  plus necessary authorization/recovery gates. The testbuild does not
+  imply full M2.06 closure or permit a general release. Only the separate
+  execution API may report a created destination; the existing rehearsal
+  flags must remain false and truthful.
+- **Packaging:** one expressly requested portable three-OS testbuild when
+  the controlled Alpha gate passes; further release/repair builds only
+  after a documented reason and the stronger acceptance gates.
 
 ### M2.07 — Crash recovery and rollback
 

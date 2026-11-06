@@ -978,15 +978,38 @@ mod tests {
             )
             .unwrap()
         };
+        // A freshly restarted installer can inspect the destination/receipt
+        // before the operator supplies either SQLCipher key or source backup.
+        // This is only a provisional status, never content verification.
+        let brief = || {
+            inspect_interrupted_encrypted_copy(
+                Path::new(""),
+                Path::new(""),
+                &destination,
+                "",
+                "",
+                &[],
+                &[],
+            )
+            .unwrap()
+        };
         let absent = check("NewKey123!");
         assert_eq!(
             absent.state,
+            InterruptedEncryptedCopyState::NoRecordedOperation
+        );
+        assert_eq!(
+            brief().state,
             InterruptedEncryptedCopyState::NoRecordedOperation
         );
         assert!(!absent.automatic_retry_permitted && !absent.automatic_delete_permitted);
         fs::write(&destination, b"unrelated-occupied-file").unwrap();
         assert_eq!(
             check("NewKey123!").state,
+            InterruptedEncryptedCopyState::UnrecordedDestination
+        );
+        assert_eq!(
+            brief().state,
             InterruptedEncryptedCopyState::UnrecordedDestination
         );
         assert_eq!(fs::read(&destination).unwrap(), b"unrelated-occupied-file");
@@ -1009,6 +1032,15 @@ mod tests {
             InterruptedEncryptedCopyState::PublishedContentMatches
         );
         assert_eq!(correct.operation_id, proof.recovery_operation_id);
+        let unverified_brief = brief();
+        assert_eq!(
+            unverified_brief.state,
+            InterruptedEncryptedCopyState::ManualReviewRequired
+        );
+        assert_eq!(unverified_brief.operation_id, correct.operation_id);
+        assert!(!unverified_brief.automatic_retry_permitted);
+        assert!(!unverified_brief.automatic_delete_permitted);
+        assert!(!unverified_brief.installation_enabled);
         assert!(!correct.automatic_retry_permitted);
         assert!(!correct.automatic_delete_permitted);
         assert!(!correct.installation_enabled);
@@ -1083,6 +1115,23 @@ mod tests {
             InterruptedEncryptedCopyState::ReservationWithoutDestination
         );
         assert!(status.operation_id.is_some());
+        let without_passwords = inspect_interrupted_encrypted_copy(
+            Path::new(""),
+            Path::new(""),
+            &destination,
+            "",
+            "",
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            without_passwords.state,
+            InterruptedEncryptedCopyState::ReservationWithoutDestination
+        );
+        assert_eq!(without_passwords.operation_id, status.operation_id);
+        assert!(!without_passwords.automatic_retry_permitted);
+        assert!(!without_passwords.automatic_delete_permitted);
         assert!(!status.automatic_retry_permitted);
         assert!(!status.automatic_delete_permitted);
         assert!(!status.installation_enabled);
@@ -1535,6 +1584,31 @@ mod tests {
                 "{fault}"
             );
             assert!(resumed.operation_id.is_some(), "{fault}");
+            // A fresh GUI is allowed to classify the reserved target
+            // without reentering the prior SQLCipher keys.
+            let brief_resumed = inspect_interrupted_encrypted_copy(
+                Path::new(""),
+                Path::new(""),
+                &target,
+                "",
+                "",
+                &[],
+                &[],
+            )
+            .unwrap();
+            assert_eq!(
+                brief_resumed.state,
+                if final_expected {
+                    InterruptedEncryptedCopyState::ManualReviewRequired
+                } else {
+                    InterruptedEncryptedCopyState::ReservationWithoutDestination
+                },
+                "{fault}"
+            );
+            assert_eq!(brief_resumed.operation_id, resumed.operation_id);
+            assert!(!brief_resumed.automatic_retry_permitted);
+            assert!(!brief_resumed.automatic_delete_permitted);
+            assert!(!brief_resumed.installation_enabled);
             assert!(!resumed.automatic_retry_permitted);
             assert!(!resumed.automatic_delete_permitted);
             assert!(!resumed.installation_enabled);

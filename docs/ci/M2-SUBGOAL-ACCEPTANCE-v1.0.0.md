@@ -178,6 +178,37 @@ process termination, power-loss durability, a persistent operation journal,
 or user-facing recovery/rollback.** Those remain open before M2.07 and
 full M2.06 acceptance. No new portable artifact was requested.
 
+**M2.07 actual process-exit fixture — implemented (commit
+`bd79683145152b2ed6b2674b4594e384bbe1794b`):**
+A separate instance of the existing Rust **test binary** executes the
+unchanged SQLCipher staging/publication path and calls
+`std::process::exit(77)` at each of the five private checkpoints.
+This is **not** a caught error: no Rust destructor or `Drop` cleanup
+runs in the worker. The parent test asserts the exact exit code,
+unchanged source bytes and unrelated sentinel, and inspects the
+destination via the existing read-only recovery function after the
+worker is gone. Before final-name publication the target is absent;
+after publication the target reopens with the correct key, rejects
+a wrong key, and matches the source snapshot. Real leftover private
+staging is observed after process termination; production does
+**not** sweep or delete it. Only the parent test deletes its own
+entire isolated temporary fixture directory after verification.
+No production execution API or GUI fault trigger is introduced.
+
+**Evidence:** [Ubuntu Rust CI](https://github.com/daresan/Minglefield/actions/runs/42264191700)
+and [Windows/macOS native security CI](https://github.com/daresan/Minglefield/actions/runs/42264192011).
+These tests exercise deliberate process termination with
+`std::process::exit`, **not** `SIGKILL`, `TerminateProcess`, system
+crash or power removal. They do not prove directory-entry durability,
+restore provenance, or authorize automatic retry/rollback. Follow-on
+gates remain a nonsecret, verified operation receipt bound to the
+actual source/backup/destination/selected edits and DDL; explicit
+exclusive ownership and idempotency; durable file and directory
+flush behavior; separate process-restart inspection; and
+non-destructive owner-approved recovery decisions. Do not promote a
+matching SQLCipher file to successful installation solely from its
+contents.
+
 - Inject interruption before staging, after encrypted export, before exclusive
   publication, just after publication and during post-publish verification.
 - Restart and inspect for an intact prior source, absence of partial target,

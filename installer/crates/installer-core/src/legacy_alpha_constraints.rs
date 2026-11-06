@@ -346,9 +346,9 @@ pub fn add_selected_registered_schema_objects(
     let reference = known_reference()?;
     let expected = schema_objects(&reference)?;
     let current = schema_objects(target)?;
-    if current.iter().any(|(name, row)| {
-        !matches!(expected.get(name), Some(reference_row) if reference_row == row)
-    }) {
+    if current.iter().any(
+        |(name, row)| !matches!(expected.get(name), Some(reference_row) if reference_row == row),
+    ) {
         return Err("Unregistered or incompatible schema objects require separate review".into());
     }
     let missing: BTreeSet<String> = expected
@@ -358,7 +358,9 @@ pub fn add_selected_registered_schema_objects(
         .collect();
     let choices: BTreeSet<String> = selected.iter().cloned().collect();
     if choices.len() != selected.len() || !choices.is_subset(&missing) {
-        return Err("Schema additions must be distinct, currently missing registered objects".into());
+        return Err(
+            "Schema additions must be distinct, currently missing registered objects".into(),
+        );
     }
     if selected.is_empty() {
         return Ok(SelectedSchemaAdditions {
@@ -427,7 +429,9 @@ pub fn add_selected_registered_schema_objects(
         .query_row("PRAGMA quick_check", [], |r| r.get(0))
         .map_err(|_| "Cannot verify schema additions integrity")?;
     let violations: i64 = transaction
-        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
+        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| {
+            r.get(0)
+        })
         .map_err(|_| "Cannot verify schema additions foreign keys")?;
     if check != "ok" || violations != 0 {
         return Err("Schema additions failed database integrity checks".into());
@@ -576,16 +580,26 @@ mod tests {
             .unwrap();
         let original = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(!original.verified);
-        assert_eq!(original.missing_objects, ["uq_game_install_one_active_project"]);
+        assert_eq!(
+            original.missing_objects,
+            ["uq_game_install_one_active_project"]
+        );
         let outcome = add_selected_registered_schema_objects(
             &mut db,
             &["uq_game_install_one_active_project".to_owned()],
         )
         .unwrap();
-        assert_eq!(outcome.added_objects, ["uq_game_install_one_active_project"]);
+        assert_eq!(
+            outcome.added_objects,
+            ["uq_game_install_one_active_project"]
+        );
         assert!(outcome.still_missing_objects.is_empty());
         assert!(outcome.complete_registered_schema);
-        assert!(audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap().verified);
+        assert!(
+            audit_registered_alpha_schema_objects(&db, &inspect(&db))
+                .unwrap()
+                .verified
+        );
     }
 
     #[test]
@@ -596,16 +610,22 @@ mod tests {
         let skipped = add_selected_registered_schema_objects(&mut db, &[]).unwrap();
         assert!(skipped.added_objects.is_empty());
         assert!(!skipped.complete_registered_schema);
-        let selected = add_selected_registered_schema_objects(
-            &mut db,
-            &["alpha_users".to_owned()],
-        )
-        .unwrap();
+        let selected =
+            add_selected_registered_schema_objects(&mut db, &["alpha_users".to_owned()]).unwrap();
         assert!(selected.added_objects.contains(&"alpha_users".to_owned()));
-        assert!(selected.added_objects.contains(&"sqlite_autoindex_alpha_users_1".to_owned()));
-        assert_eq!(selected.still_missing_objects, ["uq_game_install_one_active_project"]);
+        assert!(selected
+            .added_objects
+            .contains(&"sqlite_autoindex_alpha_users_1".to_owned()));
+        assert_eq!(
+            selected.still_missing_objects,
+            ["uq_game_install_one_active_project"]
+        );
         assert!(!selected.complete_registered_schema);
-        assert!(!audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap().verified);
+        assert!(
+            !audit_registered_alpha_schema_objects(&db, &inspect(&db))
+                .unwrap()
+                .verified
+        );
     }
 
     #[test]
@@ -623,12 +643,18 @@ mod tests {
         .unwrap();
         assert!(add_selected_registered_schema_objects(
             &mut db,
-            &["alpha_users".to_owned(), "uq_game_install_one_active_project".to_owned()],
-        ).is_err());
+            &[
+                "alpha_users".to_owned(),
+                "uq_game_install_one_active_project".to_owned()
+            ],
+        )
+        .is_err());
         let report = audit_registered_alpha_schema_objects(&db, &inspect(&db)).unwrap();
         assert!(!report.verified);
         assert!(report.missing_objects.contains(&"alpha_users".to_owned()));
-        assert!(report.missing_objects.contains(&"uq_game_install_one_active_project".to_owned()));
+        assert!(report
+            .missing_objects
+            .contains(&"uq_game_install_one_active_project".to_owned()));
         assert!(schema_objects(&db).unwrap().get("alpha_users").is_none());
     }
 
@@ -644,7 +670,10 @@ mod tests {
         ] {
             assert!(add_selected_registered_schema_objects(&mut db, &selection).is_err());
         }
-        assert!(schema_objects(&db).unwrap().get("uq_game_install_one_active_project").is_none());
+        assert!(schema_objects(&db)
+            .unwrap()
+            .get("uq_game_install_one_active_project")
+            .is_none());
     }
 
     #[test]

@@ -338,8 +338,9 @@ fn rehearse_encrypted_test_copy_under(
     let fixture_created = if let Some(target) = _fixture_publication {
         fs::hard_link(&staged, target)
             .map_err(|_| "Cannot exclusively publish fixture ciphertext")?;
-        let published_fixture = Connection::open_with_flags(target, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|_| "Cannot reopen published fixture ciphertext")?;
+        let published_fixture =
+            Connection::open_with_flags(target, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|_| "Cannot reopen published fixture ciphertext")?;
         published_fixture
             .pragma_update(None, "key", new_password)
             .map_err(|_| "Cannot unlock published fixture ciphertext")?;
@@ -484,15 +485,14 @@ mod tests {
             let original = fs::read(&source).unwrap();
             let target_parent = target_volume_fixture();
             let target = target_parent.join("chosen-destination.sqlite3");
-            let source_key = if source_encrypted { "ExistingKey9!" } else { "" };
-            let report = publish_disposable_fixture_copy(
-                &source,
-                &target,
-                source_key,
-                "NewKey123!",
-                &[],
-            )
-            .unwrap();
+            let source_key = if source_encrypted {
+                "ExistingKey9!"
+            } else {
+                ""
+            };
+            let report =
+                publish_disposable_fixture_copy(&source, &target, source_key, "NewKey123!", &[])
+                    .unwrap();
             assert!(report.destination_created && report.encrypted_destination_verified);
             assert!(!report.execution_enabled);
             assert!(report.temporary_files_removed && report.full_disk_copy_verified);
@@ -500,17 +500,18 @@ mod tests {
             assert_eq!(fs::read(&source).unwrap(), original);
             assert_eq!(fs::read_dir(&target_parent).unwrap().count(), 1);
             let mut header = [0_u8; 16];
-            fs::File::open(&target).unwrap().read_exact(&mut header).unwrap();
+            fs::File::open(&target)
+                .unwrap()
+                .read_exact(&mut header)
+                .unwrap();
             assert_ne!(&header, b"SQLite format 3\0");
             let reopened =
                 Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
             reopened.pragma_update(None, "key", "NewKey123!").unwrap();
             let row: (String, Vec<u8>) = reopened
-                .query_row(
-                    "SELECT name,payload FROM records WHERE id=1",
-                    [],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
+                .query_row("SELECT name,payload FROM records WHERE id=1", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
                 .unwrap();
             assert_eq!(row, ("first".to_owned(), vec![0, 255]));
             let version: i64 = reopened
@@ -530,34 +531,15 @@ mod tests {
         let target_parent = target_volume_fixture();
         let target = target_parent.join("chosen-destination.sqlite3");
         fs::write(&target, b"existing-user-data").unwrap();
-        assert!(publish_disposable_fixture_copy(
-            &source,
-            &target,
-            "",
-            "NewKey123!",
-            &[],
-        )
-        .is_err());
+        assert!(publish_disposable_fixture_copy(&source, &target, "", "NewKey123!", &[],).is_err());
         assert_eq!(fs::read(&target).unwrap(), b"existing-user-data");
         assert_eq!(fs::read_dir(&target_parent).unwrap().count(), 1);
         let missing = target_parent.join("missing").join("chosen.sqlite3");
-        assert!(publish_disposable_fixture_copy(
-            &source,
-            &missing,
-            "",
-            "NewKey123!",
-            &[],
-        )
-        .is_err());
+        assert!(
+            publish_disposable_fixture_copy(&source, &missing, "", "NewKey123!", &[],).is_err()
+        );
         fs::remove_file(&target).unwrap();
-        assert!(publish_disposable_fixture_copy(
-            &source,
-            &target,
-            "",
-            "bad",
-            &[],
-        )
-        .is_err());
+        assert!(publish_disposable_fixture_copy(&source, &target, "", "bad", &[],).is_err());
         assert!(!target.exists());
         assert!(fs::read_dir(&target_parent).unwrap().next().is_none());
         assert_eq!(fs::read(&source).unwrap(), original);
@@ -571,25 +553,28 @@ mod tests {
         let original = fs::read(&source).unwrap();
         let parent = target_volume_fixture();
         let target = parent.join("corrected.sqlite3");
-        let report = publish_disposable_fixture_copy(
-            &source,
-            &target,
-            "",
-            "NewKey123!",
-            &changes(),
-        )
-        .unwrap();
+        let report =
+            publish_disposable_fixture_copy(&source, &target, "", "NewKey123!", &changes())
+                .unwrap();
         assert_eq!(report.staged_changes_verified, 7);
         assert!(report.destination_created && report.staged_values_match_ciphertext);
         let reopened =
             Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         reopened.pragma_update(None, "key", "NewKey123!").unwrap();
         let disabled: i64 = reopened
-            .query_row("SELECT disabled FROM alpha_users WHERE user_id='alice'", [], |r| r.get(0))
+            .query_row(
+                "SELECT disabled FROM alpha_users WHERE user_id='alice'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(disabled, 1);
         let name: String = reopened
-            .query_row("SELECT name FROM alpha_game_projects WHERE project_id='g1'", [], |r| r.get(0))
+            .query_row(
+                "SELECT name FROM alpha_game_projects WHERE project_id='g1'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(name, "Updated game");
         drop(reopened);
@@ -599,14 +584,9 @@ mod tests {
             *before = true;
         }
         let second = parent.join("should-not-exist.sqlite3");
-        assert!(publish_disposable_fixture_copy(
-            &source,
-            &second,
-            "",
-            "NewKey123!",
-            &stale,
-        )
-        .is_err());
+        assert!(
+            publish_disposable_fixture_copy(&source, &second, "", "NewKey123!", &stale,).is_err()
+        );
         assert!(!second.exists());
         assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
         assert_eq!(fs::read(&source).unwrap(), original);
@@ -624,14 +604,8 @@ mod tests {
         let original = fs::read(&source).unwrap();
         let parent = target_volume_fixture();
         let target = parent.join("real-published-fixture.sqlite3");
-        let report = publish_disposable_fixture_copy(
-            &source,
-            &target,
-            "",
-            "NewKey123!",
-            &[],
-        )
-        .unwrap();
+        let report =
+            publish_disposable_fixture_copy(&source, &target, "", "NewKey123!", &[]).unwrap();
         assert!(report.destination_created && report.encrypted_destination_verified);
         let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()

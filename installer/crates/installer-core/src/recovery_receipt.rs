@@ -8,7 +8,7 @@ use crate::migration_destination::same_underlying_file;
 use crate::migration_dry_run::ReviewCorrection;
 use rusqlite::Connection;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 const HEADER: &str = "MINGLEFIELD_RECOVERY_RECEIPT_V1";
@@ -441,7 +441,43 @@ fn read_receipt(path: &Path) -> Result<RecoveryReceiptV1, String> {
     if meta.file_type().is_symlink() || !meta.is_file() || meta.len() > MAX_RECEIPT_BYTES {
         return Err("Recovery receipt is not a small regular file".into());
     }
-    let bytes = fs::read(path).map_err(|_| "Cannot read recovery receipt")?;
+    // The initial pathname check is advisory: opening a separate handle can
+    // race a local rename. Recheck the opened object and bound reads to 2 KiB
+    // so a switched-in large file cannot force unbounded allocation.
+    let mut file = fs::File::open(path).map_err(|_| "Cannot open recovery receipt")?;
+    let opened = file
+        .metadata()
+        .map_err(|_| "Cannot inspect opened recovery receipt")?;
+    if !opened.is_file() || opened.len() > MAX_RECEIPT_BYTES || opened.len() != meta.len() {
+        return Err("Recovery receipt changed before reading".into());
+    }
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(MAX_RECEIPT_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "Cannot read bounded recovery receipt")?;
+    let after = fs::symlink_metadata(path).map_err(|_| "Cannot recheck recovery receipt path")?;
+    if bytes.len() as u64 != opened.len()
+        || bytes.len() as u64 > MAX_RECEIPT_BYTES
+        || after.file_type().is_symlink()
+        || !after.is_file()
+        || after.len() != opened.len()
+    {
+        return Err("Recovery receipt changed during reading".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if meta.dev() != opened.dev()
+            || meta.ino() != opened.ino()
+            || after.dev() != opened.dev()
+            || after.ino() != opened.ino()
+        {
+            return Err("Recovery receipt file identity changed".into());
+        }
+    }
+    // This bounds accidental/adversarial reads; it is not an authenticated
+    // receipt or a native handle-relative Windows pathname-race guarantee.
     let receipt = parse_receipt(&bytes)?;
     let name = path.file_name().and_then(|name| name.to_str());
     let by_id = recovery_receipt_filename(&receipt.operation_id)?;
@@ -740,6 +776,59 @@ mod tests {
             .unwrap(),
             ReceiptInspection::Unverified,
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn oversized_or_replaced_receipt_never_reopens_a_recovery_slot() {
+        let root = directory();
+        let (source, backup, destination, ciphertext) = fixture(&root);
+        let original = fs::read(&source).unwrap();
+        let receipt =
+            fixture_recovery_receipt(&source, &backup, &destination, &ciphertext, &[], &[])
+                .unwrap();
+        let reservation = reserve_destination_recovery_receipt(&destination, &receipt).unwrap();
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&reservation.receipt_path)
+            .unwrap()
+            .write_all(&vec![b'X'; MAX_RECEIPT_BYTES as usize])
+            .unwrap();
+        assert!(read_reserved_destination_operation_id(&destination).is_err());
+        assert_eq!(
+            inspect_reserved_destination_recovery_receipt(
+                &source,
+                &backup,
+                &destination,
+                &ciphertext,
+                &[],
+                &[],
+            )
+            .unwrap(),
+            ReceiptInspection::Unverified,
+        );
+        assert!(reserve_destination_recovery_receipt(&destination, &receipt).is_err());
+        #[cfg(unix)]
+        {
+            fs::remove_file(&reservation.receipt_path).unwrap();
+            std::os::unix::fs::symlink(&ciphertext, &reservation.receipt_path).unwrap();
+            assert!(read_reserved_destination_operation_id(&destination).is_err());
+            assert_eq!(
+                inspect_reserved_destination_recovery_receipt(
+                    &source,
+                    &backup,
+                    &destination,
+                    &ciphertext,
+                    &[],
+                    &[],
+                )
+                .unwrap(),
+                ReceiptInspection::Unverified,
+            );
+        }
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read(&backup).unwrap(), original);
+        assert!(!destination.exists());
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -1,6 +1,8 @@
 //! Isolated on-disk SQLCipher export rehearsal. No final destination writes.
 use crate::database_password::validate_new_database_password;
-use crate::migration_destination::{preview_migration_destination, PinnedDestinationParent};
+use crate::migration_destination::{
+    preview_migration_destination, same_underlying_file, PinnedDestinationParent,
+};
 use crate::migration_dry_run::{
     apply_staged_to_isolated_copy, table_counts, validate_alpha_schema, ReviewCorrection,
 };
@@ -401,8 +403,10 @@ pub fn execute_reviewed_encrypted_copy(
     }
     let backup = fs::canonicalize(backup_path)
         .map_err(|_| "Cannot identify backup file")?;
-    if backup == source || backup == before.destination {
-        return Err("Backup must be separate from source and destination".into());
+    if backup == source || backup == before.destination
+        || same_underlying_file(source, &backup)?
+    {
+        return Err("Backup must be a physically separate file from source and destination".into());
     }
     // A backup is not considered verified because a checkbox was selected.
     // Compare actual data, schema and metadata using independent read-only

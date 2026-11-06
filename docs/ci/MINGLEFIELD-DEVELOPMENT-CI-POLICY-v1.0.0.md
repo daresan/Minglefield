@@ -169,6 +169,11 @@ previous Shadow approval applies only to its previously tested scope.
 The destination-volume rehearsal M2.05 was committed separately and
 still needs actual CI evidence at this policy revision.
 
+**Detailed executable acceptance cases:** [M2 Subgoal Acceptance v1.0.0](M2-SUBGOAL-ACCEPTANCE-v1.0.0.md).
+This companion contains the positive, negative, recovery and data-preservation
+cases for each named M2 subgoal. Its definitions are test targets, not
+retroactive proof of completion.
+
 ## Mandatory acceptance-build request contents
 
 Update the **existing** `installer/gui/PORTABLE-TEST-REQUEST.md` only when

@@ -82,12 +82,18 @@ fn checked_sha256_of_file(path: &Path) -> Result<(String, u64), String> {
         return Err("Recovery input must be a regular non-symlink file".into());
     }
     let mut file = fs::File::open(path).map_err(|_| "Cannot open recovery file")?;
-    if !file.metadata().map_err(|_| "Cannot inspect open recovery file")?.is_file() {
+    if !file
+        .metadata()
+        .map_err(|_| "Cannot inspect open recovery file")?
+        .is_file()
+    {
         return Err("Recovery input is not a regular file".into());
     }
-    let (digest, size) = sha256_reader_hex(&mut file)
-        .map_err(|_| "Cannot stream recovery file fingerprint")?;
-    let after = file.metadata().map_err(|_| "Cannot recheck recovery file")?;
+    let (digest, size) =
+        sha256_reader_hex(&mut file).map_err(|_| "Cannot stream recovery file fingerprint")?;
+    let after = file
+        .metadata()
+        .map_err(|_| "Cannot recheck recovery file")?;
     if size != metadata.len() || size != after.len() {
         return Err("Recovery file size changed during fingerprinting".into());
     }

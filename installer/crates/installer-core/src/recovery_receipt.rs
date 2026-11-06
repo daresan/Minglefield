@@ -3,7 +3,7 @@
 //! NOT provenance, permission, exclusive ownership, crash durability or trust.
 //! This module is not yet wired into production publication or installer GUI.
 
-use crate::integrity::sha256_hex;
+use crate::integrity::{sha256_hex, sha256_reader_hex};
 use crate::migration_destination::same_underlying_file;
 use crate::migration_dry_run::ReviewCorrection;
 use rusqlite::Connection;
@@ -13,9 +13,8 @@ use std::path::{Component, Path, PathBuf};
 
 const HEADER: &str = "MINGLEFIELD_RECOVERY_RECEIPT_V1";
 const MAX_RECEIPT_BYTES: u64 = 2048;
-// The first slice is bounded to disposable, small Alpha fixtures. A
-// streaming fingerprint and real directory durability are release gates.
-const MAX_FIXTURE_FILE_BYTES: u64 = 64 * 1024 * 1024;
+// SHA-256 file verification is streaming; database size is not restricted
+// to an arbitrary fixture cap. Directory crash durability is separate.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoveryReceiptV1 {
@@ -56,7 +55,6 @@ fn validate_receipt(record: &RecoveryReceiptV1) -> Result<(), String> {
         .iter()
         .all(|hash| valid_lower_hex(hash, 64))
         || record.ciphertext_bytes < 16
-        || record.ciphertext_bytes > MAX_FIXTURE_FILE_BYTES
     {
         return Err("Invalid bounded M2.07 recovery receipt fields".into());
     }
@@ -80,17 +78,20 @@ pub fn new_recovery_operation_id() -> Result<String, String> {
 fn checked_sha256_of_file(path: &Path) -> Result<(String, u64), String> {
     let metadata =
         fs::symlink_metadata(path).map_err(|_| "Cannot inspect recovery fixture file")?;
-    if metadata.file_type().is_symlink()
-        || !metadata.is_file()
-        || metadata.len() > MAX_FIXTURE_FILE_BYTES
-    {
-        return Err("Recovery fixture is not a supported regular test file".into());
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("Recovery input must be a regular non-symlink file".into());
     }
-    let data = fs::read(path).map_err(|_| "Cannot read recovery fixture bytes")?;
-    if data.len() as u64 != metadata.len() {
-        return Err("Recovery fixture size changed during inspection".into());
+    let mut file = fs::File::open(path).map_err(|_| "Cannot open recovery file")?;
+    if !file.metadata().map_err(|_| "Cannot inspect open recovery file")?.is_file() {
+        return Err("Recovery input is not a regular file".into());
     }
-    Ok((sha256_hex(&data), data.len() as u64))
+    let (digest, size) = sha256_reader_hex(&mut file)
+        .map_err(|_| "Cannot stream recovery file fingerprint")?;
+    let after = file.metadata().map_err(|_| "Cannot recheck recovery file")?;
+    if size != metadata.len() || size != after.len() {
+        return Err("Recovery file size changed during fingerprinting".into());
+    }
+    Ok((digest, size))
 }
 
 fn destination_name_digest(destination: &Path) -> Result<String, String> {

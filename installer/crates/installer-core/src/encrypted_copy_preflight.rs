@@ -1513,6 +1513,31 @@ mod tests {
                 },
                 "{fault}"
             );
+            // The Tauri-facing classifier must also work after the
+            // worker has exited, without inherited migration state.
+            let resumed = inspect_interrupted_encrypted_copy(
+                &source,
+                &backup,
+                &target,
+                "",
+                "NewKey123!",
+                &[],
+                &[],
+            )
+            .unwrap();
+            assert_eq!(
+                resumed.state,
+                if final_expected {
+                    InterruptedEncryptedCopyState::PublishedContentMatches
+                } else {
+                    InterruptedEncryptedCopyState::ReservationWithoutDestination
+                },
+                "{fault}"
+            );
+            assert!(resumed.operation_id.is_some(), "{fault}");
+            assert!(!resumed.automatic_retry_permitted);
+            assert!(!resumed.automatic_delete_permitted);
+            assert!(!resumed.installation_enabled);
             // Deliberately remove only our disposable test fixture tree.
             fs::remove_dir_all(parent).unwrap();
         }

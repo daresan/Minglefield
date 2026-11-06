@@ -84,7 +84,8 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <pre id="experimental-copy-result" role="status" aria-live="polite">Not executed. Requires a current full database rehearsal, encrypted temporary-copy proof, independent backup and exact confirmation.</pre>
 </fieldset>
 <fieldset id="read-only-recovery-controls">
-<legend>Recovery status – inspect existing migration (read-only)</legend>
+<legend>Optionale Diagnose einer früheren Migration (nur lesen)</legend>
+<p class="help">Nach einem Abbruch kannst Du die Migration mit derselben unveränderten Quelle und dem geprüften Backup auf einen <strong>neuen, freien Zielpfad</strong> erneut starten. Die Diagnose des alten Zielpfads ist optional und für den neuen Versuch nicht erforderlich. Bestehende Zieldateien oder Belege niemals automatisch überschreiben oder löschen.</p>
 <p class="help">Prüft den ausgewählten Quell- und Backup-Pfad, den gespeicherten Recovery-Beleg und die verschlüsselte Zieldatei, ohne Dateien zu verändern. Dafür dieselben Datenbankpasswörter und dieselbe Auswahl der Änderungen und Schemaobjekte wie beim ursprünglichen Versuch verwenden. Ein passender Beleg beweist keine Autorisierung und erlaubt weder automatisches Fortsetzen noch Rollback oder Löschen.</p>
 <p class="help">Nach einem Abbruch genügt für den ersten, vorläufigen Dateistatus der bisherige Zielpfad. Diese Kurzprüfung liest nur Dateieinträge und einen eventuell vorhandenen Recovery-Beleg; sie prüft KEINE SQLCipher-Inhalte, benötigt keine Passwörter und berechtigt niemals zu einem Wiederholungsversuch.</p>
 <button id="inspect-interrupted-copy-status-only" type="button" class="secondary">Kurzstatus prüfen – nur Ziel und Beleg</button>

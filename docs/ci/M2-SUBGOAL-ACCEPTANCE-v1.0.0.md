@@ -118,7 +118,23 @@ migration path and separate real-user backup safeguards.
   the controlled Alpha gate passes; further release/repair builds only
   after a documented reason and the stronger acceptance gates.
 
-### M2.07 — Crash recovery and rollback
+### M2.07 — Crash recovery and rollback (full automation deferred)
+
+**Binding owner reprioritization, 2026-11-07:** The original database
+and separately verified backup are preserved by the controlled Alpha copy,
+and a failure is recoverable for the **current Alpha use case** by repeating
+the existing consented migration on a fresh, unused target filename. The
+previous target/receipt is never automatically deleted, overwritten or
+reused. The existing M2.07 read-only diagnostic and tests remain available
+**optionally**, not as an additional check that must pass before a new
+destination is selected. Do not extend M2.07 journal/rollback,
+handle-relative durability, or power-loss fixtures as a development
+dependency of M2.08–M2.11. These stronger recovery guarantees stay open
+for later update/repair/general-release scope. The immediate work resumes
+at **M2.08 authenticated one-time local Host setup**, followed by actual
+Minglefield installation and operational launch. Source/backup preservation,
+exclusive target creation and first-run authorization are never waived.
+
 
 **M2.07 credential-free restart triage (post-testbuild, 2026-11-06):**
 The existing Tauri read-only recovery command now has **two explicit GUI

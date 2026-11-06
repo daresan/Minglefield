@@ -785,7 +785,9 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
       String(error) + ". Inspect the chosen destination AND any Minglefield recovery receipt " +
       "before another attempt. A receipt may already reserve this destination even if no encrypted " +
       "file was published. Do not delete or overwrite receipts, source files, backups or existing " +
-      "destination files automatically; manual inspection is required.";
+      "destination files automatically. For a new attempt, select a DIFFERENT, UNUSED destination " +
+      "filename and repeat the existing source/backup/consent checks; inspecting the old attempt " +
+      "is optional and must never block a new destination.";
   } finally {
     button.disabled = false;
   }

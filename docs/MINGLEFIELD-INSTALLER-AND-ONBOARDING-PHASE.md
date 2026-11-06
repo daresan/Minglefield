@@ -112,11 +112,12 @@ This is not automatic ownership merely because a process runs on a computer:
   target. All first-run inserts are included in final post-migration
   verification, with no user secrets in the report.
 
-The already verified portable setup-manager GUI and dry-run migration
-remain read-only until the separate operational-runtime packaging,
-exclusive atomic encrypted publication, one-time local handshake and
-recovery gates are finished. **No implementation-only helper counts as
-proof that first-run authorization is complete.**
+The portable Setup Manager now supports a separately authorized, non-overwriting
+**experimental encrypted destination copy** in addition to read-only rehearsals;
+it does not yet install Minglefield, package the operational runtime, or claim
+a Host. The verified encrypted source and backup must remain untouched.
+**No implementation-only helper counts as proof that first-run authorization
+is complete.**
 
 ## Existing repository boundaries and evidence to inspect
 
@@ -126,6 +127,39 @@ proof that first-run authorization is complete.**
 - `scripts/minglefield_environment.py` and `scripts/minglefield_platform_preflight.py`: Python-dependent **developer alpha tools**, not a first-install GUI.
 - `requirements-ci.txt` is **not** a complete runtime dependency manifest.
 - Existing SQLite user data and configured Hosts must survive install, repair, update, and failed migration; platform update must be distinguished from game/integration updates.
+
+## Binding owner correction: simple restart at a new target, resume real installation (2026-11-07)
+
+The operator rejected further development of crash recovery as a prerequisite
+for the **experimental/local Alpha installation**. The already verified
+SQLCipher-copy design leaves the original database and the independent backup
+unchanged and publishes only an explicitly selected new target without
+overwriting existing files. A power cut may leave a receipt, staging file
+or incomplete attempt: **do not interpret it as a successful installation,
+reuse its occupied/reserved target, delete it automatically, or assume the old
+target is free**. On restart the operator may choose a *different, unused
+destination filename* and execute the already verified migration procedure
+again after the normal backup/source/consent checks. An optional old-target
+diagnostic may be useful for troubleshooting but must **never be a mandatory
+preflight gate** for retrying on a fresh target.
+
+**Execution order now:** stop extending M2.07 read-only recovery, journal,
+automatic rollback or power-loss testing for speculative scenarios. Preserve
+implemented recovery code and its successful tests; defer general crash-durable
+recovery to the appropriate lifecycle/release work. Advance directly to
+**M2.08: single-use, installation-bound authorization and first local Host
+administrator `mingleadmin`**, then M2.09–M2.11 operational SQLCipher
+runtime, actually installed Minglefield application payload and launch.
+The separate sign-in password, owner-scoped Host authority, no-silent-claim,
+replay resistance, occupied-target protection, independent verified backup,
+and unchanged original data **remain mandatory**. Never treat the
+database-only experimental copy as a completed Minglefield installation.
+
+This scope correction supersedes previous M2.07-first sequencing wherever
+present in earlier milestone documentation. M2.07 historic CI evidence remains
+valid; its unimplemented full rollback/power-loss goals remain explicitly
+deferred, not silently declared complete. No new portable testbuild follows
+from this decision alone.
 
 ## M2.06 priority correction: executable migration before further hardening (2026-11-06)
 

@@ -40,13 +40,6 @@ jobs:
       - run: cargo check --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-      - name: Install pinned Python SQLCipher wheel for Rust-export compatibility
-        run: python -m pip install --only-binary=:all: --no-deps sqlcipher3==0.6.4
-      - name: Cross-runtime test - Rust SQLCipher export to Python Host onboarding and back
-        run: cargo test --package minglefield-installer-core --locked cross_runtime_sqlcipher_export_python_first_run -- --ignored
       - name: Offline installer release preparation tests
         run: python -m unittest discover -s scripts -p "test_*.py" -v
       - name: Inspect transitive Alpha runtime imports (read-only)

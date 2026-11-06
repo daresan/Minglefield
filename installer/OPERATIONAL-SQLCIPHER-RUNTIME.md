@@ -148,9 +148,14 @@ password or a client-controlled boolean. No `migrationEnabled` or
 
 The installer now includes an **explicit opt-in integration test** in
 `installer/crates/installer-core/src/encrypted_copy_preflight.rs` named
-`cross_runtime_sqlcipher_export_python_first_run`. It is run by the
-**existing three-platform Installer Rust checks** workflow after installing
-the reviewed `sqlcipher3==0.6.4` Python wheel on Python 3.11.
+`cross_runtime_sqlcipher_export_python_first_run`. It requires
+Python 3.11 and a compatible `sqlcipher3==0.6.4` wheel.
+**The cross-language test has not yet completed CI acceptance**; it is
+marked `#[ignore]` in the normal Rust suite. Attempts to insert an
+additional test step into GitHub Actions failed workflow validation,
+so the existing installer CI workflow remains unchanged until an
+independently validated test runner is available. Do not cite ordinary
+Rust CI success as proof of cross-language compatibility.
 
 The test reuses the real Rust `sqlcipher_export` operation to create a
 randomly staged SQLCipher database, then starts a real Python subprocess

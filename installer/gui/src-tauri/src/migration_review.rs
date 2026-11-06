@@ -470,6 +470,10 @@ pub struct ExperimentalEncryptedCopyResult {
 /// an existing independent backup against the current source and refuses
 /// collisions before generating an encrypted destination. No Host claim or
 /// app install is performed; this is not a general-purpose migration API.
+// Tauri's IPC command intentionally accepts the existing eight flat wizard
+// fields; combining them into a new payload would change the public invoke
+// contract without adding a security boundary.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_experimental_encrypted_copy(
     source_path: String,

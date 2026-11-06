@@ -65,3 +65,43 @@ test("mismatched source objects are shown by name without copying SQL or secrets
   assert.deepEqual(report.extraObjects,["local_extension"]);
   assert.equal(report.migrationEnabled,false);
 });
+
+test("a single known missing game-install index is a warning, not full schema approval", () => {
+  const original = source();
+  const expected = {
+    ...original.registeredSchemaObjects,
+    verified: false,
+    reason: "alpha_legacy_active_game_index_missing",
+    expectedSchemaEntryCount: 59,
+    matchedSchemaEntryCount: 58,
+    expectedIndexCount: 32,
+    missingObjects: ["uq_game_install_one_active_project"]
+  };
+  const result = assessRegisteredSchemaObjects({
+    ...original,
+    registeredSchemaObjects: expected
+  });
+  assert.equal(result.reason, "alpha_legacy_active_game_index_missing");
+  assert.equal(result.verified, false);
+  assert.equal(result.migrationEnabled, false);
+  assert.deepEqual(result.missingObjects, ["uq_game_install_one_active_project"]);
+});
+
+test("conflicting active Game installs stay blocked despite otherwise matching legacy schema", () => {
+  const original = source();
+  const result = assessRegisteredSchemaObjects({
+    ...original,
+    registeredSchemaObjects: {
+      ...original.registeredSchemaObjects,
+      verified: false,
+      reason: "alpha_legacy_active_game_index_conflicts",
+      expectedSchemaEntryCount: 59,
+      matchedSchemaEntryCount: 58,
+      expectedIndexCount: 32,
+      missingObjects: ["uq_game_install_one_active_project"]
+    }
+  });
+  assert.equal(result.reason, "alpha_legacy_active_game_index_conflicts");
+  assert.equal(result.verified, false);
+  assert.equal(result.migrationEnabled, false);
+});

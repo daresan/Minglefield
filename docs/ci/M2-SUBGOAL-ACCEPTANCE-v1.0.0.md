@@ -120,6 +120,36 @@ migration path and separate real-user backup safeguards.
 
 ### M2.07 — Crash recovery and rollback
 
+**M2.07 read-only operator recovery triage — implemented in the
+shared core and Tauri GUI; manual portable acceptance pending:**
+The installer can now inspect a user-selected interrupted Alpha
+database-copy attempt after Setup Manager restarts, using the saved
+destination-specific receipt and the source/backup keys, staged edits
+and registered schema-object choices. It reports one of five
+read-only states: no recorded operation, unrecorded occupied target,
+reservation without final target, published ciphertext matching
+the receipt and complete corrected SQLCipher snapshot, or
+unverifiable/manual review required. Mismatched source/backup,
+corrupted receipts, wrong ciphertext key and changed schema
+selection all fail closed. The existing Tauri Review page exposes a
+dedicated **Recovery-Zustand prüfen (nur lesen)** button; it does
+not depend on a stale in-memory rehearsal or invoke any filesystem
+writer. The frontend independently validates the returned operation
+ID and refuses permission-bearing flags.
+
+**All five status classes are informational only.** The command
+always returns `automaticRetryPermitted=false`,
+`automaticDeletePermitted=false` and
+`installationEnabled=false`. A matching receipt is a checksum-based
+consistency signal and remains unauthenticated evidence, NOT proof
+of provenance or owner authorization. There is no automatic
+rollback, restart, deletion, Host claim or production installation.
+This command is subject to Rust cross-platform tests, Tauri command
+compilation/tests and frontend unit/build checks, with distinct
+CI statuses tracked separately. A subsequent **explicitly approved**
+portable GUI milestone build is required for human acceptance;
+ordinary commits do not trigger any packaging.
+
 **M2.07 receipt v1: integrated pre-publication operation reservation
 (2026-11-06, controlled Alpha path; full milestone still OPEN).**
 The first fixture-only recovery receipt was tested on all three platforms

@@ -829,6 +829,105 @@ mod tests {
     /// A separate test-binary process uses the existing SQLCipher stage/
     /// publication implementation and exits without unwinding at one private
     /// checkpoint. This worker is inert in ordinary test runs.
+    /// Fresh test process: read the independently persisted recovery record
+    /// and the real SQLCipher destination without relying on the writer's
+    /// in-memory state or any Minglefield application permission.
+    #[test]
+    fn m207_recovery_receipt_fresh_process_reader() {
+        use crate::recovery_receipt::{inspect_fixture_recovery_receipt, ReceiptInspection};
+
+        let root = match std::env::var_os("MINGLEFIELD_M207_RECEIPT_PARENT") {
+            Some(value) => PathBuf::from(value),
+            None => return,
+        };
+        let parent = fs::canonicalize(&root).unwrap();
+        let temp = fs::canonicalize(std::env::temp_dir()).unwrap();
+        assert_eq!(parent.parent(), Some(temp.as_path()));
+        assert!(parent
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("minglefield-target-volume-"));
+        let operation_id = std::env::var("MINGLEFIELD_M207_RECEIPT_OPERATION")
+            .expect("Missing test-only recovery operation ID");
+        let source = parent.join("source.sqlite3");
+        let backup = parent.join("backup.sqlite3");
+        let target = parent.join("destination.sqlite3");
+        let filename = crate::recovery_receipt::recovery_receipt_filename(&operation_id)
+            .expect("Invalid test-only operation ID");
+        let receipt_path = parent.join(filename);
+        let classification = inspect_fixture_recovery_receipt(
+            &receipt_path, &operation_id, &source, &backup, &target,
+            &target, &[], &[],
+        ).unwrap();
+        assert_eq!(classification, ReceiptInspection::Matched);
+        let content = inspect_encrypted_copy_recovery(
+            &source, &target, "", "NewKey123!", &[],
+        ).unwrap();
+        assert_eq!(content.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
+        assert!(!content.automatic_retry_permitted);
+        assert!(!content.automatic_delete_permitted);
+    }
+
+    #[test]
+    fn m207_published_sqlcipher_receipt_survives_fresh_process_validation() {
+        use crate::recovery_receipt::{
+            fixture_recovery_receipt, inspect_fixture_recovery_receipt,
+            write_fixture_recovery_receipt, ReceiptInspection,
+        };
+        use std::process::{Command, Stdio};
+
+        let root = target_volume_fixture();
+        let source = root.join("source.sqlite3");
+        let backup = root.join("backup.sqlite3");
+        let target = root.join("destination.sqlite3");
+        let original_fixture = fixture(false);
+        fs::copy(&original_fixture, &source).unwrap();
+        fs::remove_file(original_fixture).unwrap();
+        fs::copy(&source, &backup).unwrap();
+        let source_bytes = fs::read(&source).unwrap();
+        let proof = publish_disposable_fixture_copy(
+            &source, &target, "", "NewKey123!", &[],
+        ).unwrap();
+        assert!(proof.encrypted_destination_verified);
+        let receipt = fixture_recovery_receipt(
+            &source, &backup, &target, &target, &[], &[],
+        ).unwrap();
+        let receipt_path = write_fixture_recovery_receipt(&root, &receipt).unwrap();
+        let result = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("encrypted_copy_preflight::tests::m207_recovery_receipt_fresh_process_reader")
+            .arg("--nocapture")
+            .env("MINGLEFIELD_M207_RECEIPT_PARENT", &root)
+            .env("MINGLEFIELD_M207_RECEIPT_OPERATION", &receipt.operation_id)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("Cannot launch independent receipt reader");
+        assert!(result.success(), "Independent recovery receipt reader rejected the fixture");
+        assert_eq!(fs::read(&source).unwrap(), source_bytes);
+        assert_eq!(fs::read(&backup).unwrap(), source_bytes);
+        assert!(write_fixture_recovery_receipt(&root, &receipt).is_err());
+
+        // A matching database is not sufficient if the stored operation
+        // receipt has been altered. Never infer recovery authorization.
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&receipt_path)
+            .unwrap()
+            .write_all(b"tampered=yes\n")
+            .unwrap();
+        assert_eq!(
+            inspect_fixture_recovery_receipt(
+                &receipt_path, &receipt.operation_id, &source, &backup,
+                &target, &target, &[], &[],
+            ).unwrap(),
+            ReceiptInspection::Unverified,
+        );
+        assert_eq!(fs::read(&source).unwrap(), source_bytes);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn m207_abrupt_exit_worker() {
         use std::process;

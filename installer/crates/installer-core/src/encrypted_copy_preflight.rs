@@ -547,6 +547,66 @@ mod tests {
     }
 
     #[test]
+    fn experimental_publication_requires_real_backup_and_explicit_consent() {
+        let source = editable_alpha_fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let backup = parent.join("separate-verified-backup.sqlite3");
+        let destination = parent.join("approved-encrypted.sqlite3");
+        let args = |backup: &Path, confirmation: &str| {
+            execute_reviewed_encrypted_copy(
+                &source, &destination, backup, "", "NewKey123!", &changes(),
+                confirmation,
+            )
+        };
+        assert!(args(&backup, EXPERIMENTAL_COPY_CONFIRMATION).is_err());
+        assert!(!destination.exists());
+        fs::copy(&source, &backup).unwrap();
+        assert!(args(&backup, "YES").is_err());
+        assert!(!destination.exists());
+
+        // An existing hard link is not an independent backup.
+        let alias = parent.join("source-hardlink.sqlite3");
+        fs::hard_link(&source, &alias).unwrap();
+        assert!(args(&alias, EXPERIMENTAL_COPY_CONFIRMATION).is_err());
+        fs::remove_file(&alias).unwrap();
+
+        let result = args(&backup, EXPERIMENTAL_COPY_CONFIRMATION).unwrap();
+        assert!(result.destination_created && result.encrypted_destination_verified);
+        assert!(!result.execution_enabled);
+        assert_eq!(result.staged_changes_verified, 7);
+        assert!(result.temporary_files_removed && result.full_disk_copy_verified);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert!(args(&backup, EXPERIMENTAL_COPY_CONFIRMATION).is_err());
+        assert!(destination.exists());
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn experimental_publication_rejects_outdated_or_nonmatching_backup() {
+        let source = editable_alpha_fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let backup = parent.join("backup.sqlite3");
+        let destination = parent.join("new-encrypted.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        let db = Connection::open(&backup).unwrap();
+        db.execute("UPDATE alpha_users SET disabled=1 WHERE user_id='alice'", [])
+            .unwrap();
+        drop(db);
+        assert!(execute_reviewed_encrypted_copy(
+            &source, &destination, &backup, "", "NewKey123!", &[],
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        ).is_err());
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&source).unwrap(), original);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
     fn disposable_fixture_publication_creates_real_ciphertext_on_selected_volume() {
         for source_encrypted in [false, true] {
             let source = fixture(source_encrypted);

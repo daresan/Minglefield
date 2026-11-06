@@ -177,58 +177,66 @@ schema-structure sense: the old type selector affected individual
 cell storage classes. It has nevertheless been removed because it was
 outside the approved values-only scope.
 
-## Shadow M2.06 finding: lone missing active Game-install index (2026-11-06)
+## Generic opt-in missing-schema additions during migration (owner decision, 2026-11-06)
 
-**Observed in the owner-provided installer output, not independently read
-from the owner's PC:** the existing source and its successfully
-published SQLCipher copy contain **27 tables, 143 checked rows and 58
-schema entries**. The complete current registered DDL expects **59
-entries**, including 32 indexes; the exact one missing is
-`uq_game_install_one_active_project`. No extra or changed schema
-objects were reported. One staged row-value correction was verified.
+**Policy:** A missing registered schema object is a **possible older database
+version or incomplete historical initialization**, not automatically an
+incident, vulnerability or evidence of tampering. Do not create special-case
+error codes, migration paths or operator approvals for individual missing
+indexes, tables or other registered objects. The read-only inspector reports
+the complete generic `missingObjects` list with
+`reason=alpha_required_schema_objects_missing` and
+`verified=false`. This does not silently claim that the schema is complete
+or authorize application installation.
 
-**Origin:** this index is created by the server's
-`HostCommitPolicy.__init__` in
-`server/sec01_host_commit_policy_sim.py`. It is a partial UNIQUE index
-on `sec01_game_install_journal(host_id, project_id)` restricted to
-`state NOT IN ('cancelled','committed','rolled_back')`, preventing
-concurrent active Game-install operations for the same Host/project
-even across independent SQLite connections. Earlier/uninitialized
-local Alpha databases may lack that index. We cannot determine the
-exact historical reason from the UI report alone, nor infer the
-number of active journal operations on the owner's PC.
+**Operator choice in the existing Data Review page:** if one or more
+registered objects are missing, ask whether to add **one, several, all,
+or none** of them to the **new SQLCipher destination**. No additions are
+selected by default. A changed selection requires refreshed migration
+review/verification; the existing backup and explicit final-copy consent
+remain mandatory. The original source and independent backup are never
+modified by this option. The installer reports the names of objects
+actually added and verifies them against the encrypted destination.
 
-**Finding:** the fully verified SQLCipher export intentionally
-preserved the exact source schema (58 entries). The missing 59th
-entry is not lost during migration, and file-size differences are
-outside this investigation. **Data fidelity success does not imply
-current application schema compatibility.** The encrypted copy is
-not yet approved as the live Minglefield database.
+**Generic verified execution:** the client submits **names only**, never
+executable SQL. The Rust core determines which names are currently missing
+from its independently constructed, registered reference schema and uses
+only registered CREATE statements. A single transaction executes the
+selected table/index DDL on the isolated in-memory copy **before** encrypted
+export. SQLite creates any implicit primary-key/unique indexes as table
+dependencies. The generic engine checks that existing schema objects are
+unchanged, no unrelated object was added, the chosen objects exist, and
+the resulting database passes integrity and foreign-key checks.
+If a selected UNIQUE index cannot be created because the current data
+contain duplicates, SQLite rejects it and the **entire selected set
+rolls back**. This is an ordinary schema/consistency conflict, not a
+special-case security classification. The new destination is not
+published on validation failure; no rows are deleted or altered
+to force the schema to fit.
 
-**New read-only diagnostic:** when the other 58 registered entries match
-exactly, this index is the *only* missing object, and there are no
-extra/incompatible objects, the Rust schema audit checks for multiple
-active journal rows per Host/project, using the same partial-index
-predicate. It reports:
-- `alpha_legacy_active_game_index_missing` — no conflicting active
-  Host/project groups detected in the inspected consistent snapshot;
-- `alpha_legacy_active_game_index_conflicts` — at least one group
-  would conflict with the required uniqueness invariant.
+**Boundary:** Only objects with trusted registered DDL can be offered
+for automatic addition. Unknown schema objects, incompatible definitions,
+missing prerequisites and structural changes that cannot be represented
+as additive DDL require manual/versioned review; they must not cause
+arbitrary source SQL execution. Adding a chosen subset can leave the
+new destination at a **partial schema version**; the later operational
+runtime must still require its complete, independently verified schema.
+This generic addition does not create `mingleadmin`, install Minglefield,
+enable global administration or establish crash durability.
 
-In **both** cases, `verified=false` and `migrationEnabled=false`.
-Neither condition permits a blind `CREATE INDEX` on the original
-or automatically changes a published encrypted destination. Unknown
-DDL mismatches retain the existing fail-closed diagnostics.
+### Example observed on Shadow (not a special path)
 
-**Required before operational activation:** define an explicit,
-versioned, transactional conversion for this *exact* known legacy
-variant, applied only to a verified isolated copy after validating
-journal uniqueness. Create the exact canonical index, re-audit
-all 59 schema entries, verify rows and foreign keys, and publish
-only through the approved migration/recovery route. If duplicates
-exist, stop and report the conflict; do not silently cancel,
-delete, merge or rewrite Game-install journal rows. Preserve the
-source and backups. The subsequent M2.07 recovery contract must
-handle interrupted conversion without pretending it already
-happened. No live source file or existing published Shadow
-database is modified by this analysis.
+The owner's M2.06 result showed **27 tables, 143 rows, 58 preserved
+schema entries**, while the current registered reference expects **59**.
+The single missing object is
+`uq_game_install_one_active_project`. The original copy result was
+correct and preserved the source's 58 entries; this difference is
+not a SQLCipher data-loss error. The index ordinarily prevents
+multiple concurrent active Game-install operations per Host/project,
+and can be selected through the **same generic missing-object list**
+as every other registered index or table. If existing rows prevent
+its creation, the user receives a normal consistency error and may
+resolve the data discrepancy separately. The installer never
+blindly changes the original source or automatically edits journal
+rows. No conclusion is drawn about conflicts in the owner's private
+database without reading it.

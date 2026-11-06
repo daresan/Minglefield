@@ -1,6 +1,6 @@
 //! Isolated on-disk SQLCipher export rehearsal. No final destination writes.
 use crate::database_password::validate_new_database_password;
-use crate::migration_destination::preview_migration_destination;
+use crate::migration_destination::{preview_migration_destination, PinnedDestinationParent};
 use crate::migration_dry_run::{
     apply_staged_to_isolated_copy, table_counts, validate_alpha_schema, ReviewCorrection,
 };
@@ -184,6 +184,10 @@ pub fn rehearse_encrypted_test_copy_on_destination_volume(
         .destination
         .parent()
         .ok_or("Destination-volume rehearsal parent unavailable")?;
+    // Keep the opened native destination-parent identity pinned across the
+    // entire isolated export, verification and temporary-link rehearsal.
+    // This is still NOT a safe final destination publication primitive.
+    let parent_guard = PinnedDestinationParent::open(&before)?;
     let proof = rehearse_encrypted_test_copy_under(
         source_path,
         existing_password,
@@ -191,6 +195,7 @@ pub fn rehearse_encrypted_test_copy_on_destination_volume(
         corrections,
         Some(parent),
     )?;
+    parent_guard.revalidate()?;
     let after = preview_migration_destination(source_path, destination_path)
         .map_err(|_| "Destination-volume rehearsal path changed")?;
     if before != after {

@@ -208,6 +208,18 @@ pub fn rehearse_encrypted_test_copy_on_destination_volume(
     Ok(proof)
 }
 
+/// Private checkpoints for deterministic tests of the existing encrypted
+/// staging/publication path. Production callers can only reach this path
+/// through the wrapper's no-op callback; no user input selects a checkpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CopyCheckpoint {
+    BeforeStaging,
+    AfterEncryptedExport,
+    BeforeFinalPublication,
+    AfterFinalPublication,
+    DuringFinalVerification,
+}
+
 fn rehearse_encrypted_test_copy_under(
     source_path: &Path,
     existing_password: &str,
@@ -215,6 +227,26 @@ fn rehearse_encrypted_test_copy_under(
     corrections: &[ReviewCorrection],
     staging_parent: Option<&Path>,
     publication_target: Option<&Path>,
+) -> Result<EncryptedTestCopy, String> {
+    rehearse_encrypted_test_copy_under_with_checkpoints(
+        source_path,
+        existing_password,
+        new_password,
+        corrections,
+        staging_parent,
+        publication_target,
+        |_| Ok(()),
+    )
+}
+
+fn rehearse_encrypted_test_copy_under_with_checkpoints(
+    source_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    staging_parent: Option<&Path>,
+    publication_target: Option<&Path>,
+    mut checkpoint: impl FnMut(CopyCheckpoint) -> Result<(), String>,
 ) -> Result<EncryptedTestCopy, String> {
     validate_new_database_password(new_password)
         .map_err(|_| "A strong new SQLCipher password is required")?;
@@ -249,12 +281,14 @@ fn rehearse_encrypted_test_copy_under(
             true,
         )?;
     }
+    checkpoint(CopyCheckpoint::BeforeStaging)?;
     let private = match staging_parent {
         Some(parent) => PrivateTempDir::create_under(&source, parent)?,
         None => PrivateTempDir::create(&source)?,
     };
     let staged = private.path.join("temporary-encrypted.sqlite3");
     export(&corrected_memory, &staged, new_password)?;
+    checkpoint(CopyCheckpoint::AfterEncryptedExport)?;
     let mut header = [0_u8; 16];
     fs::File::open(&staged)
         .map_err(|_| "Cannot reopen encrypted file header")?
@@ -335,14 +369,17 @@ fn rehearse_encrypted_test_copy_under(
     // No hard-link operation may overwrite an existing destination file.
     // Full handle-relative and crash-durable release gates remain separate.
     let fixture_created = if let Some(target) = publication_target {
+        checkpoint(CopyCheckpoint::BeforeFinalPublication)?;
         fs::hard_link(&staged, target)
             .map_err(|_| "Cannot exclusively publish fixture ciphertext")?;
+        checkpoint(CopyCheckpoint::AfterFinalPublication)?;
         let published_fixture =
             Connection::open_with_flags(target, OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .map_err(|_| "Cannot reopen published fixture ciphertext")?;
         published_fixture
             .pragma_update(None, "key", new_password)
             .map_err(|_| "Cannot unlock published fixture ciphertext")?;
+        checkpoint(CopyCheckpoint::DuringFinalVerification)?;
         let final_fidelity = verify_snapshot_equality(&corrected_memory, &published_fixture)?;
         if final_fidelity != fidelity || !final_fidelity.values_verified {
             return Err("Published fixture data differs from verified stage".to_owned());
@@ -723,6 +760,121 @@ mod tests {
         );
         assert!(!without_edits.automatic_delete_permitted);
         assert_eq!(fs::read(&source).unwrap(), original);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn injected_interruption_at_every_publication_boundary_keeps_source_and_occupied_files() {
+        // Returning an error models a controlled process interruption and
+        // exercises RAII cleanup; it is NOT a power-loss durability test.
+        for fault in [
+            CopyCheckpoint::BeforeStaging,
+            CopyCheckpoint::AfterEncryptedExport,
+            CopyCheckpoint::BeforeFinalPublication,
+            CopyCheckpoint::AfterFinalPublication,
+            CopyCheckpoint::DuringFinalVerification,
+        ] {
+            let source = fixture(false);
+            let source_bytes = fs::read(&source).unwrap();
+            let parent = target_volume_fixture();
+            let destination = parent.join("verified-new-target.sqlite3");
+            let untouched = parent.join("unrelated-preexisting.txt");
+            fs::write(&untouched, b"untouched-existing-file").unwrap();
+            let mut intercepted = 0;
+            let result = rehearse_encrypted_test_copy_under_with_checkpoints(
+                &source,
+                "",
+                "NewKey123!",
+                &[],
+                Some(&parent),
+                Some(&destination),
+                |point| {
+                    if point == fault {
+                        intercepted += 1;
+                        return Err("synthetic interruption before completion".to_owned());
+                    }
+                    Ok(())
+                },
+            );
+            assert!(result.is_err(), "{fault:?}");
+            assert_eq!(intercepted, 1, "{fault:?}");
+            assert_eq!(fs::read(&source).unwrap(), source_bytes, "{fault:?}");
+            assert_eq!(
+                fs::read(&untouched).unwrap(),
+                b"untouched-existing-file",
+                "{fault:?}"
+            );
+            let published = matches!(
+                fault,
+                CopyCheckpoint::AfterFinalPublication
+                    | CopyCheckpoint::DuringFinalVerification
+            );
+            assert_eq!(destination.exists(), published, "{fault:?}");
+            assert_eq!(
+                fs::read_dir(&parent).unwrap().count(),
+                if published { 2 } else { 1 },
+                "No private staging remains after a caught interruption: {fault:?}"
+            );
+            let recovery = inspect_encrypted_copy_recovery(
+                &source,
+                &destination,
+                "",
+                "NewKey123!",
+                &[],
+            )
+            .unwrap();
+            assert_eq!(
+                recovery.state,
+                if published {
+                    EncryptedCopyRecoveryState::ExistingMatchesExpected
+                } else {
+                    EncryptedCopyRecoveryState::DestinationAbsent
+                },
+                "{fault:?}"
+            );
+            assert!(!recovery.automatic_retry_permitted);
+            assert!(!recovery.automatic_delete_permitted);
+            fs::remove_dir_all(parent).unwrap();
+            fs::remove_file(source).unwrap();
+        }
+    }
+
+    #[test]
+    fn injected_failure_with_staged_edits_leaves_complete_ciphertext_not_partial_target() {
+        let source = editable_alpha_fixture(false);
+        let original = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let destination = parent.join("edited-target.sqlite3");
+        let changes = changes();
+        assert!(rehearse_encrypted_test_copy_under_with_checkpoints(
+            &source,
+            "",
+            "NewKey123!",
+            &changes,
+            Some(&parent),
+            Some(&destination),
+            |point| {
+                if point == CopyCheckpoint::DuringFinalVerification {
+                    Err("synthetic post-link interruption".to_owned())
+                } else {
+                    Ok(())
+                }
+            },
+        ).is_err());
+        assert!(destination.is_file());
+        let correct = inspect_encrypted_copy_recovery(
+            &source, &destination, "", "NewKey123!", &changes,
+        ).unwrap();
+        assert_eq!(correct.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
+        let stale = inspect_encrypted_copy_recovery(
+            &source, &destination, "", "NewKey123!", &[],
+        ).unwrap();
+        assert_eq!(stale.state, EncryptedCopyRecoveryState::ExistingUnverified);
+        assert!(!correct.automatic_delete_permitted);
+        assert!(!stale.automatic_retry_permitted);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
         fs::remove_dir_all(parent).unwrap();
         fs::remove_file(source).unwrap();
     }

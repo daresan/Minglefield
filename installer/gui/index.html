@@ -83,6 +83,12 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <button id="create-experimental-copy" type="button">Create verified encrypted database copy (experimental)</button>
 <pre id="experimental-copy-result" role="status" aria-live="polite">Not executed. Requires a current full database rehearsal, encrypted temporary-copy proof, independent backup and exact confirmation.</pre>
 </fieldset>
+<fieldset id="read-only-recovery-controls">
+<legend>Recovery status – inspect existing migration (read-only)</legend>
+<p class="help">Prüft den ausgewählten Quell- und Backup-Pfad, den gespeicherten Recovery-Beleg und die verschlüsselte Zieldatei, ohne Dateien zu verändern. Dafür dieselben Datenbankpasswörter und dieselbe Auswahl der Änderungen und Schemaobjekte wie beim ursprünglichen Versuch verwenden. Ein passender Beleg beweist keine Autorisierung und erlaubt weder automatisches Fortsetzen noch Rollback oder Löschen.</p>
+<button id="inspect-interrupted-copy" type="button" class="secondary">Recovery-Zustand prüfen (nur lesen)</button>
+<pre id="read-only-recovery-result" role="status" aria-live="polite">Noch keine Recovery-Prüfung durchgeführt. Vorhandene Belege und Zieldateien niemals automatisch löschen oder überschreiben.</pre>
+</fieldset>
 <h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
 <small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>

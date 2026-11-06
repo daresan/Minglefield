@@ -436,12 +436,20 @@ pub async fn create_experimental_encrypted_copy(
             return Err("Current source rehearsal must verify before execution".to_owned());
         }
         let proof = execute_reviewed_encrypted_copy(
-            source, destination, backup, &existing_password, &new_password,
-            &changes, &confirmation,
+            source,
+            destination,
+            backup,
+            &existing_password,
+            &new_password,
+            &changes,
+            &confirmation,
         )?;
-        if !proof.full_source_verified || !proof.full_disk_copy_verified
-            || !proof.encrypted_destination_verified || !proof.destination_created
-            || !proof.temporary_files_removed || proof.execution_enabled
+        if !proof.full_source_verified
+            || !proof.full_disk_copy_verified
+            || !proof.encrypted_destination_verified
+            || !proof.destination_created
+            || !proof.temporary_files_removed
+            || proof.execution_enabled
             || proof.staged_changes_verified != changes.len()
             || proof.rows_checked != baseline.fidelity.rows_checked
             || proof.tables_checked != baseline.fidelity.tables_checked

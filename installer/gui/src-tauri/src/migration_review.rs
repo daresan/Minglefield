@@ -1,8 +1,7 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::encrypted_copy_preflight::{
     execute_reviewed_encrypted_copy_with_schema, inspect_interrupted_encrypted_copy,
-    rehearse_encrypted_test_copy, InterruptedEncryptedCopyState,
-    EXPERIMENTAL_COPY_CONFIRMATION,
+    rehearse_encrypted_test_copy, InterruptedEncryptedCopyState, EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
@@ -590,8 +589,10 @@ pub async fn inspect_interrupted_encrypted_copy_status(
     schema_additions: Vec<String>,
 ) -> Result<ReadOnlyRecoveryStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let changes: Vec<ReviewCorrection> =
-            corrections.into_iter().map(ReviewCorrection::from).collect();
+        let changes: Vec<ReviewCorrection> = corrections
+            .into_iter()
+            .map(ReviewCorrection::from)
+            .collect();
         let checked = inspect_interrupted_encrypted_copy(
             Path::new(&source_path),
             Path::new(&backup_path),

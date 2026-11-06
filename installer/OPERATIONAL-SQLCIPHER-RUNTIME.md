@@ -215,3 +215,34 @@ destination filesystem**, verify native handle/path identity, flush
 ciphertext and directory metadata where supported, and then invoke
 the guarded irreversible publish step with explicit consent.
 
+
+## Isolated destination-volume encrypted staging rehearsal (2026-11-06)
+
+Following the owner's successful Shadow acceptance of the OS-temporary
+hard-link rehearsal, `installer-core::encrypted_copy_preflight` now offers
+`rehearse_encrypted_test_copy_on_destination_volume` as a **separate,
+explicitly invoked core-only test path**. It reuses the established
+`preview_migration_destination` check, verified RAM copy, SQLCipher export,
+wrong-key control, row/schema fidelity comparison and exclusive native
+hard-link check. Its scratch directory is randomly named and created directly
+under the **canonical proposed destination parent**, so the trial exercises
+the chosen filesystem rather than assuming the OS temporary volume behaves
+identically.
+
+The original OS-temporary GUI rehearsal is unchanged; **the new path is not
+wired to the GUI or CLI**. No real selected destination filename is created,
+opened for writing, or overwritten. Both temporary hard-link names and the
+encrypted scratch directory are removed on normal completion. Focused
+cross-platform Rust regression cases exercise empty target cleanup, occupied
+target preservation, missing parent rejection, source preservation, and Unix
+symlink-parent rejection. Their CI acceptance must be recorded separately.
+
+This is deliberately **not** final destination publication: rechecking
+canonical paths before and after does **not** pin native directory handles
+against TOCTOU substitution, and a successful scratch hard-link does not prove
+a durable or race-safe link at the actual destination filename. Crash
+recovery/flush ordering, exact target-handle identity, deliberate first-run
+authorization and verified operational application packaging remain open.
+Keep `destinationCreated=false`, `encryptedDestinationVerified=false`,
+`migrationEnabled=false`, and `executionEnabled=false` for every
+application-facing result until those independent gates pass.

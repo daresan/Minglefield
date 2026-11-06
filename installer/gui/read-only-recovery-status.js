@@ -17,6 +17,18 @@ export function assessReadOnlyRecoveryStatus(value) {
         (typeof value.operationId === "string" && /^[0-9a-f]{32}$/.test(value.operationId)))) {
     throw new Error("Unexpected recovery response; no recovery action is permitted.");
   }
+  // A reservation or positively matched ciphertext MUST refer to an actual
+  // operation. Conversely, a state without a recorded operation cannot name
+  // one. Manual-review states may contain either because corrupt receipts
+  // can fail before or after extracting an operation ID.
+  const requiresOperationId = value.status === "reserved_without_destination" ||
+    value.status === "published_content_matches_untrusted_receipt";
+  const forbidsOperationId = value.status === "no_recorded_operation" ||
+    value.status === "unrecorded_destination";
+  if ((requiresOperationId && value.operationId == null) ||
+      (forbidsOperationId && value.operationId != null)) {
+    throw new Error("Inconsistent recovery status and operation ID; manual review required.");
+  }
   return {
     status: value.status,
     operationId: value.operationId ?? null,

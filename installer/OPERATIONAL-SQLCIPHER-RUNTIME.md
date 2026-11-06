@@ -442,3 +442,38 @@ successful encrypted publication. Separate Python interoperability and
 fixture tests continue on all three OS. The GUI frontend tests the same
 review/consent prerequisites, and the Tauri backend validates the exact
 confirmation and presence of a backup before any database work.
+
+## M2.07 first read-only interruption/recovery classification
+
+The installer core now provides
+`encrypted_copy_preflight::inspect_encrypted_copy_recovery` as an
+**inspection-only** building block. Given a current read-only
+source snapshot, the original source key, candidate destination key,
+and the exact reviewed corrections, it reconstructs the expected
+post-edit snapshot in private memory and classifies the final target
+as `DestinationAbsent`, `ExistingMatchesExpected`, or
+`ExistingUnverified`. It rejects an existing plaintext SQLite
+copy, incorrect ciphertext key, source-file hardlink alias, unrelated
+occupied file or different corrected values as a *verified encrypted
+copy*. Both returned automation permissions are always false:
+`automatic_retry_permitted=false` and
+`automatic_delete_permitted=false`.
+
+**Security boundary:** matching values are evidence of *content
+equivalence at the time of inspection*, not a proof that this file came
+from a particular installer attempt, that the parent directory is
+durable on disk, or that a Host/application has been installed.
+Unknown source data, paths or failed inspection do not authorize
+mutation. No cleanup or overwrite is performed. This function has
+no GUI action yet, does not update the owner database, and is not
+general crash recovery. The next M2.07 slices still need
+provenance-bound publication journals, injected interruption
+points before/after publication, durable directory synchronization,
+classification after restart, and safe explicit recovery decisions.
+
+The Shadow M2.06 Alpha manual acceptance and lone missing
+`uq_game_install_one_active_project` source-schema index are
+documented in
+[registered Alpha schema notes](REGISTERED-ALPHA-SCHEMA.md).
+Index repair is a separately verified versioned transformation,
+not an effect of read-only recovery inspection.

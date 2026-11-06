@@ -471,6 +471,38 @@ provenance-bound publication journals, injected interruption
 points before/after publication, durable directory synchronization,
 classification after restart, and safe explicit recovery decisions.
 
+### Verified deterministic fault-injection follow-up
+
+The common private SQLCipher stage/publish function now accepts a
+**private checkpoint callback**; its normal entrypoint always supplies a
+no-op callback. This is not an installer CLI/API parameter, a persistent
+setting, or an extra user-controlled fault surface. Rust unit tests
+inject a controlled error at five distinct checkpoints: before temporary
+staging, after encrypted export, immediately before exclusive final-file
+publication, immediately after that publication, and during final-file
+verification. A separate test stages reviewed row changes and injects
+a post-publication error.
+
+On every caught test error, source bytes and unrelated occupied files
+are unchanged, and private staging cleans up on scope exit. Before
+publication the final filename is absent; after publication it remains
+a complete encrypted copy which the separate read-only recovery checker
+can inspect again. No implicit retry, deletion, overwrite or trust
+promotion occurs. The tests verify only the **normal error-unwinding
+cleanup path**. They do NOT emulate `abort()`, killed processes,
+abrupt service termination, NTFS/APFS/ext4 journal recovery or power
+failure. A real abrupt exit can leave a private staging directory;
+no automatic sweep of unknown paths has been authorized.
+
+Verified by [Ubuntu Rust](https://github.com/daresan/Minglefield/actions/runs/42246330621)
+and [Windows/macOS native security](https://github.com/daresan/Minglefield/actions/runs/42246330676)
+at implementation SHA
+`5e8e791b65f1be3ce4347d51ff70324e512a979f`.
+Next M2.07 requirements: provenance-bound, non-secret operation journal;
+safe, reproducible actual-process-exit fixtures; directory-fsync and
+crash-consistency evidence on supported OS filesystems; explicit,
+non-destructive recovery decisions. None is yet a production promise.
+
 The Shadow M2.06 Alpha manual acceptance and lone missing
 `uq_game_install_one_active_project` source-schema index are
 documented in

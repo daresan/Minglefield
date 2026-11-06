@@ -314,6 +314,7 @@ pub struct TemporaryEncryptedCopyPreview {
     temporary_encrypted_copy_verified: bool,
     ciphertext_header_verified: bool,
     wrong_key_rejected: bool,
+    atomic_temporary_publication_verified: bool,
     full_disk_copy_verified: bool,
     verified_staged_changes: usize,
     staged_values_match_ciphertext: bool,
@@ -353,6 +354,7 @@ pub async fn verify_temporary_encrypted_copy(
         if proof.staged_changes_verified != changes.len()
             || proof.staged_changes_verified != baseline.verified_changes
             || !proof.staged_values_match_ciphertext
+            || !proof.atomic_temporary_publication_verified
             || proof.rows_checked != baseline.fidelity.rows_checked
             || proof.tables_checked != baseline.fidelity.tables_checked
             || proof.schema_entries_checked != baseline.fidelity.schema_entries_checked
@@ -370,6 +372,7 @@ pub async fn verify_temporary_encrypted_copy(
             temporary_encrypted_copy_verified: proof.full_disk_copy_verified,
             ciphertext_header_verified: proof.ciphertext_header_verified,
             wrong_key_rejected: proof.wrong_key_rejected,
+            atomic_temporary_publication_verified: proof.atomic_temporary_publication_verified,
             full_disk_copy_verified: proof.full_disk_copy_verified,
             verified_staged_changes: proof.staged_changes_verified,
             staged_values_match_ciphertext: proof.staged_values_match_ciphertext,

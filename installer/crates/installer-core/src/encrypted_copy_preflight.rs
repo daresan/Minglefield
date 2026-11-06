@@ -17,6 +17,7 @@ pub struct EncryptedTestCopy {
     pub full_source_verified: bool,
     pub ciphertext_header_verified: bool,
     pub wrong_key_rejected: bool,
+    pub atomic_temporary_publication_verified: bool,
     pub full_disk_copy_verified: bool,
     pub staged_changes_verified: usize,
     pub staged_values_match_ciphertext: bool,
@@ -194,6 +195,38 @@ pub fn rehearse_encrypted_test_copy(
     // the independently checked corrected RAM copy is the expected target.
     let fidelity = verify_snapshot_equality(&corrected_memory, &reopened)?;
     drop(reopened);
+
+    // Verify the native create-if-absent publication primitive in the SAME
+    // private temporary directory. A hard link either publishes a complete
+    // already-verified ciphertext inode or fails if the target exists; it
+    // never copies plaintext or truncates an existing file. This is not a
+    // claim about the user's eventual destination filesystem or path handles.
+    let promoted = private.path.join("atomic-publication-rehearsal.sqlite3");
+    fs::hard_link(&staged, &promoted)
+        .map_err(|_| "Atomic temporary SQLCipher publication unavailable")?;
+    let duplicate_rejected = fs::hard_link(&staged, &promoted)
+        .is_err_and(|error| error.kind() == std::io::ErrorKind::AlreadyExists);
+    if !duplicate_rejected {
+        return Err("Atomic temporary publication did not reject an existing target".to_owned());
+    }
+    let occupied = private.path.join("preexisting-collision-control");
+    fs::write(&occupied, b"unchanged")
+        .map_err(|_| "Cannot create atomic publication collision control")?;
+    let occupied_rejected = fs::hard_link(&staged, &occupied)
+        .is_err_and(|error| error.kind() == std::io::ErrorKind::AlreadyExists);
+    if !occupied_rejected || fs::read(&occupied).ok().as_deref() != Some(&b"unchanged"[..]) {
+        return Err("Atomic temporary publication did not preserve occupied file".to_owned());
+    }
+    let published = Connection::open_with_flags(&promoted, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| "Cannot reopen atomically published temporary ciphertext")?;
+    published
+        .pragma_update(None, "key", new_password)
+        .map_err(|_| "Cannot unlock atomically published temporary ciphertext")?;
+    let promoted_fidelity = verify_snapshot_equality(&corrected_memory, &published)?;
+    if promoted_fidelity != fidelity || !promoted_fidelity.values_verified {
+        return Err("Atomic temporary ciphertext differs from the staged data".to_owned());
+    }
+    drop(published);
     drop(corrected_memory);
     drop(source);
     private.remove()?;
@@ -201,6 +234,7 @@ pub fn rehearse_encrypted_test_copy(
         full_source_verified: true,
         ciphertext_header_verified: true,
         wrong_key_rejected,
+        atomic_temporary_publication_verified: true,
         full_disk_copy_verified: fidelity.values_verified,
         staged_changes_verified: corrections.len(),
         staged_values_match_ciphertext: fidelity.values_verified,
@@ -256,6 +290,7 @@ mod tests {
         let proof = rehearse_encrypted_test_copy(&path, "", "NewKey123!", &[]).unwrap();
         assert!(proof.full_disk_copy_verified && proof.wrong_key_rejected);
         assert!(proof.ciphertext_header_verified && proof.temporary_files_removed);
+        assert!(proof.atomic_temporary_publication_verified);
         assert_eq!(proof.tables_checked, 3);
         assert_eq!(proof.rows_checked, 4);
         assert!(!proof.destination_created && !proof.encrypted_destination_verified);
@@ -269,6 +304,7 @@ mod tests {
         let result =
             rehearse_encrypted_test_copy(&path, "ExistingKey9!", "NewKey123!", &[]).unwrap();
         assert!(result.full_disk_copy_verified);
+        assert!(result.atomic_temporary_publication_verified);
         assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_file(path).unwrap();
     }
@@ -384,6 +420,7 @@ mod tests {
             assert_eq!(proof.staged_changes_verified, 7);
             assert!(proof.staged_values_match_ciphertext && proof.full_disk_copy_verified);
             assert!(proof.temporary_files_removed && proof.wrong_key_rejected);
+            assert!(proof.atomic_temporary_publication_verified);
             assert!(!proof.destination_created && !proof.encrypted_destination_verified);
             assert_eq!(fs::read(&path).unwrap(), before);
             fs::remove_file(path).unwrap();

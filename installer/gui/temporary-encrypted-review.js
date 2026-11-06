@@ -20,6 +20,7 @@ export function assessTemporaryDiskCopy(preview, rehearsal) {
       preview.temporaryEncryptedCopyVerified !== true ||
       preview.ciphertextHeaderVerified !== true ||
       preview.wrongKeyRejected !== true ||
+      preview.atomicTemporaryPublicationVerified !== true ||
       preview.fullDiskCopyVerified !== true ||
       preview.stagedValuesMatchCiphertext !== true ||
       !Number.isSafeInteger(preview.verifiedStagedChanges) ||
@@ -41,6 +42,7 @@ export function assessTemporaryDiskCopy(preview, rehearsal) {
     temporaryEncryptedCopyVerified: true,
     ciphertextHeaderVerified: true,
     wrongKeyRejected: true,
+    atomicTemporaryPublicationVerified: true,
     fullDiskCopyVerified: true,
     verifiedStagedChanges: preview.verifiedStagedChanges,
     stagedValuesMatchCiphertext: true,

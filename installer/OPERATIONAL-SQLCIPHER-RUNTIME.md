@@ -184,3 +184,34 @@ destination-creation/publishing semantics, production release packaging,
 key-unlock UX or lifecycle recovery. It runs only inside CI / an
 explicit developer invocation. The normal app and setup-manager
 `executionEnabled` flags remain false.
+
+## Atomic encrypted stage-link rehearsal (next publication safety gate)
+
+The existing `rehearse_encrypted_test_copy` does not yet publish a
+permanent destination. It now additionally tests the platform's
+**exclusive native hard-link promotion** of a complete, already verified
+SQLCipher staged inode inside the *same private temporary staging
+directory*. The link operation must refuse to overwrite an occupied
+file; the original collision-control file must remain byte-identical;
+reopening the promoted ciphertext with the new key must reproduce
+every staged row and schema object. Both temporary link names are
+deleted with the private staging directory.
+
+The observable `verifiedTemporaryEncryptedCopy.atomicTemporaryPublicationVerified`
+field is required to be `true` for the revised temporary-copy proof.
+The original source remains untouched, and
+`destinationCreated=false`, `encryptedDestinationVerified=false`,
+`migrationEnabled=false`, `executionEnabled=false` remain unchanged.
+
+**Scope limit:** this proves atomic *create-if-absent* behavior only on
+the CI/test system's **temporary filesystem**, not on the user's
+chosen destination volume. It does not solve path-parent replacement,
+handle-pinning/TOCTOU races, cross-volume publishing, interruption
+durability, cleanup after an interrupted live publish, encrypted
+runtime packaging, first-run local authorization, or any real
+operational installation. The final publication gate must relocate
+staging to an independently secured directory on the **actual
+destination filesystem**, verify native handle/path identity, flush
+ciphertext and directory metadata where supported, and then invoke
+the guarded irreversible publish step with explicit consent.
+

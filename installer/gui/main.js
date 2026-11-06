@@ -178,6 +178,7 @@ document.querySelector("#preview").addEventListener("click", async () => {
           stagedValuesMatchCiphertext: lastTemporaryEncryptedProof.stagedValuesMatchCiphertext,
           ciphertextHeaderVerified: lastTemporaryEncryptedProof.ciphertextHeaderVerified,
           wrongKeyRejected: lastTemporaryEncryptedProof.wrongKeyRejected,
+          atomicTemporaryPublicationVerified: lastTemporaryEncryptedProof.atomicTemporaryPublicationVerified,
           checkedRows: lastTemporaryEncryptedProof.checkedRows,
           checkedTables: lastTemporaryEncryptedProof.checkedTables,
           temporaryFilesRemoved: lastTemporaryEncryptedProof.temporaryFilesRemoved,
@@ -681,8 +682,9 @@ function refreshReview() {
       " tables and " + lastMigrationRehearsal.schemaObjectCount +
       " schema objects." +
       (lastTemporaryEncryptedProof
-        ? " Temporary SQLCipher verified for " + lastTemporaryEncryptedProof.verifiedStagedChanges +
-          " staged correction(s), all temporary files removed."
+        ? " Temporary SQLCipher and exclusive atomic staging publication verified for " +
+          lastTemporaryEncryptedProof.verifiedStagedChanges +
+          " staged correction(s); all temporary files removed."
         : " Encrypted temporary copy has not been verified.") +
       " No final destination file created. Migration execution remains disabled.";
   }

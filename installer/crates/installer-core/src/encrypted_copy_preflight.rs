@@ -596,6 +596,44 @@ mod tests {
     }
 
     #[test]
+    fn experimental_publication_accepts_separate_encrypted_source_backup() {
+        let source = fixture(true);
+        let source_bytes = fs::read(&source).unwrap();
+        let parent = target_volume_fixture();
+        let backup = parent.join("separate-encrypted-backup.sqlite3");
+        let destination = parent.join("rekeyed-source.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        assert!(execute_reviewed_encrypted_copy(
+            &source,
+            &destination,
+            &backup,
+            "WrongExistingKey",
+            "NewKey123!",
+            &[],
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        )
+        .is_err());
+        assert!(!destination.exists());
+        let result = execute_reviewed_encrypted_copy(
+            &source,
+            &destination,
+            &backup,
+            "ExistingKey9!",
+            "NewKey123!",
+            &[],
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        )
+        .unwrap();
+        assert!(result.destination_created && result.encrypted_destination_verified);
+        assert!(!result.execution_enabled);
+        assert_eq!(fs::read(&source).unwrap(), source_bytes);
+        assert_eq!(fs::read(&backup).unwrap(), source_bytes);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
     fn experimental_publication_rejects_outdated_or_nonmatching_backup() {
         let source = editable_alpha_fixture(false);
         let original = fs::read(&source).unwrap();

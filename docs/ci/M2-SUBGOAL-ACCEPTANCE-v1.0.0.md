@@ -120,46 +120,74 @@ migration path and separate real-user backup safeguards.
 
 ### M2.07 — Crash recovery and rollback
 
-**M2.07 operation receipt v1 — test-scoped implementation (2026-11-06):**
-The installer core now contains `recovery_receipt.rs`, a bounded,
-**non-authorizing** versioned recovery receipt contract. A randomized
-128-bit operation correlation ID identifies the candidate receipt;
-SHA-256 fingerprints bind the source file, separate backup, exact chosen
-destination path, encrypted file bytes, staged typed corrections and
-chosen registered schema-object names. No plaintext row values, DB keys,
-login credentials or capability tokens are serialized. A new receipt is
-created only with create-if-absent semantics and flushed using
-`File::sync_all`; a reused operation ID, malformed/missing/extra
-fields, foreign filename, changed file, changed schema selection,
-mismatching backup, plaintext copy and hard-linked backup are denied.
-The reader reports `Missing`, `Matched` or `Unverified`, never an
-instruction to retry, delete or deploy. A matching receipt proves
-**byte consistency, not authenticated provenance or operator approval**.
+**M2.07 receipt v1: integrated pre-publication operation reservation
+(2026-11-06, controlled Alpha path; full milestone still OPEN).**
+The first fixture-only recovery receipt was tested on all three platforms
+([Ubuntu](https://github.com/daresan/Minglefield/actions/runs/42273342933),
+[Windows/macOS](https://github.com/daresan/Minglefield/actions/runs/42273342890)).
+It is now also connected to the explicitly approved, backup-checked,
+normally compiled SQLCipher final-copy path. After the ciphertext stage
+is fully verified and flushed, **before exclusive final-name publication**,
+the Rust core records a new 128-bit random operation ID and SHA-256
+fingerprints for the source file, distinct backup, canonical destination
+pathname, staged ciphertext, typed corrections and selected registered
+schema additions. No source data rows, DB keys, auth tokens or raw paths
+are serialized. The backing file itself is never modified.
 
-The new test path creates a **real SQLCipher target** using the
-existing verified export, records the fixture digest, and launches
-a **separate test process** to reopen both the persisted receipt and
-the SQLCipher destination without inheriting the writer's memory.
-This complements the previous real-process termination checkpoints.
-[Ubuntu Rust checks](https://github.com/daresan/Minglefield/actions/runs/42273342933)
-passed all 119 regular core tests, including the separate reader.
-[Windows/macOS native checks](https://github.com/daresan/Minglefield/actions/runs/42273342890)
-also exercise the same tests.
+**Exclusive/idempotency rule:** A deterministic
+`minglefield-target-<destination-path-sha256>.receipt` sidecar in the
+destination directory is created using `create_new`; if that
+destination has any existing receipt, the new operation is rejected
+even when the intended ciphertext filename is absent. The original
+receipt is never deleted, silently replaced or reused. The receipt
+is read back against the verified staged ciphertext before final hard
+link; after publication the **final encrypted filename** is checked
+against that same record. The regular Tauri Alpha result includes
+`recoveryOperationId`, `recoveryReceiptDirectorySynced` and
+`destinationDirectorySynced` without implying that either metadata
+flag authorizes recovery, installation or Host activation.
 
-**Not yet operationally wired:** This initial receipt is a
-**fixture-only** capability and does not write sidecars from the
-regular Tauri/CLI migration command. It currently caps fixture
-file fingerprints at 64 MiB and hashes them in memory; larger real
-databases require a streaming verifier. It does **not** prove
-exclusive trustworthy process ownership, authenticated record origin,
-directory-entry crash durability, safe adversarial path resolution,
-or privacy-safe production ACLs on every OS. A raw data-dependent
-hash of corrections is local diagnostic metadata, not a substitute
-for confidential or keyed commitments. These boundaries must be
-resolved when integrating the receipt with the real publish operation,
-including recording it **before** final-file creation and verifying
-the state in a later process after interruption. M2.07 remains OPEN;
-no automatic retry/cleanup/rollback or portable build is authorized.
+**Streaming integrity:** Existing dependency-free SHA-256 is now
+incremental with 64-KiB chunks. File fingerprints no longer require
+loading a whole user DB into RAM or enforcing the original 64-MiB
+fixture cap; streaming known-vector/boundary and 64-MiB-plus tests
+cover the digest. Both source and backup hashes are recorded
+independently: a logically equivalent SQLite backup is not required
+to have identical physical bytes (higher-level SQLCipher/SQLite
+verification still checks logical equivalence before copying).
+
+**Crash/order evidence:** The existing separate-process fixture
+now deliberately calls `std::process::exit(77)` immediately after
+record reservation and immediately after final-name publication.
+Following a real process termination, a separate test process
+checks the reserved receipt and surviving staged or final encrypted
+file. A receipt with an absent final target means **reserved but
+not published**, not a free/retryable destination. Existing targets,
+source bytes and independently verified backups remain untouched;
+automated retry/delete is always false. Existing controlled-error,
+wrong-key, tamper, collision and source-preservation cases remain
+mandatory. No new portable package is triggered.
+
+**Current evidence:** [Ubuntu core](https://github.com/daresan/Minglefield/actions/runs/42291412639)
+and [native Windows/macOS](https://github.com/daresan/Minglefield/actions/runs/42291412669).
+The new GUI action has not yet been manually accepted in a portable
+build carrying this receipt integration. The result is an **Alpha
+development gate**, not complete M2.07 recovery acceptance.
+
+**Remaining release boundaries:** Sidecar digests and a random ID
+are *not* authenticated provenance or an authorization token. The
+record is file-synced and its parent directory explicitly synced
+where supported in the current Unix implementation. On Windows
+directory-entry crash durability is **unproven**, and the result
+flags truthfully report `false`. NTFS/APFS/ext4 crash consistency,
+malicious ancestor/path replacement, native owner-bound/ACL-secured
+receipt creation, crash-recovery journal state transitions and
+power-loss tests still need separate evidence. A failed operation
+can leave a receipt and possibly a verified ciphertext file; the
+installer must report the state and require a human decision rather
+than automatically cleaning up or resuming. **Do not close M2.07,
+enable silent recovery, or request another portable build without
+an approved milestone gate.**
 
 **M2.06 controlled Alpha acceptance evidence (2026-11-06):**
 Owner confirmed the portable Windows GUI from

@@ -120,6 +120,33 @@ migration path and separate real-user backup safeguards.
 
 ### M2.07 — Crash recovery and rollback
 
+**M2.06 controlled Alpha acceptance evidence (2026-11-06):**
+Owner confirmed the portable Windows GUI from
+[run 42164863176](https://github.com/daresan/Minglefield/actions/runs/42164863176)
+created the selected SQLCipher destination and preserved one staged value
+change. Installer output: `destinationCreated=true`,
+`encryptedDestinationVerified=true`, `backupVerified=true`,
+27 tables, 143 rows, 58 original schema entries and cleaned staging.
+The build's Windows, Ubuntu and macOS package jobs succeeded.
+This accepts the **bounded experimental database-copy test**, not full
+durable M2.06 publication or installed application behavior. The owner's
+full-schema preview also revealed **59 registered / 58 source objects**:
+the sole missing `uq_game_install_one_active_project` index is a
+**source compatibility gap**, not a lost SQLCipher export object. Never
+claim a live application installation is safe while the schema audit
+remains unverified.
+
+**M2.07 first development slice (read-only, not yet GUI acceptance):**
+Classify a candidate interrupted encrypted-copy target as absent,
+present/structurally matching the verified source plus allowed staged
+values, or present/unverified. An incorrect key, plaintext copy,
+occupied unrelated file or changed expected corrections must never
+become a verified encrypted copy. **No automatic retry, rollback,
+delete, overwrite, Host authorization or reinstallation** is implied
+by this inspection. Run T1–T3 with portable packaging disabled.
+Provenance-bound journal records, durable directory updates and
+interruption fault injection remain mandatory subsequent M2.07 work.
+
 - Inject interruption before staging, after encrypted export, before exclusive
   publication, just after publication and during post-publish verification.
 - Restart and inspect for an intact prior source, absence of partial target,

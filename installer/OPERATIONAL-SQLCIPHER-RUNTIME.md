@@ -294,3 +294,30 @@ a permission to publish a real destination. The final atomic
 directory-relative create-if-absent operation, appropriate parent
 directory sync, crash recovery and first-run owner authorization are
 separate unfinished requirements. No selected final destination is written.
+
+## Unix pinned-dirfd exclusive-link contract (M2.06, test-only)
+
+The next isolated test gate uses POSIX `linkat` with **two already-open
+directory descriptors**: the directory holding a disposable staged fixture
+and the selected destination parent pinned by
+`PinnedDestinationParent`. Its target name must be a private
+`minglefield-rehearsal-*` basename, never the selected final migration
+filename. A second link creation must fail as `AlreadyExists`. The private
+link is removed using `unlinkat` relative to the original destination
+directory descriptor, not by a pathname vulnerable to a substituted parent.
+A pre-existing same-named user file must remain untouched.
+
+The native helper currently compiles **only into Unix Rust tests** and
+does not create final database files in the GUI, CLI, or production core.
+There is no portable fallback to ordinary path-based `hard_link` for real
+publication. Windows requires a separately validated native file-handle
+relative implementation, and *all platforms* still require checked stage
+inode identity, destination entry durability, exclusive publication
+authorization, interruption recovery and first-run trust before enabling
+installation. Previous file-flush and path-preview checks are still
+necessary but insufficient to meet these gates.
+
+MDCI acceptance for this test-only step: Ubuntu/macOS run the Unix
+relative-link collision/cleanup test; Windows continues to compile
+and exercise its existing destination identity, SQLCipher, and Host
+tests. Do not request portable GUI artifacts for this technical gate.

@@ -1,6 +1,7 @@
 //! Non-persistent migration rehearsal command. Never writes a destination.
 use minglefield_installer_core::encrypted_copy_preflight::{
     execute_reviewed_encrypted_copy, rehearse_encrypted_test_copy,
+    EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::migration_destination::preview_migration_destination;
 use minglefield_installer_core::migration_dry_run::{
@@ -391,6 +392,35 @@ pub async fn verify_temporary_encrypted_copy(
     .map_err(|_| "Temporary encrypted copy rehearsal worker failed".to_owned())?
 }
 
+fn verify_local_experimental_approval(
+    backup_path: &str,
+    confirmation: &str,
+) -> Result<(), String> {
+    if confirmation != EXPERIMENTAL_COPY_CONFIRMATION {
+        return Err("Exact experimental encrypted-copy confirmation is required".to_owned());
+    }
+    if backup_path.trim().is_empty() {
+        return Err("A separate, existing source backup file is required".to_owned());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod experimental_copy_approval_tests {
+    use super::{verify_local_experimental_approval, EXPERIMENTAL_COPY_CONFIRMATION};
+
+    #[test]
+    fn no_unconfirmed_experimental_file_write() {
+        assert!(verify_local_experimental_approval("", "").is_err());
+        assert!(verify_local_experimental_approval("backup.sqlite3", "YES").is_err());
+        assert!(verify_local_experimental_approval("", EXPERIMENTAL_COPY_CONFIRMATION).is_err());
+        assert!(verify_local_experimental_approval(
+            "backup.sqlite3",
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        ).is_ok());
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExperimentalEncryptedCopyResult {
@@ -423,6 +453,7 @@ pub async fn create_experimental_encrypted_copy(
     corrections: Vec<StagedCorrection>,
     confirmation: String,
 ) -> Result<ExperimentalEncryptedCopyResult, String> {
+    verify_local_experimental_approval(&backup_path, &confirmation)?;
     tauri::async_runtime::spawn_blocking(move || {
         let changes: Vec<ReviewCorrection> = corrections
             .into_iter()

@@ -582,6 +582,7 @@ fn main() {
             migration_review::preview_migration_rehearsal,
             migration_review::verify_temporary_encrypted_copy,
             migration_review::create_experimental_encrypted_copy,
+            migration_review::inspect_interrupted_encrypted_copy_status,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

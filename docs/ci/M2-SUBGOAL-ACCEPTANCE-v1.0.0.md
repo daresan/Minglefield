@@ -120,6 +120,36 @@ migration path and separate real-user backup safeguards.
 
 ### M2.07 — Crash recovery and rollback
 
+**M2.07 credential-free restart triage (post-testbuild, 2026-11-06):**
+The existing Tauri read-only recovery command now has **two explicit GUI
+entrypoints**, with no new filesystem writer or Host authorization:
+a preliminary, destination-path-only inspection, and the original full
+source/backup/SQLCipher comparison. The lightweight path sends empty
+source/backup/password fields and no staged corrections or schema selections;
+the existing core `inspect_interrupted_encrypted_copy` can then
+distinguish no receipt, occupied unrecorded destination, and a reserved
+receipt without a final destination without decrypting any database.
+Any present encrypted destination needing original source/backup/key
+validation is merely **manual review required** in the preliminary mode:
+a positive ciphertext-equivalence claim is forbidden there.
+The full mode still requires the existing passwords, matching source/backup,
+staged corrections and registered DDL selection. Neither mode can retry,
+delete, roll back, install or claim a Host. Concurrent button invocation,
+stale request responses and forged backend capability flags fail closed
+in the frontend; this is not OS-level path-race protection.
+
+**Verified focused acceptance:**
+[Ubuntu frontend run 42307683340](https://github.com/daresan/Minglefield/actions/runs/42307683340)
+for commit `5d901b50c3d5092778631fb7097c76c176f74cd7`;
+[Ubuntu frontend run 42308032024](https://github.com/daresan/Minglefield/actions/runs/42308032024)
+for commit `2ac8306df0e71ae7ac0a5d71f416284dd003f69b`
+(including a static GUI button/command wiring check, 85/85 Node tests and
+a successful frontend build). These builds do **not** produce native packages.
+The existing successful portable M2.07 artifacts
+[run 42303513385](https://github.com/daresan/Minglefield/actions/runs/42303513385)
+precede this additional GUI behavior and do not constitute its manual acceptance.
+No further portable milestone build is requested by these technical commits.
+
 **M2.07 read-only operator recovery triage — implemented in the
 shared core and Tauri GUI; manual portable acceptance pending:**
 The installer can now inspect a user-selected interrupted Alpha

@@ -464,6 +464,20 @@ pub fn add_selected_registered_schema_objects(
     })
 }
 
+/// Create the exact 27-table registered Alpha fixture for other installer
+/// unit-test modules; not shipped as a runtime schema repair API.
+#[cfg(test)]
+pub(crate) fn create_registered_alpha_test_file(path: &std::path::Path) -> Result<(), String> {
+    let db = Connection::open(path).map_err(|_| "Cannot create registered Alpha test fixture")?;
+    for &(name, statement) in REGISTERED_SOURCE_SQL {
+        db.execute_batch(statement)
+            .map_err(|_| format!("Cannot initialize registered Alpha test table: {name}"))?;
+    }
+    db.execute_batch(ACTIVE_GAME_INDEX)
+        .map_err(|_| "Cannot initialize registered Alpha test index")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

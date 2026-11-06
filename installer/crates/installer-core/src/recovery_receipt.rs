@@ -309,6 +309,21 @@ fn sync_recovery_parent_directory(_parent: &Path) -> Result<bool, String> {
     Ok(false)
 }
 
+/// Flush a newly published destination's containing directory where a
+/// tested native API exists. Windows returns false, rather than pretending
+/// that syncing the ciphertext file also durably committed its directory.
+pub fn sync_published_destination_parent(destination: &Path) -> Result<bool, String> {
+    let parent = destination
+        .parent()
+        .ok_or("Published destination parent is missing")?;
+    let meta = fs::symlink_metadata(parent)
+        .map_err(|_| "Cannot inspect published destination parent")?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err("Published destination parent changed or is a symlink".into());
+    }
+    sync_recovery_parent_directory(parent)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn inspect_reserved_destination_recovery_receipt(
     source: &Path,

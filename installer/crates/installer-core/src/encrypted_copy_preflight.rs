@@ -857,14 +857,23 @@ mod tests {
             .expect("Invalid test-only operation ID");
         let receipt_path = parent.join(filename);
         let classification = inspect_fixture_recovery_receipt(
-            &receipt_path, &operation_id, &source, &backup, &target,
-            &target, &[], &[],
-        ).unwrap();
+            &receipt_path,
+            &operation_id,
+            &source,
+            &backup,
+            &target,
+            &target,
+            &[],
+            &[],
+        )
+        .unwrap();
         assert_eq!(classification, ReceiptInspection::Matched);
-        let content = inspect_encrypted_copy_recovery(
-            &source, &target, "", "NewKey123!", &[],
-        ).unwrap();
-        assert_eq!(content.state, EncryptedCopyRecoveryState::ExistingMatchesExpected);
+        let content =
+            inspect_encrypted_copy_recovery(&source, &target, "", "NewKey123!", &[]).unwrap();
+        assert_eq!(
+            content.state,
+            EncryptedCopyRecoveryState::ExistingMatchesExpected
+        );
         assert!(!content.automatic_retry_permitted);
         assert!(!content.automatic_delete_permitted);
     }
@@ -886,13 +895,11 @@ mod tests {
         fs::remove_file(original_fixture).unwrap();
         fs::copy(&source, &backup).unwrap();
         let source_bytes = fs::read(&source).unwrap();
-        let proof = publish_disposable_fixture_copy(
-            &source, &target, "", "NewKey123!", &[],
-        ).unwrap();
+        let proof =
+            publish_disposable_fixture_copy(&source, &target, "", "NewKey123!", &[]).unwrap();
         assert!(proof.encrypted_destination_verified);
-        let receipt = fixture_recovery_receipt(
-            &source, &backup, &target, &target, &[], &[],
-        ).unwrap();
+        let receipt =
+            fixture_recovery_receipt(&source, &backup, &target, &target, &[], &[]).unwrap();
         let receipt_path = write_fixture_recovery_receipt(&root, &receipt).unwrap();
         let result = Command::new(std::env::current_exe().unwrap())
             .arg("--exact")
@@ -904,7 +911,10 @@ mod tests {
             .stderr(Stdio::null())
             .status()
             .expect("Cannot launch independent receipt reader");
-        assert!(result.success(), "Independent recovery receipt reader rejected the fixture");
+        assert!(
+            result.success(),
+            "Independent recovery receipt reader rejected the fixture"
+        );
         assert_eq!(fs::read(&source).unwrap(), source_bytes);
         assert_eq!(fs::read(&backup).unwrap(), source_bytes);
         assert!(write_fixture_recovery_receipt(&root, &receipt).is_err());
@@ -919,9 +929,16 @@ mod tests {
             .unwrap();
         assert_eq!(
             inspect_fixture_recovery_receipt(
-                &receipt_path, &receipt.operation_id, &source, &backup,
-                &target, &target, &[], &[],
-            ).unwrap(),
+                &receipt_path,
+                &receipt.operation_id,
+                &source,
+                &backup,
+                &target,
+                &target,
+                &[],
+                &[],
+            )
+            .unwrap(),
             ReceiptInspection::Unverified,
         );
         assert_eq!(fs::read(&source).unwrap(), source_bytes);

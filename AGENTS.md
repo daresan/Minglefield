@@ -124,6 +124,25 @@ three-OS checks; green CI is not authority to install, publish migrated data
 or claim a Host. Never duplicate active YAML workflows merely to preserve an
 older policy; the v0 configuration is recoverable from the recorded Git SHA.
 
+## Portable agent onboarding template (new and existing projects)
+
+[MF_AGENTS_TEMPLATE_V1](templates/MF_AGENTS_TEMPLATE_V1/README.md) supplies a
+**project-neutral** root AGENTS.md/**SOUL.md** resumption contract, MDCI
+Core v1.1.0, project CI profile, milestone acceptance checklist and a Game
+repository example. **This repository's existing root AGENTS.md remains
+authoritative**; the template is for reuse in other repositories and must
+not override existing onboarding, Host/security policy or Game ownership.
+The deployed installer-specific MDCI policy remains v1.0.0 until a separately
+reviewed CI change adopts a new project version.
+
+On every resumed chat, first read the canonical AGENTS.md or SOUL.md, real
+branch/commit, roadmap, verified subgoal status and applicable versioned CI
+policy. Do not propose a new roadmap when one already exists. If no roadmap
+exists, propose an initial project-planning/CI milestone for the owner's
+approval. If only MDCI is missing, propose an adoption subgoal within the
+existing roadmap. Never silently overwrite established agent instructions
+or start additional portable packages while onboarding a new project.
+
 ## Working contract and verification
 1. Confirm branch, scope, existing entry points, interfaces, and the user's already-agreed architecture. Search the actual code paths before guessing filenames. GitHub code search may index only the default branch; use branch-aware file reads or repository grep.
 2. State the invariant, smallest change, trust boundary, and focused tests. Prefer small commits; preserve backward compatibility unless explicitly authorized.

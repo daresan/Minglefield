@@ -35,8 +35,10 @@ def run_cli_without_inherited_output_pipes(command, input_frame, timeout):
     a detached native application holds inherited handles. Returned diagnostics
     are still inspected for forbidden credentials and never printed verbatim.
     """
-    with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as out, (
-            tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as err):
+    with (
+        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as out,
+        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as err,
+    ):
         result = subprocess.run(
             command, input=input_frame, stdout=out, stderr=err,
             encoding="utf-8", errors="replace", timeout=timeout,

@@ -226,4 +226,49 @@ mod tests {
         assert!(parse_stdin_secrets(br#"{"unknown":"key"}"#.as_slice()).is_err());
         assert!(parse_stdin_secrets(vec![b'a'; 16 * 1024 + 1].as_slice()).is_err());
     }
+
+    #[test]
+    fn file_secret_preserves_literal_spaces_and_removes_only_terminal_line_end() {
+        let path = std::env::temp_dir().join(format!(
+            "mf-password-file-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(&path, b" a private password ! \r\n").unwrap();
+        let source = SecretInput {
+            literal: None,
+            file: Some(path.to_string_lossy().into_owned()),
+        };
+        assert_eq!(
+            source.resolve(None, None).unwrap().as_deref(),
+            Some(" a private password ! ")
+        );
+        assert!(source.resolve(None, Some("other source")).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn cli_overrides_matching_admin_config_value_without_enabling_other_sources() {
+        let mut base = DatabaseOptions {
+            database_path: Some("/old.db".to_owned()),
+            password: SecretInput {
+                literal: Some("oldKey123!".to_owned()),
+                file: None,
+            },
+            ..DatabaseOptions::default()
+        };
+        base.override_with(DatabaseOptions {
+            database_path: Some("/new.db".to_owned()),
+            password: SecretInput {
+                literal: Some("newKey456!".to_owned()),
+                file: None,
+            },
+            ..DatabaseOptions::default()
+        });
+        assert_eq!(base.database_path.as_deref(), Some("/new.db"));
+        assert_eq!(
+            base.password.resolve(None, None).unwrap().as_deref(),
+            Some("newKey456!")
+        );
+    }
 }

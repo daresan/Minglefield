@@ -530,11 +530,13 @@ or M2.08 single-use native consent is implied by this test.
 
 ### M2.09 — Encrypted operational runtime and independent application shell start
 
-- Launch the real installed Alpha against its selected encrypted SQLCipher DB using an **application-owned** invocation independent of both Setup Manager and installer CLI. Reuse `installed_alpha_launch.py` internally; no end user must call Python or operate the interpreter. The M2.09 development shell start is a testable stepping stone to the actual native M2.10 application entrypoint, **not** the final desktop deliverable. Keep SQLCipher keys out of argv/environment/logs; opening a DB is not migration/re-encryption.
+- Launch the real installed Alpha against its selected encrypted SQLCipher DB using an **application-owned** invocation independent of both Setup Manager and installer CLI. Reuse `installed_alpha_launch.py` internally; no end user must call Python or operate the interpreter. The M2.09 development shell start is a testable stepping stone to the actual native M2.10 application entrypoint, **not** the final desktop deliverable. At the **public CLI boundary**, allow the administrator's Bee-style password sources (literal argument, password file, explicit config, environment, prompt, stdin); **no unintended secret output** in application-generated logs, receipts, errors or default configs. Internally the existing private stdin gateway frame may be retained; opening a DB is not migration/re-encryption.
 - Verify ordinary login/session, Hosts, Effects, Jobs and Game storage survive
   process restart and remain tenant/Host-scoped.
 - Missing driver, missing key or wrong key must fail closed without silently
-  falling back to plaintext SQLite or retaining the key in logs/config.
+  falling back to plaintext SQLite or **unintentionally** retaining the key
+  in logs or **generated** config. Administrator-authored plaintext config
+  is a permitted, explicitly chosen input source.
 - **Packaging:** combine with M2.10 unless distinct user-visible UX requires
   a separately accepted build.
 
@@ -590,6 +592,14 @@ manifest as publisher trust or request packaging prematurely.
 - **Packaging:** one three-OS acceptance build.
 
 **Future mandatory source-build acceptance, after prebuilt Alpha delivery (no new immediate M2.11 blocking gate):** Demonstrate an official-repository build and a separately consented compatible fork build using each source's versioned OS build template, documented dependency acquisition, a native OS executable artifact, independent launch, and safe failure for a missing/invalid template, incompatible dependencies or a rejected source. The developer of a custom fork is responsible for making its template compatible. Same backend operations must be callable from shell/CLI and GUI, with no arbitrary code execution on mere checkout discovery. This future capability must not be silently reclassified as an optional extra.
+
+**Binding M2.11 CLI/GUI and silent-install credential acceptance (approved 2026-11-07; not implemented):**
+- A single versioned schema and named flags cover **every** functional installer parameter and its corresponding GUI control, including paths, source/build mode, dependency acquisition, DB migration/new creation, optional app approvals, local account/Host setup and launch. `--silent` and interactive CLI must execute the same operation core; silent needs no terminal prompt when all necessary values/consents are provided.
+- For SQLCipher DB unlock accept **all** approved Bee-style channels: literal `--db-password VALUE`, `--db-password-file PATH`, explicit `db_password` in an administrator-authored config, `MINGLEFIELD_DB_PASSWORD`, interactive password prompt (confirmation **only for creation/change**) and private `--secrets-stdin` input. Support correspondingly named sources for separate account-password operations. Proposed spellings become canonical once CLI contract is implemented. Document deterministic source precedence and reject explicit contradictory simultaneous values without printing them.
+- Verify same parameter meaning/result via CLI, config, GUI and silent mode. Tests exercise each secret source against a disposable **encrypted** DB, successful auth with an existing independent login, wrong-key failure, missing required silent input and no surprise Host ownership mutation. No test may use a real user DB or emit secrets in CI output.
+- Administrator-managed config files are permitted to contain plain passwords and are **not rejected solely for using plaintext**. Automatically generated defaults, result plans, logs, error strings, telemetry or CI artifacts must not leak secrets. A non-blocking permission warning is acceptable. Files accidentally published as a repository or public artifact are considered compromised, **not** legitimate Minglefield DB distribution.
+- Retain private stdin between native launcher and embedded SQLCipher worker as an internal implementation detail, **not** an exclusion of `--db-password` or other public CLI options. Mere DB path/key possession is not consent to overwrite, re-provision, claim a remote Host or bypass normal Minglefield account authorization.
+- **Do not call M2.11 complete** while any of these input/CLI/GUI parity cases are missing; the existing `alpha_application_shell.py` prompts interactively and `installer-cli` is currently PLAN ONLY. This is a **target contract** and no implementation is claimed here.
 
 ### M2.12 — Optional Conda and ComfyUI integration
 

@@ -477,6 +477,10 @@ stays explicitly deferred at the operator's direction.
 
 ### M2.08 — First-run `mingleadmin` and local Host binding
 
+**Rejected manual operator acceptance (2026-11-07):** The former portable M2.08 build succeeded on three packaging runners but failed on Shadow. Real users were forced through redundant test copies, an existing newly copied DB blocked application installation, absent install/data parents were rejected, and an attempted one-time Host action exhausted the entire GUI session. The selected missing-schema addition was also rejected; without the original diagnostic its exact cause is not proven. The remediation explicitly distinguishes *optional* in-memory/temporary SQLCipher diagnostics from mandatory native execution checks, preserves the source and separate backup, allows an application to be installed beside an existing new DB, creates missing parent folders only on consented writes, resolves bundled managed-alpha resources (including the Windows sibling folder), and maintains one-time local Host authority **per operation** with fresh-target retries in the same process. Wrong SQLCipher password must not consume the permit. CI and renewed operator acceptance are both required. Status: **FAILED / awaiting re-test**.
+
+
+
 - Require an explicitly authorized, installation-bound, local-only,
   single-use Host activation handshake (no manual local console invite).
 - Create only the local user, salted login verifier and approved local Host

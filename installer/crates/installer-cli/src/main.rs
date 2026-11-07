@@ -50,10 +50,17 @@ fn complete(
             || action.inventory_sha256.is_some()
             || action.confirmation.is_some()
         {
-            return Err((2, "file and database operations require separate explicit actions".to_owned()));
+            return Err((
+                2,
+                "file and database operations require separate explicit actions".to_owned(),
+            ));
         }
         if plan.install_optional_conda || plan.install_optional_comfyui {
-            return Err((2, "optional runtime installation is not implemented for database operations".to_owned()));
+            return Err((
+                2,
+                "optional runtime installation is not implemented for database operations"
+                    .to_owned(),
+            ));
         }
         return db_action.execute(db_config, json);
     }
@@ -194,11 +201,19 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                     "Default operation is PLAN ONLY. File install is not database migration, \\
                      Host provisioning, release provenance or an application launcher."
                 );
-                println!("Database: --verify-encrypted-db or --create-encrypted-copy, with --database PATH,");
-                println!("  --source-db PATH --backup-db PATH --db-password VALUE --new-db-password VALUE");
+                println!(
+                    "Database: --verify-encrypted-db or --create-encrypted-copy, with --database PATH,"
+                );
+                println!(
+                    "  --source-db PATH --backup-db PATH --db-password VALUE --new-db-password VALUE"
+                );
                 println!("  --db-password-file PATH --new-db-password-file PATH --secrets-stdin");
-                println!("  --schema-add ID --confirm-db-copy 'CREATE EXPERIMENTAL ENCRYPTED COPY'.");
-                println!("V3 config supports database_path, source_db_path, backup_db_path, db_password,");
+                println!(
+                    "  --schema-add ID --confirm-db-copy 'CREATE EXPERIMENTAL ENCRYPTED COPY'."
+                );
+                println!(
+                    "V3 config supports database_path, source_db_path, backup_db_path, db_password,"
+                );
                 println!("  db_password_file, new_db_password, new_db_password_file.");
                 println!("Env: MINGLEFIELD_DB_PASSWORD, MINGLEFIELD_NEW_DB_PASSWORD.");
                 println!("Database copy neither provisions Hosts nor launches the app.");
@@ -278,7 +293,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             let plan = config
                 .preview(Mode::Silent)
                 .map_err(|_| (3, "invalid installation plan".to_owned()))?;
-            if action.enabled
+            if (action.enabled || db_action.active())
                 && (config.git_tools.install_optional_git
                     || config.git_tools.install_optional_gh
                     || config.git_tools.offer_gh_login)

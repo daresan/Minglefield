@@ -436,6 +436,45 @@ contents.
   verified target and preserve any preexisting non-Minglefield file.
 - **Packaging:** one acceptance build after automated fault injection.
 
+**Implementation and gate evidence (2026-11-07, portable M2.08
+acceptance pending):** `installer/gui/src-tauri/src/alpha_first_run.rs`
+has a Tauri-process-local single-use authorization state populated
+**only** by the confirmed encrypted-copy operation and by separately
+confirmed installation of verified application files. It cannot be
+armed from a caller-provided Boolean, path, database password, Host
+claim token, or arbitrary frontend status. The native command consumes
+this state once, rechecks the new database and installed-file inventory,
+and sends the two independent credentials through a private stdin pipe
+to the packaged `server/installed_alpha_first_run.py` worker. That worker
+uses the existing `HostCommitPolicy.provision_first_run_local_host_admin_trusted`
+atomic account/Host transaction, not a public gateway route or second
+identity backend. The GUI displays an editable default `mingleadmin`
+and separate confirmation/explicit consent. The original database and
+independent backup remain unchanged. Repeated activation, existing
+identities and pre-owned Hosts are rejected. The current local Host ID
+has an installation-scoped `local.<operation-id>` value, not a global
+administrator role. **Current first-run response has
+`applicationLaunchEnabled=false`**: native launching is the subsequent
+M2.09–M2.11 path, not a completed capability here.
+
+Focused source/runtime checks: [Ubuntu installer Rust CI
+42320729192](https://github.com/daresan/Minglefield/actions/runs/42320729192),
+[Windows/macOS native SQLCipher/Host CI
+42320729241](https://github.com/daresan/Minglefield/actions/runs/42320729241),
+and [MAP/Python conformance
+42319929885](https://github.com/daresan/Minglefield/actions/runs/42319929885),
+all successful. [Frontend checks
+42320390401](https://github.com/daresan/Minglefield/actions/runs/42320390401)
+passed the first-run GUI validations. After the exact rustfmt fixes,
+[Tauri native full Windows/Linux/macOS gate
+42320859781](https://github.com/daresan/Minglefield/actions/runs/42320859781)
+passed on all three operating systems at
+`dda30f7a27ca06508beee8bf7622b0b6d55298b0`.
+Actual portable packaging and human GUI acceptance are **not** implied
+by these checks. General repair/release lifecycle and fresh empty-DB
+creation remain separate future requirements; M2.07 full crash recovery
+stays explicitly deferred at the operator's direction.
+
 ### M2.08 — First-run `mingleadmin` and local Host binding
 
 - Require an explicitly authorized, installation-bound, local-only,

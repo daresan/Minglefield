@@ -112,12 +112,24 @@ This is not automatic ownership merely because a process runs on a computer:
   target. All first-run inserts are included in final post-migration
   verification, with no user secrets in the report.
 
-The portable Setup Manager now supports a separately authorized, non-overwriting
-**experimental encrypted destination copy** in addition to read-only rehearsals;
-it does not yet install Minglefield, package the operational runtime, or claim
-a Host. The verified encrypted source and backup must remain untouched.
-**No implementation-only helper counts as proof that first-run authorization
-is complete.**
+**Current experimental M2.08 implementation (2026-11-07):** The
+portable Setup Manager now performs three independently approved steps:
+(1) a non-overwriting, backup-verified encrypted destination copy;
+(2) a separately consented native installation of the bundled,
+digest-pinned Python/SQLCipher and Minglefield Alpha application files into
+a previously absent destination; and (3) a native current-session,
+single-use activation of the first local Host administrator with an
+independent login password and no invite token. The Rust process records
+the verified database-copy operation ID and the successful application
+install in a private in-memory permit. The permit is consumed once and
+cannot be forged by supplying paths, keys or JavaScript booleans. The
+installed private first-run Python worker reuses the atomic existing
+HostCommitPolicy transaction, denies identity/Host conflicts and refuses
+remote Host power. The verified original source and independent backup
+remain untouched. **What is still unimplemented:** an entirely fresh
+database with no source to migrate, native launch of the separately installed
+application, repair/update, and end-user acceptance of a portable M2.08
+build. Green engineering CI does not stand in for those product checks.
 
 ## Existing repository boundaries and evidence to inspect
 

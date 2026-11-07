@@ -88,7 +88,7 @@ class MacOSBundleTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 package_macos_app(source, target)
             self.assertFalse(target.exists())
-            data["platform"] = "macos-arm64"
+            data["platform"] = "darwin-aarch64"
             manifest.write_text(json.dumps(data), encoding="utf-8")
             target.mkdir()
             sentinel = target / "EXISTING-OWNER-FILE"

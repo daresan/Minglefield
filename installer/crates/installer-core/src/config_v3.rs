@@ -69,6 +69,7 @@ pub struct DatabaseOptions {
     pub backup_path: Option<String>,
     pub schema_additions: Vec<String>,
     pub copy_confirmation: Option<String>,
+    pub new_db_confirmation: Option<String>,
     pub password: SecretInput,
     pub new_password: SecretInput,
 }
@@ -92,6 +93,9 @@ impl DatabaseOptions {
         if flags.copy_confirmation.is_some() {
             self.copy_confirmation = flags.copy_confirmation;
         }
+        if flags.new_db_confirmation.is_some() {
+            self.new_db_confirmation = flags.new_db_confirmation;
+        }
         if flags.password.literal.is_some() {
             self.password.literal = flags.password.literal;
         }
@@ -112,6 +116,7 @@ impl DatabaseOptions {
             || self.backup_path.is_some()
             || !self.schema_additions.is_empty()
             || self.copy_confirmation.is_some()
+            || self.new_db_confirmation.is_some()
             || self.password.literal.is_some()
             || self.password.file.is_some()
             || self.new_password.literal.is_some()
@@ -190,6 +195,7 @@ impl InstallerConfigV3 {
                     }
                 }
                 "confirm_db_copy" => db.copy_confirmation = Some(value.to_owned()),
+                "confirm_new_db" => db.new_db_confirmation = Some(value.to_owned()),
                 "db_password" => db.password.literal = Some(value.to_owned()),
                 "db_password_file" => db.password.file = Some(value.to_owned()),
                 "new_db_password" => db.new_password.literal = Some(value.to_owned()),
@@ -266,6 +272,18 @@ mod tests {
         assert_eq!(f.new_db_password.as_deref(), Some("next"));
         assert!(parse_stdin_secrets(br#"{"unknown":"key"}"#.as_slice()).is_err());
         assert!(parse_stdin_secrets(vec![b'a'; 16 * 1024 + 1].as_slice()).is_err());
+    }
+
+    #[test]
+    fn new_db_consent_is_part_of_the_shared_version_3_schema() {
+        let config = InstallerConfigV3::parse(&format!(
+            "{BASE}database_path=/tmp/fresh.db\nconfirm_new_db=CREATE NEW ENCRYPTED DATABASE\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            config.database.new_db_confirmation.as_deref(),
+            Some("CREATE NEW ENCRYPTED DATABASE")
+        );
     }
 
     #[test]

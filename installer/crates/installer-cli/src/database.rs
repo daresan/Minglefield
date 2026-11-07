@@ -102,7 +102,11 @@ impl DatabaseAction {
                 flag_value(args, "--confirm-db-copy", &mut self.input.copy_confirmation)?;
             }
             "--confirm-new-db" => {
-                flag_value(args, "--confirm-new-db", &mut self.input.new_db_confirmation)?;
+                flag_value(
+                    args,
+                    "--confirm-new-db",
+                    &mut self.input.new_db_confirmation,
+                )?;
             }
             "--schema-add" => {
                 let value = args
@@ -180,7 +184,10 @@ impl DatabaseAction {
         ))?;
         if self.fresh {
             if input.db_password.is_some() {
-                return Err((3, "old database password is not accepted for a fresh DB".into()));
+                return Err((
+                    3,
+                    "old database password is not accepted for a fresh DB".into(),
+                ));
             }
             let new_password = db
                 .new_password

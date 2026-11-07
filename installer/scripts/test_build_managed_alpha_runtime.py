@@ -8,7 +8,8 @@ from zipfile import ZipFile
 
 from build_managed_alpha_runtime import (
     BUNDLES, RUNTIME_REQUIREMENTS, PINNED_APPLICATION_WHEELS,
-    _safe_relative, current_variant,
+    _safe_relative, current_variant, managed_file_inventory,
+    verify_managed_file_inventory, MANAGED_FILES_NAME,
     extract_sqlcipher_wheel, extract_standalone, verify_pinned_file,
 )
 
@@ -57,6 +58,42 @@ class ManagedAlphaRuntimeBuildTests(unittest.TestCase):
         self.assertTrue(all(len(digest) == 64 and
                             all(character in "0123456789abcdef" for character in digest)
                             for digest in PINNED_APPLICATION_WHEELS.values()))
+
+    def test_managed_inventory_detects_tampering_and_unexpected_files(self):
+        import hashlib
+        import json
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "application").mkdir()
+            target = root / "application" / "installed.py"
+            target.write_bytes(b"print('minglefield')\n")
+            listing = managed_file_inventory(root)
+            self.assertEqual(len(listing["files"]), 1)
+            inventory_file = root / MANAGED_FILES_NAME
+            inventory_file.write_text(
+                json.dumps(listing, sort_keys=True), encoding="utf-8")
+            digest = hashlib.sha256(inventory_file.read_bytes()).hexdigest()
+            self.assertEqual(verify_managed_file_inventory(root, digest), 1)
+            target.write_bytes(b"print('modified')\n")
+            with self.assertRaisesRegex(ValueError, "content changed"):
+                verify_managed_file_inventory(root, digest)
+            target.write_bytes(b"print('minglefield')\n")
+            (root / "application" / "unlisted.py").write_bytes(b"evil")
+            with self.assertRaisesRegex(ValueError, "content changed"):
+                verify_managed_file_inventory(root, digest)
+
+    def test_inventory_rejects_symlink_leaving_source_tree(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inside = root / "payload"
+            inside.mkdir()
+            (root / "private.txt").write_bytes(b"must not be packaged")
+            try:
+                (inside / "escape").symlink_to(root / "private.txt")
+            except (OSError, NotImplementedError):
+                self.skipTest("symlink creation unavailable")
+            with self.assertRaisesRegex(ValueError, "symlink escapes"):
+                managed_file_inventory(inside)
 
     def test_checksum_fails_closed(self):
         with TemporaryDirectory() as tmp:

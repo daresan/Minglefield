@@ -353,6 +353,66 @@ assert result.state=="created", "failed to seed local test Host"
     return True
 
 
+MANAGED_FILES_NAME = "managed-file-inventory.json"
+MAX_MANAGED_ENTRIES = 40000
+MAX_MANAGED_BYTES = 2 * 1024 * 1024 * 1024
+
+
+def managed_file_inventory(root):
+    """Enumerate the exact reusable payload for native install verification.
+
+    Source/backup databases and the temporary first-run test fixture are not
+    part of this folder. Every regular file is hashed; symlinks remain relative
+    and are allowed only when they resolve inside the managed payload.
+    """
+    root = Path(root).resolve(strict=True)
+    records = {}
+    total = 0
+    for item in sorted(root.rglob("*")):
+        relative = item.relative_to(root).as_posix()
+        if relative in ("runtime-manifest.json", MANAGED_FILES_NAME):
+            continue
+        parts = _safe_relative(relative)
+        if not parts or len(records) > MAX_MANAGED_ENTRIES:
+            raise ValueError("invalid managed bundle inventory")
+        if item.is_symlink():
+            target = os.readlink(item)
+            if Path(target).is_absolute() or not item.resolve(strict=True).is_relative_to(root):
+                raise ValueError("managed runtime symlink escapes bundle")
+            records[relative] = {"type": "symlink", "target": target}
+        elif item.is_dir():
+            continue
+        elif item.is_file():
+            size = item.stat().st_size
+            total += size
+            if size > MAX_DOWNLOAD or total > MAX_MANAGED_BYTES:
+                raise ValueError("managed runtime exceeds bounded inventory")
+            records[relative] = {
+                "type": "file", "size": size,
+                "sha256": sha256_file(item)
+            }
+        else:
+            raise ValueError("managed runtime contains an unsupported file")
+        if len(records) > MAX_MANAGED_ENTRIES:
+            raise ValueError("managed runtime inventory is too large")
+    return {"schemaVersion": 1, "files": records}
+
+
+def verify_managed_file_inventory(root, expected_sha256):
+    """Recheck every file and link after preparation, without executing them."""
+    root = Path(root).resolve(strict=True)
+    record = root / MANAGED_FILES_NAME
+    if not record.is_file() or record.is_symlink():
+        raise ValueError("managed runtime inventory is missing")
+    if sha256_file(record) != expected_sha256:
+        raise ValueError("managed runtime inventory digest mismatch")
+    expected = json.loads(record.read_text(encoding="utf-8"))
+    actual = managed_file_inventory(root)
+    if expected != actual:
+        raise ValueError("managed runtime content changed after verification")
+    return len(actual["files"])
+
+
 def build_runtime(output):
     """Prepare a reusable runtime; never modify an existing output directory."""
     variant = current_variant()
@@ -470,6 +530,16 @@ def build_runtime(output):
                     or b"installed_alpha_start_rejected" not in application_probe.stderr):
                 raise ValueError("managed Alpha application import/startup self-test failed")
             smoke_managed_application(executable, application_entrypoint)
+            inventory = managed_file_inventory(staged)
+            inventory_bytes = (json.dumps(
+                inventory, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+            inventory_file = staged / MANAGED_FILES_NAME
+            inventory_file.write_bytes(inventory_bytes)
+            inventory_digest = sha256_file(inventory_file)
+            if verify_managed_file_inventory(staged, inventory_digest) != len(
+                    inventory["files"]):
+                raise ValueError("managed runtime inventory roundtrip failed")
+
             manifest = {
                 "schemaVersion": 1,
                 "platform": variant[0] + "-" + variant[1],
@@ -490,6 +560,9 @@ def build_runtime(output):
                 "managedApplicationStartupVerified": True,
                 "managedApplicationHttpLoginVerified": True,
                 "managedHostAndGameApisVerified": True,
+                "managedFileInventory": MANAGED_FILES_NAME,
+                "managedFileInventorySha256": inventory_digest,
+                "managedFileCount": len(inventory["files"]),
                 "fullRuntimeDependencyClosureVerified": False,
                 "publisherSignatureVerified": False,
                 "completeProductInstallation": False,

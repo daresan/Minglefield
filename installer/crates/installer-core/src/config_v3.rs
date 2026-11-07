@@ -70,6 +70,8 @@ pub struct DatabaseOptions {
     pub database_path: Option<String>,
     pub source_path: Option<String>,
     pub backup_path: Option<String>,
+    pub schema_additions: Vec<String>,
+    pub copy_confirmation: Option<String>,
     pub password: SecretInput,
     pub new_password: SecretInput,
 }
@@ -86,6 +88,12 @@ impl DatabaseOptions {
         }
         if flags.backup_path.is_some() {
             self.backup_path = flags.backup_path;
+        }
+        if !flags.schema_additions.is_empty() {
+            self.schema_additions = flags.schema_additions;
+        }
+        if flags.copy_confirmation.is_some() {
+            self.copy_confirmation = flags.copy_confirmation;
         }
         if flags.password.literal.is_some() {
             self.password.literal = flags.password.literal;
@@ -105,6 +113,8 @@ impl DatabaseOptions {
         self.database_path.is_some()
             || self.source_path.is_some()
             || self.backup_path.is_some()
+            || !self.schema_additions.is_empty()
+            || self.copy_confirmation.is_some()
             || self.password.literal.is_some()
             || self.password.file.is_some()
             || self.new_password.literal.is_some()
@@ -170,6 +180,24 @@ impl InstallerConfigV3 {
                 "database_path" => db.database_path = Some(value.to_owned()),
                 "source_db_path" => db.source_path = Some(value.to_owned()),
                 "backup_db_path" => db.backup_path = Some(value.to_owned()),
+                "schema_additions" => {
+                    db.schema_additions = value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|item| !item.is_empty())
+                        .map(str::to_owned)
+                        .collect();
+                    if db.schema_additions.len()
+                        != db
+                            .schema_additions
+                            .iter()
+                            .collect::<HashSet<_>>()
+                            .len()
+                    {
+                        return Err("duplicate schema addition");
+                    }
+                }
+                "confirm_db_copy" => db.copy_confirmation = Some(value.to_owned()),
                 "db_password" => db.password.literal = Some(value.to_owned()),
                 "db_password_file" => db.password.file = Some(value.to_owned()),
                 "new_db_password" => db.new_password.literal = Some(value.to_owned()),

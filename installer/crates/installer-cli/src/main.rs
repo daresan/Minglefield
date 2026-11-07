@@ -76,7 +76,10 @@ fn complete(
         );
     }
     if host_action.verify_native_start {
-        return Err((2, "--verify-native-start requires --setup-local-host".into()));
+        return Err((
+            2,
+            "--verify-native-start requires --setup-local-host".into(),
+        ));
     }
     if host_action.input.has_any() {
         return Err((2, "local login inputs require --setup-local-host".into()));

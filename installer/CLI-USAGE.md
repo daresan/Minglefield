@@ -157,9 +157,9 @@ db_password_file=/absolute/private/sqlcipher-password.txt
 Use this with `--silent --config /absolute/path/config.conf --verify-encrypted-db`. The text config is authored and protected by the
 Host administrator; generated defaults never silently persist a password.
 
-## Same-process first-time local Host setup (implementation; CI acceptance pending)
+## Same-process first-time local Host setup (tested across Ubuntu, Windows and macOS)
 
-The CLI now provides an **explicitly approved one-process** operation that
+The CLI provides an **explicitly approved one-process** operation that
 joins its existing shared verified file installation, **new-only** encrypted
 database creation, and the **existing installed application's** private
 `installed_alpha_first_run.py` admission/Host policy. It does not authorize

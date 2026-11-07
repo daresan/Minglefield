@@ -102,6 +102,19 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <button type="button" id="install-alpha-application-files">Geprüfte Alpha-Anwendungsdateien installieren</button>
 <pre id="alpha-application-install-result" role="status" aria-live="polite">Noch keine Anwendungsdateien installiert. Lokale Host-Aktivierung und Anwendungsstart bleiben gesperrt.</pre>
 </fieldset>
+<fieldset id="alpha-first-run-controls">
+<legend>Lokalen Host-Administrator einrichten (einmalig)</legend>
+<p class="help">Nach einer in dieser Setup-Sitzung verifizierten neuen SQLCipher-Kopie und der Installation der Alpha-Anwendungsdateien kann der lokale Host ohne Einladungscode erstellt werden. Der Benutzer hat ausschließlich Rechte am neu zugeordneten lokalen Host, nicht an entfernten oder fremden Hosts. Die Originaldatenbank und das Backup bleiben unverändert.</p>
+<label for="alpha-first-run-login">Lokaler Anmeldename</label>
+<input id="alpha-first-run-login" value="mingleadmin" autocomplete="username" spellcheck="false" />
+<label for="alpha-first-run-password">Separates Loginpasswort (mind. 12 Zeichen, NICHT das Datenbankpasswort)</label>
+<input id="alpha-first-run-password" type="password" autocomplete="new-password" spellcheck="false" />
+<label for="alpha-first-run-confirm-password">Loginpasswort wiederholen</label>
+<input id="alpha-first-run-confirm-password" type="password" autocomplete="new-password" spellcheck="false" />
+<label><input id="alpha-first-run-consent" type="checkbox" /> Ich bestätige die einmalige Einrichtung dieses lokalen Hosts für den neuen Administrator.</label>
+<button type="button" id="activate-alpha-first-run">Lokalen Host und Administrator einrichten</button>
+<pre id="alpha-first-run-result" role="status" aria-live="polite">Erst nach verifizierter Datenbankkopie und Anwendungsdatei-Installation möglich. Keine automatische Host-Übernahme.</pre>
+</fieldset>
 <h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
 <small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>

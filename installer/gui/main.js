@@ -14,6 +14,7 @@ import { validateSchemaAdditionSelection } from "./schema-addition-selection.js"
 import { assessReadOnlyRecoveryStatus } from "./read-only-recovery-status.js";
 import { prepareReadOnlyRecoveryRequest } from "./read-only-recovery-request.js";
 import { prepareAlphaApplicationInstall, verifyAlphaApplicationInstallResult } from "./alpha-application-install.js";
+import { prepareLocalFirstRun, verifyLocalFirstRunResult } from "./alpha-first-run.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -853,6 +854,7 @@ const alphaFilesResult = document.querySelector("#alpha-application-install-resu
 const alphaFilesConsent = document.querySelector("#alpha-application-install-confirmation");
 const alphaFilesButton = document.querySelector("#install-alpha-application-files");
 let alphaFilesBusy = false;
+let installedAlphaFiles = null;
 alphaFilesButton.addEventListener("click", async () => {
   if (alphaFilesBusy) return;
   let request;
@@ -872,10 +874,12 @@ alphaFilesButton.addEventListener("click", async () => {
   try {
     const response = await invoke("install_alpha_application", request);
     const checked = verifyAlphaApplicationInstallResult(response);
+    installedAlphaFiles = { ...checked };
     alphaFilesResult.textContent = "Minglefield-Alpha-Anwendungsdateien kopiert: " +
       checked.installedEntries + " geprüfte Einträge in " + checked.installDir +
       ". Die Benutzer- und Host-Einrichtung sowie der Anwendungsstart sind weiterhin getrennt.";
   } catch (error) {
+    installedAlphaFiles = null;
     alphaFilesResult.textContent = "Keine bestätigte vollständige Dateiinstallation: " +
       String(error) + ". Ein eventuell angelegter neuer Zielordner darf " +
       "nicht automatisch überschrieben oder entfernt werden. Für einen neuen Versuch " +
@@ -884,6 +888,59 @@ alphaFilesButton.addEventListener("click", async () => {
     alphaFilesConsent.value = "";
     alphaFilesBusy = false;
     alphaFilesButton.disabled = false;
+  }
+});
+
+// M2.08: One-time local Host setup; Rust alone holds the proof of both
+// successful writes from this same Setup Manager process.
+const firstRunLogin = document.querySelector("#alpha-first-run-login");
+const firstRunPassword = document.querySelector("#alpha-first-run-password");
+const firstRunPasswordAgain = document.querySelector("#alpha-first-run-confirm-password");
+const firstRunConsent = document.querySelector("#alpha-first-run-consent");
+const firstRunResult = document.querySelector("#alpha-first-run-result");
+const firstRunButton = document.querySelector("#activate-alpha-first-run");
+let firstRunBusy = false;
+firstRunButton.addEventListener("click", async () => {
+  if (firstRunBusy) return;
+  let request;
+  try {
+    request = prepareLocalFirstRun({
+      reviewedCopy: lastExperimentalCopy,
+      installedFiles: installedAlphaFiles,
+      currentDestination: migrationDestinationInput.value.trim(),
+      databasePassword: newDbPassword.value,
+      loginUserId: firstRunLogin.value.trim(),
+      loginPassword: firstRunPassword.value,
+      repeatPassword: firstRunPasswordAgain.value,
+      consent: firstRunConsent.checked
+    });
+  } catch (error) {
+    firstRunResult.textContent = String(error);
+    return;
+  }
+  firstRunBusy = true;
+  firstRunButton.disabled = true;
+  firstRunResult.textContent =
+    "Prüfe die aktuelle Installation und richte den lokalen Administrator ein…";
+  try {
+    const response = await invoke("activate_first_run_local_admin", request);
+    const result = verifyLocalFirstRunResult(response, request.loginUserId);
+    firstRunResult.textContent =
+      "LOKALER HOST EINGERICHTET: " + result.localHostId +
+      "\nAnmeldung: " + result.loginUserId +
+      "\nDie Benutzer- und Hostdaten liegen in der neuen verschlüsselten Datenbank. " +
+      "Die Originaldatenbank wurde nicht verändert. Der Anwendungsstart folgt als eigener Schritt.";
+  } catch (error) {
+    firstRunResult.textContent =
+      "Lokale Aktivierung nicht bestätigt: " + String(error) +
+      ". Bei einem unklaren Zustand die neue Datenbank nicht überschreiben; " +
+      "einen weiteren Versuch nur als neue Installation mit freiem Zielpfad beginnen.";
+  } finally {
+    firstRunPassword.value = "";
+    firstRunPasswordAgain.value = "";
+    firstRunConsent.checked = false;
+    firstRunBusy = false;
+    firstRunButton.disabled = false;
   }
 });
 

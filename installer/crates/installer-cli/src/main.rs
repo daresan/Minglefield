@@ -597,11 +597,13 @@ mod tests {
             "CREATE NEW ENCRYPTED DATABASE".to_owned(),
         ];
         run(args.clone()).unwrap();
-        assert!(minglefield_installer_core::db_operations::verify_encrypted_database(
-            &database,
-            "FreshSecret9!",
-        )
-        .is_ok());
+        assert!(
+            minglefield_installer_core::db_operations::verify_encrypted_database(
+                &database,
+                "FreshSecret9!",
+            )
+            .is_ok()
+        );
         let before = std::fs::read(&database).unwrap();
         assert_eq!(run(args).unwrap_err().0, 4);
         assert_eq!(std::fs::read(&database).unwrap(), before);

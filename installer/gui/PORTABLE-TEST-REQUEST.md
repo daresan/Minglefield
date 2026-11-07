@@ -1,36 +1,89 @@
-# M2.08 — specifically corrected portable Alpha setup acceptance after rejected Windows artifact
+# M2.10/M2.11 — portable native application handoff acceptance (2026-11-07)
 
-**Scope:** Exactly one M2.08 failed-build repair retest, not a new M2 under-goal or a restart of deferred M2.07 crash recovery. The [previous corrected-build attempt 42329947124](https://github.com/daresan/Minglefield/actions/runs/42329947124) packaged successfully but failed on Shadow: the uploaded Windows artifact lacked two hidden zero-byte members declared in the build-pinned managed-runtime inventory (`setuptools/_vendor/.lock`, `Scripts/.empty`). Previous [42321392311](https://github.com/daresan/Minglefield/actions/runs/42321392311) was already manually rejected. Neither is accepted. The fix includes hidden files and checks a freshly downloaded, extracted artifact against the unchanged SHA-256 inventory; it does not disable or relax integrity verification.
+**Scope:** Explicitly requested next user-visible milestone acceptance package for Shadow.
+The preceding M2.08 manually rejected Windows artifact remains REJECTED, not retroactively accepted.
+This request is for a new disposable acceptance build of the current Tauri Setup Manager
+with the independently executable OS-native Minglefield application included in its
+inventoried managed Alpha payload. No production release, branch merge or deployment.
 
-**Branch:** `feat/game-integration-updates`
-**Reviewed implementation HEAD before marker:** `d6d7f7e003205327fd04a1a67f2c2168796b45f2`
-**Actual portable source SHA:** the new marker commit (no implementation changes between the verified implementation HEAD and packaging). Record that actual SHA/run rather than claiming the previous HEAD was packaged.
-**Packaging path:** Only the existing `.github/workflows/installer-portable-milestone.yml` -> `installer-tauri-packaging.yml` on this feature branch. Windows EXE + sibling `managed-alpha/`, Linux AppImage, macOS app archive. No NSIS/DEB installation of the portable Setup Manager.
+**Milestone/subgoal:** M2.10 native application and M2.11 first-run + independent app launch.
+**Source branch:** `feat/game-integration-updates`
+**Reviewed implementation HEAD before marker:** `b5c0c589032984e5b2fac0c3bf3a00807d2b2284`
+**Actual packaging SHA:** the marker commit that changes this file; record it from GitHub Actions,
+not the preceding implementation SHA.
+**Reason for new portable packages:** The currently approved M2.11 runtime handoff has
+no downloadable artifact at the new implementation SHA. Earlier portable packaging built
+a runtime-only managed Alpha payload and omitted native `Minglefield.exe`.
+The packaging workflow now compiles and inventories the OS-native Minglefield executable
+on each platform, pins the resulting inventory digest into Tauri, checks the native
+program before packaging and independently verifies the re-downloaded Windows artifact.
 
-## Completed, relevant Minglefield Development CI v1.0.0 engineering gates
+## Completed required engineering CI (MDCI T1–T3)
 
-- [Installer Rust / Ubuntu #569](https://github.com/daresan/Minglefield/actions/runs/42342101858): **success**, including existing installed Alpha runtime and encrypted login/Host regression tests.
-- [Native security / Windows + macOS #83](https://github.com/daresan/Minglefield/actions/runs/42342101861): **both success**, covering the current source/runtime/authorization change set.
-- [MAP v0.1 draft conformance #770](https://github.com/daresan/Minglefield/actions/runs/42342101859): **success**, including the added existing bearer-session continuity check.
-- [Installer GUI frontend #37](https://github.com/daresan/Minglefield/actions/runs/42342217557): **success**, covering pre-existing users/Hosts and older verified DBs without auth tables.
-- [AGENTS security guard #799](https://github.com/daresan/Minglefield/actions/runs/42342217435): **success**.
-- Earlier unchanged Tauri backend [#42328609249](https://github.com/daresan/Minglefield/actions/runs/42328609249): **success**, no intervening Tauri backend code change; the packaging modification is exercised by **this** acceptance build, not claimed previously verified.
+- [Installer Rust / Ubuntu 42407238263](https://github.com/daresan/Minglefield/actions/runs/42407238263):
+  **success**, real encrypted local Host setup, independent native app process survives CLI exit
+  and answers HTTP on loopback.
+- [Native Security / Windows + macOS 42407238244](https://github.com/daresan/Minglefield/actions/runs/42407238244):
+  **both success**, including real installed SQLCipher/Host startup and bounded runtime checks.
+- [Tauri GUI native / Ubuntu 42407324302](https://github.com/daresan/Minglefield/actions/runs/42407324302):
+  **success**, Rust backend command, session-bound approved paths and native start guard.
+- [Installer GUI frontend 42407196354](https://github.com/daresan/Minglefield/actions/runs/42407196354):
+  **success**, current-session and authorization response validation.
+- [AGENTS Security Guard 42407835388](https://github.com/daresan/Minglefield/actions/runs/42407835388):
+  **success**. The packaging-specific native binary inclusion is the new T4 check,
+  not claimed as previously tested.
 
-## New portable artifact checks (CI, not user acceptance)
+## Packaging acceptance gate
 
-1. Upload the Windows portable EXE with the entire bundled `managed-alpha/` tree, **including hidden and zero-byte runtime files**; retain the pinned inventory/hash in the compiled binary.
-2. **Download the uploaded Windows artifact back into a fresh extraction path within the same packaging job** and verify that the complete managed-runtime inventory matches size, SHA-256 and required names; missing, extra or modified files must fail packaging.
-3. Require all Windows/Linux/macOS packaging jobs to succeed with actual downloadable non-expired artifacts. Report the exact packaging run and source SHA. Compilation/upload alone never establishes that the installed Minglefield application launches.
+Trigger **once**, only via the existing `.github/workflows/installer-portable-milestone.yml`
+path-scoped marker. The called `installer-tauri-packaging.yml` must produce:
+`tauri-portable-windows-exe` (entire portable EXE and sibling `managed-alpha/` tree),
+`tauri-portable-linux-appimage`, and `tauri-portable-macos-app`.
+The Windows upload and its re-download must preserve hidden, empty and native executable files;
+inventory verification cannot be weakened. Missing native Minglefield binary, incomplete
+Python/SQLCipher runtime, failed bundle checksum or unavailable OS runner fails acceptance.
+Do not trigger an NSIS/DEB, signed production release or automatic upgrade.
 
-## Focused real Windows operator retest (disposable fixtures; no production data)
+## Shadow manual positive cases (disposable testing only)
 
-1. Download and extract the **entire corrected Windows artifact**, keeping `managed-alpha/` next to its portable EXE. Run without Python/Conda/Git/Cargo/Node developer prerequisites.
-2. Select a disposable legacy Alpha database and independently verified backup. Review records and any supported registered missing-schema additions. Authorize one real SQLCipher copy to a **new unused destination** with a separate strong database password; optional rehearsal/temporary-copy diagnostics are not required. Original source and separate backup remain unchanged.
-3. Install the verified Alpha application payload into a new application directory or beside the newly created encrypted DB without overwriting either database or unrelated files. Missing parent folders may be created only for an explicitly approved write.
-4. **Existing users/Hosts:** If the reviewed DB contains existing identities and Host ownership, the GUI must **not** require a new `mingleadmin`, Host ID, first-run claim, password reset or token regeneration. Preserve existing password verifiers, session token hashes and expiry/revocation state and local/remote Host grants. A client-held valid, unexpired session remains usable; passwords provide normal new login sessions later in the application. The installer must not claim active remote Hosts. A separate M2.09 application launch remains pending.
-5. **Genuinely empty local identity/Host:** A verified older DB that has no users or Host bindings (even if it predates current auth tables) may use the existing separately authorized, once-only local first-run path with a login password independent of SQLCipher, without a console invitation.
-6. Negative/retry: wrong SQLCipher password does not consume first-run permission; existing/reserved destinations and receipts are never overwritten/deleted; a different fresh target/operation can be used without restarting the manager. Any missing/tampered managed file must fail before installation.
+1. Download the Windows artifact **from this run**, extract the **entire** ZIP including
+   all `managed-alpha/` contents beside `minglefield-installer-gui.exe`.
+   Do not install Python, Node, Rust, Git or Conda on the test machine.
+2. Select a disposable legacy Alpha SQLite/SQLCipher database with a separately verified
+   independent backup. Confirm database contents and registered missing-schema changes;
+   authorize an encrypted new destination with a strong SQLCipher key. The source,
+   verified backup and independent existing applications remain unchanged.
+3. Install the checked managed Alpha payload into a new path or allowed data coexistence
+   directory, never overwriting existing application files. The destination must
+   contain the exact inventory-pinned `Minglefield.exe` plus managed Python/SQLCipher.
+4. If the migrated DB already has valid user identities/Host owners, preserve them
+   without forcing a new `mingleadmin`, resetting passwords or minting Host authority.
+   If identity/Host tables are genuinely empty, separately authorize one local
+   `mingleadmin` using a distinct account secret and the original first-run worker.
+5. Click the independent **Installierte Minglefield-Anwendung starten** control.
+   The installed native application must start over `127.0.0.1`, open a browser
+   only after readiness, accept normal existing/new account login and keep running
+   after the portable Setup Manager is closed. Account login and Host scope must
+   match the encrypted DB, not the installer login assumptions.
+6. Record the version/ZIP, visible messages, port and observed results.
+   Do not paste real credentials or session tokens into issue logs.
 
-**Out of scope:** M2.09 standalone application shell startup, M2.10 freshly created empty database and general app launch, M2.11 installer CLI, active Remote Host claim/client-only modes, M2.13 repair/update, M2.07 automated crash recovery. The original source/backup and stored remote Host records must still be preserved.
+## Manual negative and preservation cases
 
-**Maintainer acceptance:** **FAILED / pending actual corrected-build Shadow retest**. Green engineering tests and three-OS packaging are not a substitute for the maintainer's interactive result.
+- Tamper with or remove a required native managed file: installation/start must refuse;
+  no silent source-file replacement, fallback to system Python or publisher-trust bypass.
+- Wrong SQLCipher key, nonexistent native executable, missing backup or stale current-session
+  proof must fail safely. A failed start must not consume an unrelated new Host claim.
+- Existing/occupied destination or re-run of first-run must not overwrite/recreate
+  existing DBs, owners, login verifiers, token state, remote Host grants or recovery receipts.
+- Repeated click while starting must not spawn duplicate processes. Cancellation and
+  recovery require explicit operator inspection, not automatic rollback.
+
+**Known limitations and explicit gates:** This remains an unsigned Alpha preview.
+Interactive Windows console-free native starter UX, macOS Finder signing/notarization,
+Linux desktop integration, fully unified fresh/migrated Standard/Advanced/silent flows,
+complete source-build support, and clean end-user release provenance still require
+separate M2.10/M2.11/M2.14 acceptance. An engineering CI pass or artifact upload is
+not maintainer acceptance. `full_installation_completed=false` remains binding.
+
+**Maintainer acceptance:** PENDING real Windows Shadow results; none inferred from CI.

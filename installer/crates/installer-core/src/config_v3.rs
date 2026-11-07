@@ -34,8 +34,7 @@ impl SecretInput {
         let value = if let Some(value) = &self.literal {
             Some(value.clone())
         } else if let Some(path) = &self.file {
-            let mut file =
-                std::fs::File::open(path).map_err(|_| "password file unavailable")?;
+            let mut file = std::fs::File::open(path).map_err(|_| "password file unavailable")?;
             let mut bytes = Vec::new();
             file.by_ref()
                 .take((MAX_SECRET_BYTES + 3) as u64)
@@ -199,28 +198,47 @@ mod tests {
 
     #[test]
     fn v3_preserves_original_gui_and_cli_base_options() {
-        let c = InstallerConfigV3::parse(&format!("{BASE}database_path=/tmp/owner.db\ndb_password=OwnerPass123!\n")).unwrap();
+        let c = InstallerConfigV3::parse(&format!(
+            "{BASE}database_path=/tmp/owner.db\ndb_password=OwnerPass123!\n"
+        ))
+        .unwrap();
         assert_eq!(c.database.database_path.as_deref(), Some("/tmp/owner.db"));
         assert_eq!(c.database.password.literal.as_deref(), Some("OwnerPass123!"));
         assert!(c.preview(Mode::Silent).is_ok());
-        assert!(InstallerConfigV3::parse(&format!("{BASE}db_password=x\ndb_password=y\n")).is_err());
+        assert!(
+            InstallerConfigV3::parse(&format!("{BASE}db_password=x\ndb_password=y\n")).is_err()
+        );
         assert!(InstallerConfigV3::parse(&format!("{BASE}unexpected_key=value\n")).is_err());
     }
 
     #[test]
     fn accepts_all_noninteractive_secret_sources_and_no_implicit_choice() {
-        let mut input = SecretInput { literal: Some("literal password".into()), file: None };
-        assert_eq!(input.resolve(None, None).unwrap().as_deref(), Some("literal password"));
+        let mut input = SecretInput {
+            literal: Some("literal password".into()),
+            file: None,
+        };
+        assert_eq!(
+            input.resolve(None, None).unwrap().as_deref(),
+            Some("literal password")
+        );
         assert!(input.resolve(Some("env".into()), None).is_err());
         input.literal = None;
-        assert_eq!(input.resolve(Some("env".into()), None).unwrap().as_deref(), Some("env"));
-        assert_eq!(input.resolve(None, Some("stdin")).unwrap().as_deref(), Some("stdin"));
+        assert_eq!(
+            input.resolve(Some("env".into()), None).unwrap().as_deref(),
+            Some("env")
+        );
+        assert_eq!(
+            input.resolve(None, Some("stdin")).unwrap().as_deref(),
+            Some("stdin")
+        );
         assert_eq!(input.resolve(None, None).unwrap(), None);
     }
 
     #[test]
     fn bounded_stdin_json_rejects_unknown_and_oversized_fields() {
-        let f = parse_stdin_secrets(br#"{"db_password":"key","new_db_password":"next"}"#.as_slice()).unwrap();
+        let f =
+            parse_stdin_secrets(br#"{"db_password":"key","new_db_password":"next"}"#.as_slice())
+                .unwrap();
         assert_eq!(f.db_password.as_deref(), Some("key"));
         assert_eq!(f.new_db_password.as_deref(), Some("next"));
         assert!(parse_stdin_secrets(br#"{"unknown":"key"}"#.as_slice()).is_err());

@@ -104,14 +104,17 @@ fn dialog_command(kind: DialogKind) -> Result<Command, &'static str> {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        let zenity_present = std::env::var_os("PATH").is_some_and(|path| {
-            std::env::split_paths(&path).any(|entry| entry.join("zenity").is_file())
-        });
-        let kdialog_present = std::env::var_os("PATH").is_some_and(|path| {
-            std::env::split_paths(&path).any(|entry| entry.join("kdialog").is_file())
-        });
-        if zenity_present {
-            let mut cmd = Command::new("zenity");
+        // Use known OS locations, never execute a PATH-shadowed replacement
+        // for a graphical password dialog. Optional desktop helpers are
+        // not auto-installed or treated as an Alpha runtime dependency.
+        let dialog_path = |name: &str| {
+            ["/usr/bin", "/bin", "/usr/local/bin"]
+                .iter()
+                .map(|dir| std::path::Path::new(dir).join(name))
+                .find(|path| path.is_file())
+        };
+        if let Some(path) = dialog_path("zenity") {
+            let mut cmd = Command::new(path);
             match kind {
                 DialogKind::DatabaseFile => {
                     cmd.args([
@@ -125,8 +128,8 @@ fn dialog_command(kind: DialogKind) -> Result<Command, &'static str> {
             }
             return Ok(cmd);
         }
-        if kdialog_present {
-            let mut cmd = Command::new("kdialog");
+        if let Some(path) = dialog_path("kdialog") {
+            let mut cmd = Command::new(path);
             match kind {
                 DialogKind::DatabaseFile => {
                     cmd.args(["--getopenfilename", ".", "*|Existing SQLCipher database"]);

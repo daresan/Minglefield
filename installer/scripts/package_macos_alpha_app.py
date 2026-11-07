@@ -33,7 +33,7 @@ def verify_native_macos_source(source):
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if (
         manifest.get("schemaVersion") != 1
-        or not str(manifest.get("platform", "")).startswith("macos-")
+        or not str(manifest.get("platform", "")).startswith("darwin-")
         or manifest.get("nativeApplicationIncluded") is not True
         or manifest.get("nativeApplicationExecutable") != "Minglefield"
         or manifest.get("applicationEntrypoint")

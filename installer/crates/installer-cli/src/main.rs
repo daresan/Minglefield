@@ -337,4 +337,92 @@ mod tests {
         assert!(run(["--defaults".to_string()]).is_err());
         assert!(run(["--silent".to_string()]).is_err());
     }
+
+    fn disposable_managed_package() -> (std::path::PathBuf, std::path::PathBuf, String) {
+        use minglefield_installer_core::integrity::sha256_hex;
+        use std::fs;
+        let root = std::env::temp_dir().join(format!(
+            "mf-cli-install-test-{}-{:x}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let source = root.join("verified-source");
+        let application = source.join("application/server/installed_alpha_launch.py");
+        let python = source.join("runtime/python/bin/python3.11");
+        fs::create_dir_all(application.parent().unwrap()).unwrap();
+        fs::create_dir_all(python.parent().unwrap()).unwrap();
+        fs::write(application, b"abc").unwrap();
+        fs::write(python, b"def").unwrap();
+        let inventory = concat!(
+            "{\"schemaVersion\":1,\"files\":{",
+            "\"application/server/installed_alpha_launch.py\":",
+            "{\"type\":\"file\",\"size\":3,\"sha256\":",
+            "\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"},",
+            "\"runtime/python/bin/python3.11\":",
+            "{\"type\":\"file\",\"size\":3,\"sha256\":",
+            "\"cb8379ac2098aa165029e3938a51da0bcecfc008fd6795f401178647f96c5b34\"}}}"
+        );
+        fs::write(source.join("managed-file-inventory.json"), inventory).unwrap();
+        fs::write(source.join("runtime-manifest.json"), "{}").unwrap();
+        (root, source, sha256_hex(inventory.as_bytes()))
+    }
+
+    #[test]
+    fn actually_installs_verified_alpha_files_only_with_explicit_consent() {
+        use std::fs;
+        let (root, source, digest) = disposable_managed_package();
+        let target = root.join("new-application");
+        let args = vec![
+            "--silent".to_owned(),
+            "--defaults".to_owned(),
+            "--install-dir".to_owned(),
+            target.to_string_lossy().into_owned(),
+            "--install-alpha-files".to_owned(),
+            "--package-dir".to_owned(),
+            source.to_string_lossy().into_owned(),
+            "--inventory-sha256".to_owned(),
+            digest.clone(),
+        ];
+        assert_eq!(run(args.clone()).unwrap_err().0, 2);
+        assert!(!target.exists());
+        let mut approved = args;
+        approved.extend([
+            "--confirm-install".to_owned(),
+            INSTALL_CONFIRMATION.to_owned(),
+        ]);
+        assert!(run(approved.clone()).is_ok());
+        assert_eq!(
+            fs::read(target.join("application/server/installed_alpha_launch.py")).unwrap(),
+            b"abc"
+        );
+        assert_eq!(run(approved).unwrap_err().0, 4);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn tampered_bundle_does_not_create_destination() {
+        use std::fs;
+        let (root, source, digest) = disposable_managed_package();
+        let target = root.join("not-created");
+        fs::write(source.join("runtime/python/bin/python3.11"), b"tampered").unwrap();
+        let args = vec![
+            "--silent".to_owned(),
+            "--defaults".to_owned(),
+            "--install-dir".to_owned(),
+            target.to_string_lossy().into_owned(),
+            "--install-alpha-files".to_owned(),
+            "--package-dir".to_owned(),
+            source.to_string_lossy().into_owned(),
+            "--inventory-sha256".to_owned(),
+            digest,
+            "--confirm-install".to_owned(),
+            INSTALL_CONFIRMATION.to_owned(),
+        ];
+        assert_eq!(run(args).unwrap_err().0, 4);
+        assert!(!target.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 }

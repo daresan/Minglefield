@@ -19,12 +19,14 @@ use minglefield_installer_core::managed_alpha_install::{
     install_from_verified_root, verified_inventory, verify_installed_application,
 };
 use std::env;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 #[derive(Default)]
 pub struct LocalSetupAction {
     pub enabled: bool,
+    pub verify_native_start: bool,
     pub input: LocalHostOptions,
 }
 
@@ -50,6 +52,12 @@ impl LocalSetupAction {
             return Ok(true);
         }
         match argument {
+            "--verify-native-start" if !self.verify_native_start => {
+                self.verify_native_start = true;
+            }
+            "--verify-native-start" => {
+                return Err((2, "duplicate --verify-native-start".into()));
+            }
             "--login-user-id" => {
                 flag_value(args, "--login-user-id", &mut self.input.login_user_id)?;
             }
@@ -194,6 +202,20 @@ impl LocalSetupAction {
             )
         })?;
 
+        // Reject a missing native starter before any fresh DB or file write.
+        if self.verify_native_start {
+            let native = if cfg!(windows) {
+                package.join("Minglefield.exe")
+            } else {
+                package.join("Minglefield")
+            };
+            let metadata = std::fs::symlink_metadata(&native)
+                .map_err(|_| (4, "native Minglefield application not in package".to_owned()))?;
+            if !metadata.is_file() || metadata.file_type().is_symlink() {
+                return Err((4, "native Minglefield executable is not a regular file".into()));
+            }
+        }
+
         // Preflight the *whole package* before creating an encrypted DB or
         // installing bytes. This digest must be operator trusted; the digest
         // is not a publisher-signature verification.
@@ -276,10 +298,19 @@ impl LocalSetupAction {
                 "installed local Host first-run authorization rejected".to_owned(),
             )
         })?;
+        if self.verify_native_start {
+            probe_native_application(installed_root, database, &cipher_key).map_err(|_| {
+                (
+                    4,
+                    "local Host was created, but native startup verification failed; preserve installed data for review"
+                        .to_owned(),
+                )
+            })?;
+        }
         if json {
             println!(
-                "{{\"schema_version\":1,\"status\":\"local_host_admin_created\",\"login_user_id\":\"{}\",\"local_host_id\":\"{}\",\"remote_host_authority_granted\":false,\"application_files_installed\":true,\"encrypted_database_created\":true,\"native_application_launch_enabled\":false,\"full_installation_completed\":false}}",
-                receipt.login_user_id, receipt.local_host_id
+                "{{\"schema_version\":1,\"status\":\"local_host_admin_created\",\"login_user_id\":\"{}\",\"local_host_id\":\"{}\",\"remote_host_authority_granted\":false,\"application_files_installed\":true,\"encrypted_database_created\":true,\"native_application_launch_enabled\":{},\"full_installation_completed\":false}}",
+                receipt.login_user_id, receipt.local_host_id, self.verify_native_start
             );
         } else {
             println!(
@@ -289,6 +320,65 @@ impl LocalSetupAction {
         }
         Ok(())
     }
+}
+
+/// Launch the installed native starter with the existing private stdin
+/// credential contract. Probe loopback readiness, then stop without a browser.
+/// A failed post-setup probe never authorizes a replay or removes user data.
+fn probe_native_application(
+    installed_root: &Path,
+    database: &Path,
+    cipher_key: &str,
+) -> Result<(), &'static str> {
+    let native = if cfg!(windows) {
+        installed_root.join("Minglefield.exe")
+    } else {
+        installed_root.join("Minglefield")
+    };
+    let mut child = Command::new(native)
+        .arg("--database")
+        .arg(database)
+        .arg("--secrets-stdin")
+        .arg("--probe-exit")
+        .arg("--no-browser")
+        .arg("--no-dialog")
+        .env_remove("MINGLEFIELD_DB_PASSWORD")
+        .env_remove("MINGLEFIELD_NEW_DB_PASSWORD")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "cannot launch installed native application")?;
+    let frame = serde_json::json!({
+        "db_password": cipher_key,
+        "new_db_password": null,
+        "login_password": null
+    });
+    {
+        let mut stdin = child.stdin.take().ok_or("native stdin unavailable")?;
+        serde_json::to_writer(&mut stdin, &frame)
+            .map_err(|_| "cannot deliver native private key frame")?;
+        stdin.flush().map_err(|_| "cannot flush private key frame")?;
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|_| "native application verification unavailable")?;
+    if !output.status.success() {
+        return Err("installed native application failed startup");
+    }
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).map_err(|_| "invalid native readiness response")?;
+    if report.get("status").and_then(serde_json::Value::as_str)
+        != Some("native_minglefield_startup_verified")
+        || report.get("encryptedDatabase").and_then(serde_json::Value::as_bool) != Some(true)
+        || report.get("hostProvisioningEnabled").and_then(serde_json::Value::as_bool) != Some(false)
+        || report.get("hostClaimBootstrapEnabled").and_then(serde_json::Value::as_bool)
+            != Some(false)
+        || report.get("bind").and_then(serde_json::Value::as_str) != Some("127.0.0.1")
+    {
+        return Err("native application readiness contract rejected");
+    }
+    Ok(())
 }
 
 #[cfg(test)]

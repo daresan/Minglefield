@@ -3,11 +3,12 @@
 The headless CLI and the Tauri GUI now use the **same**
 `installer-core::managed_alpha_install` Rust implementation to validate a
 managed Alpha file inventory and copy exactly its declared files. The headless
-CLI now exposes **three separate, executable actions**: verified file
-installation, encrypted database verification, and reviewed encrypted
-database copy. They are not yet composed into a complete installation.
-A successful individual action does **not** mean fresh database creation,
-local Host setup, independent native application launch or M2.11 acceptance.
+CLI now exposes **four separate, executable actions**: verified file
+installation, read-only encrypted database verification, reviewed encrypted
+database copy, and creation of a fresh SQLCipher database. They are not yet
+composed into a complete installation. A successful individual action does
+**not** mean local Host setup, independent native application launch or
+M2.11 acceptance.
 
 ## Actual file-install invocation (explicit local package)
 
@@ -59,6 +60,30 @@ cargo run -p minglefield-installer-cli -- --silent --defaults \
   --verify-encrypted-db --database /absolute/path/user.db \
   --db-password 'ExistingCipherPass9!' --json
 ```
+
+**Create a genuinely new SQLCipher database without an existing source:**
+
+```sh
+cargo run -p minglefield-installer-cli -- --silent --defaults \
+  --create-new-encrypted-db \
+  --database /absolute/existing-directory/new-encrypted.sqlite3 \
+  --new-db-password 'FreshCipherPass9!' \
+  --confirm-new-db 'CREATE NEW ENCRYPTED DATABASE' \
+  --json
+```
+
+The parent directory must already exist; the chosen database file must **not**
+exist. This operation exclusively creates and verifies an encrypted SQLCipher
+container, with no Alpha application schema, login user, password hash,
+Host owner/grant, or automatic Host activation. Existing targets are never
+overwritten. An interrupted or invalid creation leaves its occupied target
+for explicit review rather than automatically deleting or reusing it.
+The application's existing first-run initialization will create its own
+canonical schema and local Host/user records in a **separately authorized**
+step. \`--new-db-password-file\`, \`MINGLEFIELD_NEW_DB_PASSWORD\`, administrator-
+authored version-3 \`new_db_password\` / \`new_db_password_file\` and bounded
+\`--secrets-stdin\` can supply the new key; the exact approval is also available
+as version-3 \`confirm_new_db\`. This is not yet a full installer transaction.
 
 **Create a verified encrypted copy from an original and its independent backup:**
 
@@ -139,8 +164,9 @@ CLI values, password files, administrator-authored configuration, environment
 variables, prompt and private stdin. **The noninteractive credential sources
 are now implemented for the focused SQLCipher verification/encrypted-copy
 actions**, not for every future application/installer operation. Interactive
-prompt, complete database/new-Host creation, a separately launched native
-app and end-to-end silent installation **remain unfinished**. Do not infer
+prompt, local Host/user initialization and verification against the newly
+created database, a separately launched native app, and end-to-end silent
+installation **remain unfinished**. Do not infer
 the complete acceptance from a successful file-copy or encrypted-copy
 action. The eventual CLI, Tauri UI and native
 Minglefield application must use the same versioned installation/config

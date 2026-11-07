@@ -41,7 +41,9 @@ fn option_value(
     if field.is_some() {
         return Err("duplicate native application option");
     }
-    let value = args.next().ok_or("missing native application option value")?;
+    let value = args
+        .next()
+        .ok_or("missing native application option value")?;
     if value.starts_with("--") {
         return Err("missing native application option value");
     }
@@ -138,7 +140,10 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
     )
     .map_err(|_| "invalid native application manifest")?;
     if manifest.get("schemaVersion").and_then(Value::as_u64) != Some(1)
-        || manifest.get("nativeApplicationIncluded").and_then(Value::as_bool) != Some(true)
+        || manifest
+            .get("nativeApplicationIncluded")
+            .and_then(Value::as_bool)
+            != Some(true)
     {
         return Err("not a verified native Minglefield application package");
     }
@@ -150,14 +155,17 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
     if manifest_string(&manifest, "nativeApplicationExecutable")? != executable_name {
         return Err("native Minglefield executable name mismatch");
     }
-    if fs::canonicalize(executable)
-        .map_err(|_| "native Minglefield path unavailable")?
+    if fs::canonicalize(executable).map_err(|_| "native Minglefield path unavailable")?
         != root.join(executable_name)
     {
         return Err("native executable not located in its managed Alpha root");
     }
     let digest = manifest_string(&manifest, "managedFileInventorySha256")?;
-    if digest.len() != 64 || !digest.bytes().all(|x| x.is_ascii_hexdigit() && !x.is_ascii_uppercase()) {
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|x| x.is_ascii_hexdigit() && !x.is_ascii_uppercase())
+    {
         return Err("invalid native inventory digest");
     }
     verify_installed_application(&root, digest)
@@ -188,10 +196,7 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
     })
 }
 
-fn resolve_key(
-    opts: &LaunchOptions,
-    root: &Path,
-) -> Result<(PathBuf, String), &'static str> {
+fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &'static str> {
     let automatic = root.join("minglefield.conf");
     let config_path = opts.config.as_ref().or(if automatic.exists() {
         Some(&automatic)
@@ -222,22 +227,32 @@ fn resolve_key(
         let mut buf = [0_u8; 16];
         file.read_exact(&mut buf)
             .map_err(|_| "selected SQLCipher database is incomplete")?;
-        (buf, fs::metadata(path).map_err(|_| "cannot inspect SQLCipher file")?.len())
+        (
+            buf,
+            fs::metadata(path)
+                .map_err(|_| "cannot inspect SQLCipher file")?
+                .len(),
+        )
     };
     if size < 16 || &header == b"SQLite format 3\0" {
         return Err("selected database must be encrypted SQLCipher");
     }
 
     let frame = if opts.stdin {
-        Some(parse_stdin_secrets(std::io::stdin().lock())
-            .map_err(|_| "invalid bounded native secrets stdin")?)
+        Some(
+            parse_stdin_secrets(std::io::stdin().lock())
+                .map_err(|_| "invalid bounded native secrets stdin")?,
+        )
     } else {
         None
     };
     if frame.as_ref().is_some_and(|f| f.login_password.is_some()) {
         return Err("native application launch must not accept account login password");
     }
-    if frame.as_ref().is_some_and(|f| f.db_password.is_some() && f.new_db_password.is_some()) {
+    if frame
+        .as_ref()
+        .is_some_and(|f| f.db_password.is_some() && f.new_db_password.is_some())
+    {
         return Err("conflicting native application database key channels");
     }
     let chosen = if db.password.literal.is_some()
@@ -263,7 +278,10 @@ fn resolve_key(
     if !verified.alpha_users_table_present {
         return Err("Alpha account login has not yet been initialized");
     }
-    Ok((fs::canonicalize(path).map_err(|_| "cannot identify selected database")?, secret))
+    Ok((
+        fs::canonicalize(path).map_err(|_| "cannot identify selected database")?,
+        secret,
+    ))
 }
 
 fn private_start_frame(database: &Path, key: &str) -> Result<Vec<u8>, &'static str> {
@@ -291,7 +309,10 @@ fn parse_readiness(frame: &[u8]) -> Result<u16, &'static str> {
         || value.get("status").and_then(Value::as_str) != Some("ready")
         || value.get("bind").and_then(Value::as_str) != Some("127.0.0.1")
         || value.get("encryptedDatabase").and_then(Value::as_bool) != Some(true)
-        || value.get("hostClaimBootstrapEnabled").and_then(Value::as_bool) != Some(false)
+        || value
+            .get("hostClaimBootstrapEnabled")
+            .and_then(Value::as_bool)
+            != Some(false)
     {
         return Err("native Alpha readiness violated local-only security contract");
     }
@@ -305,10 +326,7 @@ fn parse_readiness(frame: &[u8]) -> Result<u16, &'static str> {
     Ok(port as u16)
 }
 
-fn start_worker(
-    app: &InstalledApp,
-    frame: &[u8],
-) -> Result<(Child, u16), &'static str> {
+fn start_worker(app: &InstalledApp, frame: &[u8]) -> Result<(Child, u16), &'static str> {
     let mut command = Command::new(&app.python);
     command
         .arg("-I")
@@ -477,22 +495,16 @@ mod tests {
 
     #[test]
     fn rejects_plaintext_db_options_and_ambiguous_native_flags() {
-        assert!(parse_args(["--db-password".to_owned(), "value".to_owned()])
-            .is_ok());
-        assert!(parse_args(["--db-password=--DashKey123!".to_owned()])
-            .is_ok());
-        assert!(parse_args([
-            "--db-password=x".to_owned(),
-            "--db-password=y".to_owned(),
-        ])
-        .is_err());
-        assert!(parse_args(["--probe-exit".to_owned(), "--verify-only".to_owned()])
-            .is_err());
+        assert!(parse_args(["--db-password".to_owned(), "value".to_owned()]).is_ok());
+        assert!(parse_args(["--db-password=--DashKey123!".to_owned()]).is_ok());
+        assert!(parse_args(["--db-password=x".to_owned(), "--db-password=y".to_owned(),]).is_err());
+        assert!(parse_args(["--probe-exit".to_owned(), "--verify-only".to_owned()]).is_err());
     }
 
     #[test]
     fn verifies_bounded_private_launch_frames_without_logging_credentials() {
-        let frame = private_start_frame(Path::new("/test/alpha.db"), "NotPrintedSecret123!").unwrap();
+        let frame =
+            private_start_frame(Path::new("/test/alpha.db"), "NotPrintedSecret123!").unwrap();
         assert!(frame.len() < MAX_FRAME);
         assert!(parse_readiness(
             br#"{"version":1,"status":"ready","bind":"127.0.0.1","port":32111,"encryptedDatabase":true,"hostClaimBootstrapEnabled":false}"#

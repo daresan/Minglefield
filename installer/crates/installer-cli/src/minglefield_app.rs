@@ -542,8 +542,16 @@ fn main() -> std::process::ExitCode {
     match result {
         Ok(Ok(())) => std::process::ExitCode::SUCCESS,
         Ok(Err(reason)) => {
-            // Every error is a static developer-authored string. Never echo
-            // raw environment, argv, config, DB paths or SQLCipher keys.
+            // Report a failed *graphical* unlock in the same desktop UI.
+            // A deliberate Cancel is not an error message. Scripted starts
+            // never open a dialog, so never trigger this GUI notification.
+            if native_start_dialog::was_opened()
+                && reason != "native Minglefield startup dialog cancelled or unavailable"
+            {
+                native_start_dialog::show_unlock_error();
+            }
+            // Every reason is a static developer-authored string. Never
+            // echo environment, argv, config, DB paths or SQLCipher keys.
             eprintln!("minglefield_native_launch_rejected: {reason}");
             std::process::ExitCode::from(2)
         }

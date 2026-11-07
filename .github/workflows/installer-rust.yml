@@ -93,10 +93,10 @@ jobs:
         run: python -B -m unittest discover -s ../tests/conformance -p "test_installed*alpha*.py" -v
       - name: Offline installer release preparation tests
         run: python -m unittest discover -s scripts -p "test_*.py" -v
-      - name: Assemble pinned embedded CPython, SQLCipher and real Alpha application (build-only)
-        run: python -B scripts/build_managed_alpha_runtime.py --output ci-managed-alpha
+      - name: Build OS-native Minglefield executable and pinned managed Alpha payload
+        run: python -B scripts/build_native_alpha_application.py --output ci-managed-alpha
       - name: Verify real one-shot CLI fresh local Host setup against installed managed Alpha
-        run: python -B scripts/verify_cli_local_setup.py --package ci-managed-alpha
+        run: python -B scripts/verify_cli_local_setup.py --package ci-managed-alpha --require-native
       - name: Inspect transitive Alpha runtime imports (read-only)
         run: python scripts/audit_alpha_runtime_imports.py --json
       - name: Inspect Git and gh executable invocation sites (read-only)

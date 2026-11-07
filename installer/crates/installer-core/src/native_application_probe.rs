@@ -221,6 +221,12 @@ pub fn start_installed_application(
     if !open_browser {
         command.arg("--no-browser");
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW: never flash a console when launched by Tauri.
+        command.creation_flags(0x0800_0000);
+    }
     // A separate process group also permits exact clean-up in CI without
     // signalling the installer or unrelated user processes.
     #[cfg(unix)]

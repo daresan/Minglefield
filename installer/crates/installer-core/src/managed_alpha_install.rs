@@ -350,6 +350,132 @@ pub fn install_from_verified_root(
     })
 }
 
+
+/// An explicitly approved installation may reuse a valid existing application
+/// or archive *only conflicting managed top-level names* before installing a
+/// newly verified package. Foreign files are neither deleted nor replaced.
+/// This operation is not invoked by developer diagnostic or preview buttons.
+pub fn install_or_reuse_application(
+    source: &Path,
+    destination: &Path,
+    pinned_inventory: &str,
+    approve_existing: bool,
+) -> Result<(ApplicationFilesInstalled, bool), String> {
+    let inventory = verified_inventory(source, pinned_inventory)?;
+    if verify_installed_application(destination, pinned_inventory).is_ok() {
+        return Ok((
+            ApplicationFilesInstalled {
+                status: "alpha_application_files_installed",
+                install_dir: fs::canonicalize(destination)
+                    .map_err(|_| "Cannot identify existing Minglefield installation")?
+                    .to_string_lossy()
+                    .into_owned(),
+                installed_entries: inventory.files.len(),
+                host_provisioning_enabled: false,
+                application_launch_enabled: false,
+            },
+            true,
+        ));
+    }
+    let existing = match fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => true,
+        Ok(_) => return Err("Application destination is not a real directory".into()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(_) => return Err("Cannot inspect application destination".into()),
+    };
+    if !existing {
+        return install_from_verified_root(source, destination, pinned_inventory)
+            .map(|result| (result, false));
+    }
+    if !approve_existing {
+        return Err("Existing application directory requires confirmation".into());
+    }
+    let mut roots = std::collections::BTreeSet::new();
+    for entry in inventory.files.keys() {
+        let relative = relative_install_path(entry)?;
+        let first = relative
+            .components()
+            .next()
+            .ok_or("Managed application entry has no top-level directory")?;
+        roots.insert(first.as_os_str().to_os_string());
+    }
+    roots.insert(std::ffi::OsString::from(INVENTORY_NAME));
+    roots.insert(std::ffi::OsString::from("runtime-manifest.json"));
+    let has_conflicts = roots.iter().any(|name| {
+        fs::symlink_metadata(destination.join(name)).is_ok()
+    });
+    if !has_conflicts {
+        return install_from_verified_root(source, destination, pinned_inventory)
+            .map(|result| (result, false));
+    }
+    // A staged package is complete and hash-verified before anything in the
+    // existing target can be renamed. Distinct names preserve old files for
+    // manual recovery if an OS file handle prevents replacement.
+    let parent = destination
+        .parent()
+        .ok_or("Application destination has no parent")?;
+    let id: String = rusqlite::Connection::open_in_memory()
+        .and_then(|db| db.query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0)))
+        .map_err(|_| "Cannot reserve unique application staging identity")?;
+    let stage = parent.join(format!(".minglefield-install-stage-{id}"));
+    let backup = parent.join(format!(".minglefield-previous-application-{id}"));
+    let staged = install_from_verified_root(source, &stage, pinned_inventory)?;
+    fs::create_dir(&backup).map_err(|_| "Cannot preserve previous application entries")?;
+    let mut backed_up = Vec::new();
+    let mut installed = Vec::new();
+    let result = (|| -> Result<(), String> {
+        for name in &roots {
+            let target_entry = destination.join(name);
+            match fs::symlink_metadata(&target_entry) {
+                Ok(_) => {
+                    fs::rename(&target_entry, backup.join(name))
+                        .map_err(|_| "Cannot archive previous application entry")?;
+                    backed_up.push(name.clone());
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(_) => return Err("Cannot inspect existing application entry".into()),
+            }
+            fs::rename(stage.join(name), &target_entry)
+                .map_err(|_| "Cannot install staged application entry")?;
+            installed.push(name.clone());
+        }
+        verify_installed_application(destination, pinned_inventory)
+            .map_err(|_| "Updated installed application failed inventory check")
+    })();
+    if let Err(reason) = result {
+        let mut restore_ok = true;
+        for name in installed.iter().rev() {
+            if fs::rename(destination.join(name), stage.join(name)).is_err() {
+                restore_ok = false;
+            }
+        }
+        for name in backed_up.iter().rev() {
+            if fs::rename(backup.join(name), destination.join(name)).is_err() {
+                restore_ok = false;
+            }
+        }
+        return Err(if restore_ok {
+            reason
+        } else {
+            "Application update interrupted; previous and staged files preserved for manual recovery"
+                .into()
+        });
+    }
+    // Only the now-empty internal stage directory is removed. Never delete
+    // the backup holding previously installed/foreign application bytes.
+    let _ = fs::remove_dir(&stage);
+    Ok((
+        ApplicationFilesInstalled {
+            install_dir: fs::canonicalize(destination)
+                .map_err(|_| "Cannot identify updated application directory")?
+                .to_string_lossy()
+                .into_owned(),
+            ..staged
+        },
+        false,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,6 +507,34 @@ mod tests {
         fs::write(source.join(INVENTORY_NAME), inventory).unwrap();
         fs::write(source.join("runtime-manifest.json"), "{}").unwrap();
         (root, source, sha256_hex(inventory.as_bytes()))
+    }
+
+    #[test]
+    fn existing_directory_update_archives_old_managed_entries_without_touching_user_files() {
+        let (source, dest, digest) = fixture();
+        // Use a previously populated destination rather than rejecting it.
+        fs::create_dir_all(dest.join("application/server")).unwrap();
+        fs::write(dest.join("application/server/legacy.py"), b"older edition").unwrap();
+        fs::write(dest.join("unrelated-user-file.txt"), b"do not touch").unwrap();
+        assert!(install_or_reuse_application(&source, &dest, &digest, false).is_err());
+        let (installed, reused) =
+            install_or_reuse_application(&source, &dest, &digest, true).unwrap();
+        assert!(!reused);
+        assert_eq!(installed.status, "alpha_application_files_installed");
+        assert!(verify_installed_application(&dest, &digest).is_ok());
+        assert_eq!(fs::read(dest.join("unrelated-user-file.txt")).unwrap(), b"do not touch");
+        let archives: Vec<_> = fs::read_dir(dest.parent().unwrap())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(".minglefield-previous-application-"))
+            .collect();
+        assert_eq!(archives.len(), 1);
+        assert_eq!(
+            fs::read(archives[0].path().join("application/server/legacy.py")).unwrap(),
+            b"older edition"
+        );
+        let (_same, reused) = install_or_reuse_application(&source, &dest, &digest, true).unwrap();
+        assert!(reused);
     }
 
     #[test]

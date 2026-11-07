@@ -17,7 +17,7 @@ class ManagedAlphaRuntimeBuildTests(unittest.TestCase):
         self.assertIn(current_variant(), BUNDLES)
         self.assertEqual(len(BUNDLES), 4)
         for variant, (triple, archive_sha, wheel, wheel_sha) in BUNDLES.items():
-            self.assertIn("3.11", wheel)
+            self.assertIn("-cp311-cp311-", wheel)
             self.assertTrue(triple)
             self.assertEqual(len(archive_sha), 64)
             self.assertEqual(len(wheel_sha), 64)

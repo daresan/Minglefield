@@ -112,9 +112,6 @@ pub fn preview_migration_destination(
     let file_name = destination
         .file_name()
         .ok_or(MigrationDestinationError::DestinationParentUnavailable)?;
-    if file_name == source.file_name().unwrap_or_default() {
-        return Err(MigrationDestinationError::SameFileName);
-    }
     match fs::symlink_metadata(destination) {
         Ok(_) => return Err(MigrationDestinationError::DestinationExists),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -648,9 +645,15 @@ mod tests {
                 Err(MigrationDestinationError::ProtectedSourceSidecar)
             );
         }
+        // Reusing the familiar database filename in a DIFFERENT new
+        // directory is safe. Only the original pathname/physical file is
+        // protected against replacement.
+        let same_name_elsewhere = preview_migration_destination(
+            &source, &target_dir.join("alpha.sqlite3")
+        ).unwrap();
         assert_eq!(
-            preview_migration_destination(&source, &target_dir.join("alpha.sqlite3")),
-            Err(MigrationDestinationError::SameFileName)
+            same_name_elsewhere.destination,
+            fs::canonicalize(&target_dir).unwrap().join("alpha.sqlite3")
         );
         let destination = target_dir.join("new.sqlite3");
         fs::write(&destination, b"existing").unwrap();

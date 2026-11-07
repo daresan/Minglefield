@@ -26,6 +26,7 @@ PYTHON_VERSION = "3.11.18"
 SQLCIPHER_VERSION = "0.6.4"
 MAX_DOWNLOAD = 90 * 1024 * 1024
 MAX_UNPACKED = 900 * 1024 * 1024
+ROOT = Path(__file__).resolve().parents[2]
 
 # These release-digest values are source-pinned and deliberately platform exact.
 # macOS has separate arm64 and Intel builds; other unsupported machines fail.

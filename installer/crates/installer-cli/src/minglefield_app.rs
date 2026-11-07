@@ -630,9 +630,14 @@ mod tests {
 
     #[test]
     fn config_file_and_noninteractive_credentials_never_force_password_dialog() {
-        let mut db = DatabaseOptions::default();
-        db.database_path = Some("/private/from-config.db".to_owned());
-        db.password.file = Some("/private/credential.txt".to_owned());
+        let mut db = DatabaseOptions {
+            database_path: Some("/private/from-config.db".to_owned()),
+            password: minglefield_installer_core::config_v3::SecretInput {
+                file: Some("/private/credential.txt".to_owned()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         complete_interactive_sources(&mut db, true, false, |_| Err("unexpected GUI request"))
             .unwrap();
         assert!(db.password.literal.is_none());

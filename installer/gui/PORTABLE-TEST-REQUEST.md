@@ -1,38 +1,77 @@
-# M2.08 — authorized local Host administrator and real Alpha application files: single portable acceptance build
+# M2.08 — corrected portable Alpha setup acceptance, failed-build repair retest
 
-**Gate:** 2026-11-07; the M2.08 user-visible implementation and its focused native Windows/Linux/macOS checks have finished. The existing single milestone marker is updated **only now**, after CI, not on an ordinary code commit.
+**Reason for explicit repeat:** The previous M2.08 portable build
+[42321392311](https://github.com/daresan/Minglefield/actions/runs/42321392311)
+passed packaging but **FAILED** the real Windows Shadow operator acceptance
+on 2026-11-07. This marker authorizes precisely ONE corrected repeat of that
+failed user-visible subgoal, under the existing MDCI policy; do not interpret
+prior packaging as user acceptance or trigger other portable workflows.
+
 **Branch:** `feat/game-integration-updates`.
-**Last verified implementation/documentation HEAD before marker update:** `5462af840637eb12a23baa5426ce43f9165666d6`.
-**Actual packaging source:** the new marker commit itself (all three platforms must check out its exact SHA).
-**Build workflow:** `.github/workflows/installer-portable-milestone.yml`, invoking the existing `installer-tauri-packaging.yml`. Do not create or trigger another packaging workflow.
-**Artifacts:** directly runnable Windows Setup Manager EXE **plus its sibling managed-alpha folder**, portable Linux AppImage and runnable macOS application zip (not an installer of the Setup Manager). The bundled Alpha application includes pinned Python 3.11.18, SQLCipher 0.6.4, exact runtime dependency wheels, Minglefield application code and standalone README + GPL license. No system Python, Conda, Node or Cargo should be required merely to start the Setup Manager.
+**Implementation HEAD accepted by development CI:** `d8cbf16d670cf09289867e9e575cc41480941db5`.
+**Final reviewed documentation HEAD before marker:** `b952dcdba13d48ad1f1f619ac24ce80ceb900df1`.
+**Actual portable build source:** this marker commit, with no further
+implementation changes between code-gate verification and packaging.
 
-## Verified engineering evidence before this build
+## Completed required engineering gates
 
-- [Ubuntu installer Rust checks — 42320729192](https://github.com/daresan/Minglefield/actions/runs/42320729192): **success**, including real managed-Python + SQLCipher Alpha process, actual HTTP login/Hosts/Games, locally authorized first-run worker and source/backup isolation fixtures.
-- [Windows + macOS native security checks — 42320729241](https://github.com/daresan/Minglefield/actions/runs/42320729241): **both success**, checking actual per-OS managed binaries, isolated first-run/replay rejection, and no remote Host grant.
-- [MAP/Python Conformance — 42319929885](https://github.com/daresan/Minglefield/actions/runs/42319929885): **success** for existing database integration and first-run tests.
-- [Installer GUI frontend checks — 42320390401](https://github.com/daresan/Minglefield/actions/runs/42320390401): **success**, including independent application-file installation approval, editable `mingleadmin`, separate login password and UI rejection of unexpected response authority.
-- [Tauri native full three-OS checks — 42320859781](https://github.com/daresan/Minglefield/actions/runs/42320859781): **Ubuntu, Windows and macOS success** for compiled Tauri code and unit tests at `dda30f7a27ca06508beee8bf7622b0b6d55298b0`.
-- [AGENTS security guard — 42320859780](https://github.com/daresan/Minglefield/actions/runs/42320859780): **success**.
+- [Ubuntu Installer Rust 42329523542](https://github.com/daresan/Minglefield/actions/runs/42329523542): success, including actual non-overwriting encrypted migration of an older Alpha DB missing a registered table, implicit SQLite index restoration, a preserved legacy extension row, an initially absent nested destination directory, and unchanged source plus independent backup.
+- [Windows/macOS native security 42329523531](https://github.com/daresan/Minglefield/actions/runs/42329523531): both success for the same critical migration/path/SQLCipher code.
+- [Ubuntu Tauri backend 42328609249](https://github.com/daresan/Minglefield/actions/runs/42328609249): success for the real embedded database-password check, one-time per-operation Host setup, verified bundled resource lookup (including sibling folder), and installing app files beside existing user database / in a new destination directory.
+- [Frontend 42329309473](https://github.com/daresan/Minglefield/actions/runs/42329309473): success for the revised wizard; SQLCipher destination selection is accessible while the earlier rehearsal and temporary cipher tests are hidden behind optional developer diagnostics, not required to create the real destination.
+- [AGENTS guard 42329892440](https://github.com/daresan/Minglefield/actions/runs/42329892440): success for the documented rejected manual test and corrective acceptance scope.
 
-These are engineering CI results, **not** portable packaged-GUI acceptance. Require the new packaging run to report all three jobs successful **and** actually uploaded artifacts with expected contents before asking the maintainer to test. The same signed-off code path must be present on all OSes.
+## Required portable artifacts and checks
 
-## M2.08 manual acceptance (disposable source/backup and NEW paths ONLY)
+Use only the existing `.github/workflows/installer-portable-milestone.yml`,
+which calls `installer-tauri-packaging.yml` and builds **Windows,
+Linux, macOS** without installing the portable manager. Confirm all three
+jobs succeed and GitHub uploads all three non-expired artifacts, including
+the Windows executable with its fully extracted sibling `managed-alpha/`,
+Linux AppImage and macOS application archive. The actual operator test has
+not passed until it is performed on Shadow; do not mark M2.08 done merely
+because the build and uploads succeed.
 
-1. Extract/launch the portable Setup Manager on Shadow without installing the manager. For Windows keep `minglefield-installer-gui.exe` and `managed-alpha/` siblings from the **same** workflow artifact. Confirm offline GNU GPL and the Minglefield README display correctly; verify all six wizard steps and Standard/Advanced modes still work.
-2. Use a **disposable** existing Alpha SQLite database with a separate real verified backup. Never use a production DB in this milestone. Run the existing full-data migration review, temporary encrypted SQLCipher copy test, and the explicit `CREATE EXPERIMENTAL ENCRYPTED COPY` action to a **previously unused absolute destination filename**. Source and independent backup must remain unchanged. Record operation ID without credentials or private paths.
-3. Review the install destination (must be a new **unoccupied** directory). Type the separate `INSTALL MINGLEFIELD ALPHA FILES` confirmation and choose **Geprüfte Alpha-Anwendungsdateien installieren**. Expect exactly the files-only native completion response; there must be **no** automatic Host claim or application start. Check new directory contains Python, SQLCipher, `application/server/installed_alpha_launch.py`, private `installed_alpha_first_run.py`, README and GPL.
-4. For the first local Host, accept proposed editable login name `mingleadmin` (or another unused safe local ID), choose a **different** login password than the SQLCipher destination password and repeat it. Explicitly check the local Host setup consent and run **Lokalen Host und Administrator einrichten**. Expect only `local.<verified-operation-id>` Host ownership; no invitation, console bootstrap token, global admin or remote Host privileges. Passwords must not appear in status output or logs. The old source database/backup and imported users/Host ownership must be preserved.
-5. Negative cases on separate disposable fixtures: no staged database/app install, missing explicit consent, mismatched/short login password, password identical to SQLCipher, wrong database key, repeated first-run action, preexisting `mingleadmin`/Host conflict, occupied install target. Each must deny without overwriting the original/backup or granting remote Host rights. Do not try to reuse an occupied/partly completed output; select another fresh target if an operation was interrupted.
-6. After closing/relaunching the manager, no previous *unconsumed* local first-run permit must still be available; a successful Host admin remains saved in the new encrypted DB. The encrypted Alpha process's actual login/Host/Game persistence has separate automated evidence. The Setup Manager **does not yet launch** the installed application; that is the next milestone's user-visible acceptance.
-7. Verify on Linux and macOS that the same portable GUI starts directly and that its managed resources are really bundled. A green packaging job alone is not manual desktop acceptance.
+## Focused M2.08 operator retest on disposable fixtures (no production data)
 
-## Security limits and next work
+1. Download the **new** Windows artifact, extract the whole ZIP, start the
+   Setup Manager with its sibling `managed-alpha/` folder. No developer
+   Python, Git checkout, Conda, Cargo or earlier test databases required.
+2. Select a disposable legacy Alpha SQLite database and independently
+   verified separate backup; review staged changes. A new SQLCipher
+   destination may have a yet-nonexistent nested parent directory and may
+   use the *same basename* as its source if in a different directory.
+3. Select any **registered missing schema objects** that actually apply to
+   the disposable legacy DB. Set/confirm a strong destination SQLCipher
+   password, select the fresh unoccupied target and explicitly authorize
+   the real copy. Do **NOT** run either memory rehearsal or temporary
+   SQLCipher test first. Source/backup bytes must remain unchanged.
+4. Select an app install destination which either (a) does not exist yet,
+   or (b) is the same existing data directory containing the **new**
+   encrypted target DB, with no existing managed application files. The
+   real app files must install without overwriting the DB or other files.
+5. Choose default or another safe local administrator ID, use a separate
+   confirmed sign-in password and explicit local Host consent. A wrong
+   SQLCipher DB key must fail **before consuming** the permit. The correct
+   key must allow the local-only owner account without a console invite,
+   remote host claim or global admin rights.
+6. Negative/retry case: a prior attempt in another occupied directory or
+   an already-consumed operation must never overwrite that output; a
+   **different fresh target and operation ID** can be tried in the **same
+   manager process** without restarting it or deleting previous receipts.
+7. On Linux/macOS verify that the same usable GUI paths and bundled
+   managed runtime are present; packaging success is not GUI manual
+   interaction acceptance.
 
-- First-run authorization is a **single-use, same-Setup-Manager-process proof** of the newly created encrypted DB copy and native installed application files. Entering an arbitrary path/password in Tauri IPC cannot create a Host. Native and Python layers validate independently; no HTTP provisioning route exists.
-- SQLCipher key and separate Minglefield sign-in password enter the private first-run worker through stdin; neither is accepted from persistent runtime config, command-line options or environment variables.
-- Installation and account activation are **not** an update/repair operation. No overwriting existing application directories, occupied database targets, receipts or credentials. No auto-recovery/rollback is authorized; M2.07 deeper crash recovery remains deferred at maintainer direction.
-- The runtime/source-file checksum inventory is artifact **integrity**, not a publisher signature/release provenance claim. No Apple signing/notarization requirement is introduced.
-- **Completed slice to test:** usable portable Alpha app-files installation + local first-run `mingleadmin` Host activation. **Still open:** new empty encrypted DB from scratch, installed application launch in the native manager, update/repair and user-observed three-OS acceptance; no full GA release.
-- Do **not** merge, publish or mark the next milestone accepted without independent maintainer feedback. Do **not** trigger additional portable packages for ordinary development changes.
+**Security boundaries retained:** native source/backup integrity; explicit
+consent for encrypted copy, separately verified app files and local Host
+activation; independent SQLCipher and sign-in passwords; each operation
+single-use; never automatically overwrite existing destinations, receipts,
+source, backup or application files. No automatic crash recovery, general
+repair/update, or installed application launch is claimed in this milestone.
+
+**Known uncertainty:** the exact original Shadow text for the missing
+schema/source-files error was not captured. The repaired embedded registered
+schema and fallback to the verified packaged `managed-alpha` directory now
+have code+CI coverage, but only a real Shadow retest can confirm the symptom
+is gone. M2.08 acceptance remains **FAILED / pending owner retest**.

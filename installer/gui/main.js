@@ -14,7 +14,7 @@ import { validateSchemaAdditionSelection } from "./schema-addition-selection.js"
 import { assessReadOnlyRecoveryStatus } from "./read-only-recovery-status.js";
 import { prepareReadOnlyRecoveryRequest } from "./read-only-recovery-request.js";
 import { prepareAlphaApplicationInstall, verifyAlphaApplicationInstallResult } from "./alpha-application-install.js";
-import { prepareLocalFirstRun, verifyLocalFirstRunResult } from "./alpha-first-run.js";
+import { prepareLocalFirstRun, verifyLocalFirstRunResult, classifyImportedAlphaAuthorization } from "./alpha-first-run.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -498,6 +498,7 @@ async function inspectSelectedSqlite() {
     retainedSourceUnlockPassword = unlockPassword;
     renderGroupedDatabase();
     updateReviewSummary();
+    updateFirstRunGuidance();
     const objectAudit = databaseReviewEvidence(preview).schemaObjectAssessment;
     renderMissingSchemaOptions(objectAudit);
     const objectCounts = Number.isSafeInteger(objectAudit.matchedSchemaEntryCount) &&
@@ -520,6 +521,7 @@ async function inspectSelectedSqlite() {
     editedFullDb = null;
     renderGroupedDatabase();
     updateReviewSummary();
+    updateFirstRunGuidance();
     output.textContent = "Database inspection rejected: " + String(error);
   }
 }
@@ -873,6 +875,7 @@ alphaFilesButton.addEventListener("click", async () => {
     const response = await invoke("install_alpha_application", request);
     const checked = verifyAlphaApplicationInstallResult(response);
     installedAlphaFiles = { ...checked };
+    updateFirstRunGuidance();
     alphaFilesResult.textContent = "Minglefield-Alpha-Anwendungsdateien kopiert: " +
       checked.installedEntries + " geprüfte Einträge in " + checked.installDir +
       ". Die Benutzer- und Host-Einrichtung sowie der Anwendungsstart sind weiterhin getrennt.";
@@ -897,9 +900,48 @@ const firstRunPasswordAgain = document.querySelector("#alpha-first-run-confirm-p
 const firstRunConsent = document.querySelector("#alpha-first-run-consent");
 const firstRunResult = document.querySelector("#alpha-first-run-result");
 const firstRunButton = document.querySelector("#activate-alpha-first-run");
+function updateFirstRunGuidance() {
+  const state = classifyImportedAlphaAuthorization(editedFullDb);
+  const existing = state === "existing_host_authorization" ||
+    state === "existing_identity_or_host";
+  firstRunButton.disabled = state !== "empty_first_run";
+  firstRunLogin.disabled = existing;
+  firstRunPassword.disabled = existing;
+  firstRunPasswordAgain.disabled = existing;
+  firstRunConsent.disabled = existing;
+  if (state === "existing_host_authorization") {
+    firstRunResult.textContent =
+      "BESTANDSDATENBANK: Benutzer und Hostzuordnungen sind bereits vorhanden. " +
+      "Keine neue Erstregistrierung und keine Token-/Passwort-Neuerzeugung. " +
+      "Nach der verifizierten Kopie und Anwendungsinstallation gelten die " +
+      "vorhandenen Hostberechtigungen unverändert. Gültige Sitzungstoken " +
+      "funktionieren weiter, sofern der Client sie noch besitzt; andernfalls " +
+      "erfolgt die normale Benutzeranmeldung beim späteren Anwendungsstart.";
+  } else if (state === "existing_identity_or_host") {
+    firstRunResult.textContent =
+      "BESTANDSDATENBANK: Vorhandene Benutzer- oder Hostdaten werden erhalten. " +
+      "Eine neue mingleadmin-/Host-Registrierung darf diese Einträge nicht " +
+      "ersetzen. Die bestehende Anmeldung wird beim Anwendungsstart verwendet; " +
+      "fehlende Hostzuordnungen können dort später gesondert verwaltet werden.";
+  } else if (state === "unverified") {
+    firstRunResult.textContent =
+      "Noch keine hinreichend geprüften Authentifizierungs-/Hostdaten. " +
+      "Die Erstregistrierung wird nicht blind ausgeführt. Datenbank zuerst prüfen.";
+  } else {
+    firstRunResult.textContent =
+      "Die geprüfte Datenbank enthält noch keine lokalen Benutzer oder Hostzuordnungen. " +
+      "Nur für diesen Fall ist die ausdrücklich bestätigte einmalige Ersteinrichtung vorgesehen.";
+  }
+}
 let firstRunBusy = false;
 firstRunButton.addEventListener("click", async () => {
   if (firstRunBusy) return;
+  // Never call the account-creation worker for an imported existing identity.
+  // Existing login/session hashes and Host grants are application data.
+  if (classifyImportedAlphaAuthorization(editedFullDb) !== "empty_first_run") {
+    updateFirstRunGuidance();
+    return;
+  }
   let request;
   try {
     request = prepareLocalFirstRun({

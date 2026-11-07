@@ -55,7 +55,8 @@ def run_smoke(package, *, require_native=False):
             "--confirm-local-admin", HOST_CONFIRM,
         ]
         completed = subprocess.run(
-            command, text=True, capture_output=True, timeout=300,
+            command, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=300,
             check=False,
         )
         assert completed.returncode == 0, "local setup CLI did not complete"
@@ -116,7 +117,8 @@ assert store.principal("Bearer " + authorization) is not None
                 "database": str(database), "key": TEST_DB_KEY, "host": host_id,
                 "login": TEST_LOGIN, "installed": str(installed),
             }),
-            capture_output=True, text=True, timeout=120, check=False,
+            capture_output=True, encoding="utf-8",
+            errors="replace", timeout=120, check=False,
         )
         assert check.returncode == 0, "installed SQLCipher Host/login verification failed"
         has_native = manifest.get("nativeApplicationIncluded") is True
@@ -144,9 +146,38 @@ assert store.principal("Bearer " + authorization) is not None
             safe_failure = "unclassified_native_failure"
             if launched.stderr.startswith("minglefield_native_launch_rejected: "):
                 safe_failure = launched.stderr.splitlines()[0]
+            reference_result = "not_needed"
+            if launched.returncode != 0:
+                # The established developer-only adapter uses exactly the
+                # same embedded interpreter and private Alpha entrypoint.
+                # Compare only on native failure; never print raw worker
+                # stderr, SQLCipher keys, paths or private startup frames.
+                from alpha_application_shell import start_installed_alpha
+                reference_result = "reference_worker_failed"
+                try:
+                    worker, _port = start_installed_alpha(
+                        embedded,
+                        installed / "application/server/installed_alpha_launch.py",
+                        database,
+                        TEST_DB_KEY,
+                        timeout=35,
+                    )
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    pass
+                else:
+                    reference_result = "reference_worker_started"
+                    worker.terminate()
+                    try:
+                        worker.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        worker.kill()
+                        worker.wait(timeout=15)
+                    if worker.stdout is not None:
+                        worker.stdout.close()
             assert launched.returncode == 0, (
                 "native app failed independent startup: "
-                + safe_failure + " rc=" + str(launched.returncode)
+                + safe_failure + " " + reference_result
+                + " rc=" + str(launched.returncode)
             )
             report = json.loads(launched.stdout)
             assert report["status"] == "native_minglefield_startup_verified"
@@ -158,7 +189,8 @@ assert store.principal("Bearer " + authorization) is not None
             wrong_key = subprocess.run(
                 [str(native), "--database", str(database), "--verify-only",
                  "--db-password", "WrongCipherSecret9!"],
-                text=True, capture_output=True, timeout=30, check=False,
+                encoding="utf-8", errors="replace",
+                capture_output=True, timeout=30, check=False,
             )
             assert wrong_key.returncode != 0
             assert "WrongCipherSecret9!" not in wrong_key.stdout
@@ -185,7 +217,8 @@ assert store.principal("Bearer " + authorization) is not None
             )
             restarted = subprocess.run(
                 [str(native), "--no-browser", "--probe-exit"],
-                text=True, capture_output=True, timeout=110, check=False,
+                encoding="utf-8", errors="replace",
+                capture_output=True, timeout=110, check=False,
             )
             assert restarted.returncode == 0, "native app restart using owner config failed"
             assert json.loads(restarted.stdout)["status"] == (
@@ -196,7 +229,8 @@ assert store.principal("Bearer " + authorization) is not None
         prior_db = fingerprint(database)
         prior_inventory = fingerprint(installed / "managed-file-inventory.json")
         again = subprocess.run(
-            command, text=True, capture_output=True, timeout=120, check=False,
+            command, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=120, check=False,
         )
         assert again.returncode != 0, "repeated local first-run setup was accepted"
         assert fingerprint(database) == prior_db
@@ -213,7 +247,8 @@ assert store.principal("Bearer " + authorization) is not None
             rejected = subprocess.run(
                 [str(native), "--database", str(database), "--verify-only",
                  "--db-password", TEST_DB_KEY],
-                text=True, capture_output=True, timeout=30, check=False,
+                encoding="utf-8", errors="replace",
+                capture_output=True, timeout=30, check=False,
             )
             assert rejected.returncode != 0, (
                 "native app accepted modified installed application content"

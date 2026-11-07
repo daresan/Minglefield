@@ -2,6 +2,8 @@ name: Installer Tauri native checks
 
 # Minglefield Development CI Policy v1; this is NOT a ComfyUI workflow.
 # Ordinary pushes test Ubuntu; pull requests and explicit gates test all OS.
+# A reviewed commit explicitly marked [installer-full-matrix] executes one
+# targeted Windows/Linux/macOS T3 check without generating portable packages.
 on:
   push:
     paths:
@@ -41,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'pull_request' || inputs.full_matrix == true) && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'pull_request' || inputs.full_matrix == true || contains(github.event.head_commit.message, '[installer-full-matrix]')) && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:

@@ -8,8 +8,10 @@ NOT a signed release, native installer, or permission to provision a Host.
 """
 import argparse
 import hashlib
+import http.client
 import json
 import os
+import queue
 from pathlib import Path, PurePosixPath
 import platform
 import shutil
@@ -17,6 +19,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import threading
 import tempfile
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
@@ -193,6 +196,137 @@ def find_embedded_python(python_root, variant):
     raise ValueError("embedded Python executable missing from pinned archive")
 
 
+def smoke_managed_application(executable, application_entrypoint):
+    """Exercise real login and Host/Game APIs with the bundled interpreter.
+
+    Creates only disposable local fixture DB state. The first-run account is
+    seeded by the already tested *trusted* storage primitive for this test;
+    it is not a production provisioning API or a GUI authorization bypass.
+    """
+    with tempfile.TemporaryDirectory(prefix="minglefield-packaged-alpha-http-") as temp:
+        work = Path(temp)
+        database = work / "isolated-fixture.sqlite3"
+        fixture = {
+            "database": str(database),
+            "moduleDir": str(application_entrypoint.parent),
+            "cipherKey": "Ephemeral-Build-Test-Cipher-Key-123!",
+            "loginKey": "Independent-Build-Test-Login-Key-456!",
+        }
+        initialization = """
+import json,sys
+a=json.loads(sys.stdin.read())
+sys.path.insert(0,a["moduleDir"])
+from alpha_sqlcipher_runtime import sqlcipher_driver
+from private_alpha_auth import AlphaAuthStore
+from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+from sec01_host_commit_policy_sim import HostCommitPolicy
+db=sqlcipher_driver().connect(a["database"])
+try:
+    db.execute("PRAGMA key = '" + a["cipherKey"].replace("'", "''") + "'")
+    db.execute("CREATE TABLE existing_marker(value TEXT)")
+    db.execute("INSERT INTO existing_marker VALUES('intact')")
+    db.commit()
+finally:
+    db.close()
+store=AlphaAuthStore(a["database"],sqlcipher_key_provider=lambda:a["cipherKey"])
+result=HostCommitPolicy(IntegratedAlphaAdmission(store)).provision_first_run_local_host_admin_trusted(
+    "host.alpha",a["loginKey"])
+assert result.state=="created", "failed to seed local test Host"
+"""
+        init = subprocess.run(
+            [str(executable), "-I", "-B", "-c", initialization],
+            input=json.dumps(fixture).encode("utf-8"),
+            capture_output=True, timeout=120, check=False)
+        if init.returncode != 0:
+            raise ValueError("embedded Alpha fixture initialization failed")
+        if not database.is_file():
+            raise ValueError("embedded Alpha fixture not created")
+
+        process = subprocess.Popen(
+            [str(executable), "-I", "-B", str(application_entrypoint)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, bufsize=0)
+        try:
+            startup = {
+                "version": 1, "databasePath": str(database),
+                "sqlcipherKey": fixture["cipherKey"], "port": 0,
+            }
+            process.stdin.write(json.dumps(startup).encode("utf-8"))
+            process.stdin.close()
+            ready_lines = queue.Queue(maxsize=1)
+            threading.Thread(
+                target=lambda: ready_lines.put(process.stdout.readline()),
+                daemon=True).start()
+            try:
+                line = ready_lines.get(timeout=140)
+            except queue.Empty:
+                raise ValueError("embedded Alpha service start timeout") from None
+            if not line:
+                raise ValueError("embedded Alpha service terminated before readiness")
+            status = json.loads(line)
+            if (type(status) is not dict or status.get("status") != "ready"
+                    or status.get("bind") != "127.0.0.1"
+                    or type(status.get("port")) is not int
+                    or not 0 < status["port"] <= 65535):
+                raise ValueError("invalid embedded Alpha readiness response")
+            port = status["port"]
+
+            def call(method, endpoint, body=None, session=None):
+                connection = http.client.HTTPConnection(
+                    "127.0.0.1", port, timeout=12)
+                headers = {"Host": "127.0.0.1:" + str(port)}
+                if body is not None:
+                    headers["Content-Type"] = "application/json"
+                if session is not None:
+                    headers["Authorization"] = "Bearer " + session
+                try:
+                    connection.request(
+                        method, endpoint,
+                        body=json.dumps(body) if body is not None else None,
+                        headers=headers)
+                    result = connection.getresponse()
+                    return result.status, json.loads(result.read(64 * 1024))
+                finally:
+                    connection.close()
+
+            denied, _ = call("POST", "/api/login", {
+                "user_id": "mingleadmin", "password": fixture["cipherKey"]})
+            if denied != 401:
+                raise ValueError("database key must not authenticate an Alpha user")
+            success, login = call("POST", "/api/login", {
+                "user_id": "mingleadmin", "password": fixture["loginKey"]})
+            if success != 200 or type(login.get("session_token")) is not str:
+                raise ValueError("embedded Alpha login failed")
+            session = login["session_token"]
+            owner, hosts = call("GET", "/api/hosts", session=session)
+            if owner != 200 or [h["host_id"] for h in hosts["hosts"]] != ["host.alpha"]:
+                raise ValueError("embedded Alpha Host ownership mismatch")
+            p = str(work / "game")
+            created, _ = call("POST", "/api/game/projects", {
+                "host_id": "host.alpha", "project_id": "game.alpha",
+                "name": "Managed Alpha", "repository_root": p,
+                "job_attachments_root": p, "output_root": p,
+            }, session=session)
+            if created != 201:
+                raise ValueError("embedded Alpha Game project creation failed")
+            forbidden, _ = call(
+                "GET", "/api/game/projects?host_id=host.remote",
+                session=session)
+            if forbidden != 403:
+                raise ValueError("embedded Alpha foreign Host authorization failed")
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=15)
+            process.stdout.close()
+            process.stderr.close()
+    return True
+
+
 def build_runtime(output):
     """Prepare a reusable runtime; never modify an existing output directory."""
     variant = current_variant()
@@ -306,6 +440,7 @@ def build_runtime(output):
             if (application_probe.returncode != 2 or application_probe.stdout
                     or b"installed_alpha_start_rejected" not in application_probe.stderr):
                 raise ValueError("managed Alpha application import/startup self-test failed")
+            smoke_managed_application(executable, application_entrypoint)
             manifest = {
                 "schemaVersion": 1,
                 "platform": variant[0] + "-" + variant[1],
@@ -324,6 +459,8 @@ def build_runtime(output):
                 "applicationArchiveSha256": sha256_file(application_archive),
                 "applicationModuleCount": len(application_manifest["modules"]),
                 "managedApplicationStartupVerified": True,
+                "managedApplicationHttpLoginVerified": True,
+                "managedHostAndGameApisVerified": True,
                 "fullRuntimeDependencyClosureVerified": False,
                 "publisherSignatureVerified": False,
                 "completeProductInstallation": False,

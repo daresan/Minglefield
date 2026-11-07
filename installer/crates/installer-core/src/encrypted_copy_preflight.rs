@@ -1920,7 +1920,12 @@ mod tests {
         )
         .unwrap();
         assert!(created.destination_created && created.encrypted_destination_verified);
-        assert_eq!(created.added_schema_objects, selected);
+        assert!(created.added_schema_objects.contains(&selected[0]));
+        // Restoring the registered table also restores the implicit SQLite
+        // PRIMARY KEY autoindex. It is not a separate user-selected object.
+        assert!(created
+            .added_schema_objects
+            .contains(&"sqlite_autoindex_sec01_host_rules_1".to_owned()));
         assert!(dest.exists());
         let encrypted =
             Connection::open_with_flags(&dest, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();

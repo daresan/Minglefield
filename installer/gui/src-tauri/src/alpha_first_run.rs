@@ -355,6 +355,37 @@ mod tests {
     }
 
     #[test]
+    fn incorrect_database_key_does_not_burn_verified_first_run_operation() {
+        let base = std::env::temp_dir()
+            .join(format!("minglefield-cipher-credential-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir(&base).unwrap();
+        let db_path = base.join("encrypted.sqlite3");
+        let correct_key = "IndependentSecureCipherPassword123!";
+        {
+            let db = rusqlite::Connection::open(&db_path).unwrap();
+            db.pragma_update(None, "key", correct_key).unwrap();
+            db.execute_batch("CREATE TABLE fixture(v INTEGER); INSERT INTO fixture VALUES (1);")
+                .unwrap();
+        }
+        assert_ne!(&fs::read(&db_path).unwrap()[..16], b"SQLite format 3\\0");
+        let app_path = base.join("app");
+        fs::create_dir(&app_path).unwrap();
+        let state = FirstRunState::default();
+        state.record_encrypted_copy(
+            &db_path, "abcdef0123456789abcdef0123456789").unwrap();
+        state.record_installed_application(&app_path).unwrap();
+        assert!(state.validate_database_unlock("WrongKey0123456789!").is_err());
+        assert!(state.validate_database_unlock(correct_key).is_ok());
+        let permit = state.consume().unwrap();
+        assert_eq!(permit.database.operation_id, "abcdef0123456789abcdef0123456789");
+        state.finish();
+        assert!(state.record_encrypted_copy(
+            &db_path, "abcdef0123456789abcdef0123456789").is_err());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn first_run_session_proof_is_consumed_only_once() {
         let base = std::env::temp_dir().join(format!("mf-first-run-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);

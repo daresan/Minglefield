@@ -505,7 +505,9 @@ mod tests {
         // the canonical existing ancestor rather than its textual alias.
         assert_eq!(
             preview.destination,
-            fs::canonicalize(&root).unwrap().join("data/nested/new.sqlite3")
+            fs::canonicalize(&root)
+                .unwrap()
+                .join("data/nested/new.sqlite3")
         );
         assert!(!destination.parent().unwrap().exists());
         create_missing_destination_parent(&destination).unwrap();

@@ -1884,6 +1884,66 @@ mod tests {
     }
 
     #[test]
+    fn one_real_copy_preserves_extensions_adds_missing_schema_and_creates_new_directories() {
+        // End-user acceptance regression: no mandatory preliminary disk test,
+        // no source checkout, no preexisting destination parent and no need
+        // to rename the user's original database basename.
+        let root = target_volume_fixture();
+        let source_parent = root.join("source");
+        fs::create_dir(&source_parent).unwrap();
+        let source = source_parent.join("alpha.sqlite3");
+        crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch(
+                "DROP TABLE sec01_host_rules;
+                 CREATE TABLE legacy_extension(note TEXT NOT NULL);
+                 INSERT INTO legacy_extension VALUES('preserve-this-value');",
+            )
+            .unwrap();
+        }
+        let before = fs::read(&source).unwrap();
+        let backup = root.join("independent-backup.sqlite3");
+        fs::copy(&source, &backup).unwrap();
+        let dest = root.join("new-data").join("nested").join("alpha.sqlite3");
+        assert!(!dest.parent().unwrap().exists());
+        let selected = vec!["sec01_host_rules".to_owned()];
+        let created = execute_reviewed_encrypted_copy_with_schema(
+            &source,
+            &dest,
+            &backup,
+            "",
+            "NewKey123!",
+            &[],
+            &selected,
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        )
+        .unwrap();
+        assert!(created.destination_created && created.encrypted_destination_verified);
+        assert_eq!(created.added_schema_objects, selected);
+        assert!(dest.exists());
+        let encrypted =
+            Connection::open_with_flags(&dest, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        encrypted.pragma_update(None, "key", "NewKey123!").unwrap();
+        let restored: i64 = encrypted.query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name='sec01_host_rules'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(restored, 1);
+        let original: String = encrypted.query_row(
+            "SELECT note FROM legacy_extension",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(original, "preserve-this-value");
+        drop(encrypted);
+        assert_eq!(fs::read(&source).unwrap(), before);
+        assert_eq!(fs::read(&backup).unwrap(), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn conflicting_selected_schema_additions_refuse_publication_and_leave_backup_untouched() {
         let source_parent = target_volume_fixture();
         let source = source_parent.join("registered-alpha.sqlite3");

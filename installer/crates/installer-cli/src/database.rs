@@ -13,9 +13,7 @@ pub struct DatabaseAction {
     pub verify: bool,
     pub copy: bool,
     pub input: DatabaseOptions,
-    pub consent: Option<String>,
     pub stdin: bool,
-    pub schema_additions: Vec<String>,
 }
 
 fn flag_value(
@@ -64,16 +62,18 @@ impl DatabaseAction {
             "--new-db-password-file" => {
                 flag_value(args, "--new-db-password-file", &mut self.input.new_password.file)?;
             }
-            "--confirm-db-copy" => flag_value(args, "--confirm-db-copy", &mut self.consent)?,
+            "--confirm-db-copy" => {
+                flag_value(args, "--confirm-db-copy", &mut self.input.copy_confirmation)?;
+            }
             "--schema-add" => {
                 let value = args
                     .next()
                     .filter(|value| !value.starts_with("--"))
                     .ok_or((2, "--schema-add requires a registry identifier".to_owned()))?;
-                if self.schema_additions.contains(&value) {
+                if self.input.schema_additions.contains(&value) {
                     return Err((2, "duplicate requested schema addition".to_owned()));
                 }
-                self.schema_additions.push(value);
+                self.input.schema_additions.push(value);
             }
             _ => return Ok(false),
         }
@@ -93,15 +93,17 @@ impl DatabaseAction {
                 || db.backup_path.is_some()
                 || db.new_password.literal.is_some()
                 || db.new_password.file.is_some()
-                || self.consent.is_some()
-                || !self.schema_additions.is_empty())
+                || db.copy_confirmation.is_some()
+                || !db.schema_additions.is_empty())
         {
             return Err((
                 2,
                 "unexpected database-copy options for read-only verification".into(),
             ));
         }
-        if self.copy && self.consent.as_deref() != Some(EXPERIMENTAL_COPY_CONFIRMATION) {
+        if self.copy
+            && db.copy_confirmation.as_deref() != Some(EXPERIMENTAL_COPY_CONFIRMATION)
+        {
             return Err((2, "explicit --confirm-db-copy approval is required".into()));
         }
         let input = if self.stdin {
@@ -171,7 +173,7 @@ impl DatabaseAction {
             Path::new(backup),
             key.as_deref().unwrap_or(""),
             &new_key,
-            &self.schema_additions,
+            &db.schema_additions,
             EXPERIMENTAL_COPY_CONFIRMATION,
         )
         .map_err(|_| (4, "reviewed encrypted database publication rejected".to_owned()))?;
@@ -214,10 +216,7 @@ impl DatabaseAction {
     }
 
     pub fn has_unbound_inputs(&self) -> bool {
-        self.input.has_any()
-            || self.stdin
-            || self.consent.is_some()
-            || !self.schema_additions.is_empty()
+        self.input.has_any() || self.stdin
     }
 }
 

@@ -1,9 +1,11 @@
 //! Native Tauri adapter for the shared verified managed Alpha file installer.
 //! The GUI, headless CLI and tests must use the same installer-core engine.
+#[cfg(test)]
 use minglefield_installer_core::integrity::sha256_hex;
 use minglefield_installer_core::managed_alpha_install::{
     install_from_verified_root, verified_inventory, ApplicationFilesInstalled,
 };
+#[cfg(test)]
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;

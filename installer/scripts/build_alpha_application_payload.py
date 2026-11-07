@@ -49,9 +49,13 @@ def _source_inventory(server_dir):
             raise ValueError("nonregular or linked Alpha source module")
         if not 1 <= metadata.st_size <= MAX_SOURCE_BYTES:
             raise ValueError("invalid Alpha source module size")
-        data = source.read_bytes()
-        if len(data) != metadata.st_size or len(data) > MAX_SOURCE_BYTES:
+        raw = source.read_bytes()
+        if len(raw) != metadata.st_size or len(raw) > MAX_SOURCE_BYTES:
             raise ValueError("Alpha source changed during packaging")
+        # actions/checkout uses platform-specific text checkout settings.
+        # Runtime Python modules are Git text: canonicalize CRLF back to LF
+        # so Windows and Unix builds carry byte-identical application code.
+        data = raw.replace(b"\r\n", b"\n")
         blobs["server/" + source.name] = data
     if "server/installed_alpha_launch.py" not in blobs:
         raise ValueError("missing installed Alpha launch entrypoint")

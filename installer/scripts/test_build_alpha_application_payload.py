@@ -194,6 +194,30 @@ class AlphaPayloadTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _source_inventory(directory)
 
+    def test_platform_checkout_line_endings_produce_same_source_bundle(self):
+        """Windows CRLF checkout must not change application package identity."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_names = (
+                "installed_alpha_launch", "private_alpha_gateway",
+                "private_alpha_auth", "alpha_sqlcipher_runtime",
+                "sec01_integrated_alpha_admission", "sec01_host_commit_policy_sim"
+            )
+            for ending, dirname in ((b"\n", "unix"), (b"\r\n", "windows")):
+                directory = root / dirname
+                directory.mkdir()
+                for name in source_names:
+                    dependencies = (
+                        "import " + "\nimport ".join(
+                            x for x in source_names if x != name
+                        ) + "\n"
+                    ).encode("utf-8").replace(b"\n", ending)
+                    (directory / (name + ".py")).write_bytes(dependencies)
+                build_payload(directory, root / (dirname + ".zip"))
+            self.assertEqual(
+                (root / "unix.zip").read_bytes(),
+                (root / "windows.zip").read_bytes())
+
     def test_symlink_module_is_rejected(self):
         with TemporaryDirectory() as temp:
             directory = Path(temp) / "server"

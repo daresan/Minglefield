@@ -127,6 +127,7 @@ pub fn create_new_encrypted_database(
     }
     std::fs::OpenOptions::new()
         .read(true)
+        .write(true)
         .open(destination)
         .and_then(|file| file.sync_all())
         .map_err(|_| "Cannot flush fresh SQLCipher destination")?;

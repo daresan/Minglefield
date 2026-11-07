@@ -648,14 +648,11 @@ mod tests {
         // Reusing the familiar database filename in a DIFFERENT new
         // directory is safe. Only the original pathname/physical file is
         // protected against replacement.
-        let same_name_elsewhere = preview_migration_destination(
-            &source, &target_dir.join("alpha.sqlite3")
-        ).unwrap();
+        let same_name_elsewhere =
+            preview_migration_destination(&source, &target_dir.join("alpha.sqlite3")).unwrap();
         assert_eq!(
             same_name_elsewhere.destination,
-            fs::canonicalize(&target_dir)
-                .unwrap()
-                .join("alpha.sqlite3")
+            fs::canonicalize(&target_dir).unwrap().join("alpha.sqlite3")
         );
         let destination = target_dir.join("new.sqlite3");
         fs::write(&destination, b"existing").unwrap();

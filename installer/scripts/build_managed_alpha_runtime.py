@@ -27,6 +27,19 @@ SQLCIPHER_VERSION = "0.6.4"
 MAX_DOWNLOAD = 90 * 1024 * 1024
 MAX_UNPACKED = 900 * 1024 * 1024
 ROOT = Path(__file__).resolve().parents[2]
+# Fixed binary-wheel versions for every external import in the current
+# Alpha application closure. No user needs pip, Conda or system Python.
+# Every wheel's exact platform filename and SHA-256 are recorded in the
+# generated manifest; publisher provenance is still a separate release gate.
+RUNTIME_REQUIREMENTS = (
+    ("attrs", "25.4.0"),
+    ("jsonschema", "4.26.0"),
+    ("jsonschema_specifications", "2025.9.1"),
+    ("packaging", "25.0"),
+    ("referencing", "0.36.2"),
+    ("rpds_py", "0.27.1"),
+    ("typing_extensions", "4.15.0"),
+)
 
 # These release-digest values are source-pinned and deliberately platform exact.
 # macOS has separate arm64 and Intel builds; other unsupported machines fail.
@@ -212,6 +225,38 @@ def build_runtime(output):
         if len(wheels) != 1 or wheels[0].name != wheel_name:
             raise ValueError("SQLCipher driver wheel platform mismatch")
         verify_pinned_file(wheels[0], wheel_sha)
+        dependencies_dir = temp / "application-wheels"
+        dependencies_dir.mkdir()
+        # --no-deps is deliberate: the complete declared closure is pinned
+        # here. Do not silently accept pip's mutable dependency resolution.
+        other = subprocess.run(
+            [sys.executable, "-m", "pip", "download", "--no-deps",
+             "--only-binary=:all:", "--disable-pip-version-check",
+             "--dest", str(dependencies_dir),
+             *(name.replace("_", "-") + "==" + version
+               for name, version in RUNTIME_REQUIREMENTS)],
+            capture_output=True, timeout=180, check=False)
+        if other.returncode != 0:
+            raise ValueError("cannot download complete pinned Alpha runtime wheels")
+        files = sorted(dependencies_dir.iterdir())
+        if len(files) != len(RUNTIME_REQUIREMENTS):
+            raise ValueError("incomplete or unexpected Alpha runtime wheels")
+        required = {name: version for name, version in RUNTIME_REQUIREMENTS}
+        found = set()
+        for wheel in files:
+            parts = wheel.name.split("-", 2)
+            if len(parts) != 3 or not wheel.name.endswith(".whl"):
+                raise ValueError("unrecognized Alpha wheel name")
+            package, version = parts[:2]
+            if required.get(package) != version or package in found:
+                raise ValueError("unexpected Alpha dependency wheel or version")
+            found.add(package)
+        if found != set(required):
+            raise ValueError("missing Alpha application wheel")
+        wheel_inventory = [
+            {"filename": wheel.name, "sha256": sha256_file(wheel)}
+            for wheel in files
+        ]
         with tempfile.TemporaryDirectory(
                 prefix="minglefield-managed-stage-", dir=output.parent) as staging:
             staged = Path(staging)
@@ -223,13 +268,19 @@ def build_runtime(output):
                 else "lib/python3.11/site-packages"
             )
             extract_sqlcipher_wheel(wheels[0], site_packages)
+            for wheel in files:
+                extract_sqlcipher_wheel(wheel, site_packages)
             probe = subprocess.run(
                 [str(executable), "-I", "-B", "-c",
                  "import sys,sqlcipher3;"
                  "assert sys.version_info[:2]==(3,11);"
                  "c=sqlcipher3.connect(':memory:');"
                  "assert c.execute('PRAGMA cipher_version').fetchone()[0];"
-                 "c.close()"],
+                 "c.close();"
+                 "from packaging.version import Version;"
+                 "assert Version('1.2') < Version('2.0');"
+                 "from jsonschema import Draft202012Validator;"
+                 "Draft202012Validator({'type':'object'}).validate({})"],
                 capture_output=True, timeout=60, check=False)
             if probe.returncode != 0:
                 raise ValueError("embedded Python/SQLCipher runtime self-test failed")
@@ -264,6 +315,8 @@ def build_runtime(output):
                 "pythonArchiveSha256": python_sha,
                 "sqlcipherWheel": wheel_name,
                 "sqlcipherWheelSha256": wheel_sha,
+                "applicationRuntimeWheels": wheel_inventory,
+                "externalRuntimeImportsVerified": True,
                 "pythonExecutable": executable.relative_to(staged).as_posix(),
                 "runtimeSmokeVerified": True,
                 "applicationSourceIncluded": True,

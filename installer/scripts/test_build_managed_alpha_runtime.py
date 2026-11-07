@@ -7,8 +7,8 @@ import unittest
 from zipfile import ZipFile
 
 from build_managed_alpha_runtime import (
-    BUNDLES, _safe_relative, current_variant, extract_sqlcipher_wheel,
-    extract_standalone, verify_pinned_file,
+    BUNDLES, RUNTIME_REQUIREMENTS, _safe_relative, current_variant,
+    extract_sqlcipher_wheel, extract_standalone, verify_pinned_file,
 )
 
 
@@ -22,6 +22,19 @@ class ManagedAlphaRuntimeBuildTests(unittest.TestCase):
             self.assertEqual(len(archive_sha), 64)
             self.assertEqual(len(wheel_sha), 64)
             self.assertNotEqual(archive_sha, wheel_sha)
+
+    def test_external_alpha_runtime_versions_are_exactly_pinned(self):
+        self.assertEqual(len(RUNTIME_REQUIREMENTS), 7)
+        self.assertEqual(
+            {name for name, _ in RUNTIME_REQUIREMENTS},
+            {"attrs", "jsonschema", "jsonschema_specifications",
+             "packaging", "referencing", "rpds_py", "typing_extensions"})
+        for name, version in RUNTIME_REQUIREMENTS:
+            self.assertTrue(name.replace("_", "").isalnum())
+            self.assertTrue(version)
+            self.assertNotIn(">", version)
+            self.assertNotIn("<", version)
+            self.assertNotIn("*", version)
 
     def test_checksum_fails_closed(self):
         with TemporaryDirectory() as tmp:

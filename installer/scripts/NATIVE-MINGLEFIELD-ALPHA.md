@@ -1,14 +1,23 @@
 # Native Minglefield Alpha application — M2.09/M2.10 implementation slice
 
-**Status (2026-11-07):** Native OS executable and real bundled runtime
-startup are implemented and Ubuntu CI tested; Windows/macOS native CI
-acceptance is pending. **Not a finished user-facing M2.10/M2.11 release.**
+**Status (2026-11-07):** Direct launch of the bundled native Minglefield
+application, using the real SQLCipher database, loopback gateway and its
+existing Host/login policy, is now CI-verified on Ubuntu, Windows and macOS.
+The Windows \x5c\x5c?\x5c path compatibility defect found in native-security #135
+has been corrected while retaining canonical package integrity checks.
+**This is the native execution slice, not finished M2.10 desktop packaging,
+installer GUI/silent parity or human acceptance on Shadow.**
+
+Evidence: [native Windows/macOS #139](https://github.com/daresan/Minglefield/actions/runs/42391165179);
+[Ubuntu Rust run](https://github.com/daresan/Minglefield/actions/runs/42391164967)
+and [Tauri GUI run](https://github.com/daresan/Minglefield/actions/runs/42391164978)
+both passed for the same implementation commit `e32b4af8b8d714f2fcd26ee240ca64b84bdd5a0e`.
 
 ## What was built
 
-The separate \`Minglefield\` Rust binary (on Windows \`Minglefield.exe\`)
-is produced from \`installer/crates/installer-cli/src/minglefield_app.rs\`.
-It is a different entrypoint from \`minglefield-installer-cli\` and does
+The separate `Minglefield` Rust binary (on Windows `Minglefield.exe`)
+is produced from `installer/crates/installer-cli/src/minglefield_app.rs`.
+It is a different entrypoint from `minglefield-installer-cli` and does
 not require the Setup Manager, a running installer process, user-installed
 Python, Conda, Git, Cargo, or a source checkout at application launch.
 
@@ -28,9 +37,9 @@ runtime paths. An unrecognized, missing or modified managed file prevents
 application launch. At this stage the inventory hash is self-declared in
 the package and is **not** a publisher signature.
 
-Windows places \`Minglefield.exe\` at the package root. Linux and macOS
-currently place \`Minglefield\` at that root; Linux desktop packaging and
-the macOS Finder \`.app\` bundle/signing remain separate M2.10 tasks.
+Windows places `Minglefield.exe` at the package root. Linux and macOS
+currently place `Minglefield` at that root; Linux desktop packaging and
+the macOS Finder `.app` bundle/signing remain separate M2.10 tasks.
 The runtime directory and its managed files must remain together.
 
 ## Direct native launch, without the installer
@@ -46,11 +55,11 @@ already completed normal first-run account initialization:
 ./Minglefield --database /absolute/private-data/minglefield.db --db-password 'owner-chosen-key'
 ```
 
-The administrator may supply the SQLCipher key using \`--db-password\`,
-\`--db-password-file\`, \`MINGLEFIELD_DB_PASSWORD\`, a full version-3
-installer-compatible \`--config\` text file, or \`--secrets-stdin\` with a
-bounded \`{"db_password":"..."}\` JSON frame. If the owner **chooses** to
-provide a file called \`minglefield.conf\` next to the executable, the
+The administrator may supply the SQLCipher key using `--db-password`,
+`--db-password-file`, `MINGLEFIELD_DB_PASSWORD`, a full version-3
+installer-compatible `--config` text file, or `--secrets-stdin` with a
+bounded `{"db_password":"..."}` JSON frame. If the owner **chooses** to
+provide a file called `minglefield.conf` next to the executable, the
 application loads that version-3 configuration automatically. The
 installer never generates a plaintext-password config by default.
 As with the approved Bee-style contract, owner-supplied argv, environment,
@@ -59,19 +68,19 @@ Minglefield-generated logs, readiness messages or error diagnostics.
 
 The executable validates its own inventory and the encrypted database
 using the shared Rust SQLCipher inspection, then starts the existing
-\`application/server/installed_alpha_launch.py\` worker via a **private
+`application/server/installed_alpha_launch.py` worker via a **private
 stdin request**, entirely inside the installed runtime. It refuses
 plaintext/invalid databases and does **not** create, claim or reset any
 user/Host. The worker must return exactly the approved loopback readiness
-frame for \`127.0.0.1\`; the remote Host claim bootstrap remains disabled.
+frame for `127.0.0.1`; the remote Host claim bootstrap remains disabled.
 The native app then opens the installed Alpha web UI in the OS browser.
 The user still logs in normally with a **separate account password**.
 
-Developer/CI-only checks: \`--verify-only\` validates inventory and
-SQLCipher key without launching the gateway; \`--probe-exit --no-browser\`
+Developer/CI-only checks: `--verify-only` validates inventory and
+SQLCipher key without launching the gateway; `--probe-exit --no-browser`
 starts and probes the gateway over 127.0.0.1 and stops its worker before
 exiting. The cross-OS integration script
-\`scripts/verify_cli_local_setup.py --package <managed-root> --require-native\`
+`scripts/verify_cli_local_setup.py --package <managed-root> --require-native`
 installs the real package, creates a **disposable** encrypted DB/Host,
 verifies normal and invalid login credentials, launches the native
 executable, checks its loopback contract, restarts using an
@@ -83,7 +92,7 @@ payloads. It does not access private user DBs.
 The default double-click UX still lacks an application-owned **graphical
 SQLCipher password prompt** and database chooser when there is no
 owner-provided config. The current native binary is a first real native
-execution target, **not** the final desktop user flow. macOS \`.app\`,
+execution target, **not** the final desktop user flow. macOS `.app`,
 Linux desktop packages, application process shutdown/restart UX, publisher
 signature/release integrity, independent portable artifacts, GUI/silent
 installer integration and installed-user acceptance on Shadow remain

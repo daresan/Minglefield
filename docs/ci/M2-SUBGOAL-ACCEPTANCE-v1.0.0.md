@@ -475,6 +475,12 @@ by these checks. General repair/release lifecycle and fresh empty-DB
 creation remain separate future requirements; M2.07 full crash recovery
 stays explicitly deferred at the operator's direction.
 
+### Current M2.08 artifact repair and separate acceptance evidence (2026-11-07)
+
+After the corrective CI listed below, portable build [42329947124](https://github.com/daresan/Minglefield/actions/runs/42329947124) was **again rejected on Shadow**. The previous artifact review reports the uploaded Windows ZIP omits two hidden, zero-byte files declared in its pinned inventory: `managed-alpha/runtime/python/Lib/site-packages/setuptools/_vendor/.lock` and `managed-alpha/runtime/python/Scripts/.empty`. The workflow's Windows `upload-artifact` step has no explicit include-hidden-files setting. A successful build-directory inventory is insufficient: a corrected M2.08 repair must verify the **actual uploaded/downloaded and re-extracted Windows payload**, including hidden/empty members, against the build-bound inventory (size and SHA-256), show an actionable mismatch path and preserve fail-closed integrity. Run MDCI T1–T3 before the next **single permitted failed-build repair** acceptance request, then require the maintainer's independent Shadow retest. This is a documented review finding, **not** a claim that the defect is fixed or that the previous failure was user error.
+
+Keep the existing M2.08 Alpha scope narrow: newly verified encrypted target, separately installed files and one-time local first-Host creation. A prior established `mingleadmin`/same Host and other saved local/remote Host owner grants must be **preserved** on imported DBs, not silently re-created or reset. The current first-run writer still treats existing account/Host references as conflicts; non-destructive recognition and stable physical/local Host identity are **open** for existing-install/reuse acceptance, not proof of an active Remote Host claim feature. Never bypass ownership checks or reuse a consumed operation. Remote Host acquisition/management and client-only installation have **no installer acceptance gate** here; retained remote records are migration-fidelity data.
+
 ### M2.08 — First-run `mingleadmin` and local Host binding
 
 **Rejected manual operator acceptance (2026-11-07):** The former portable M2.08 build succeeded on three packaging runners but failed on Shadow. Real users were forced through redundant test copies, an existing newly copied DB blocked application installation, absent install/data parents were rejected, and an attempted one-time Host action exhausted the entire GUI session. The selected missing-schema addition was also rejected; without the original diagnostic its exact cause is not proven. The remediation explicitly distinguishes *optional* in-memory/temporary SQLCipher diagnostics from mandatory native execution checks, preserves the source and separate backup, allows an application to be installed beside an existing new DB, creates missing parent folders only on consented writes, resolves bundled managed-alpha resources (including the Windows sibling folder), and maintains one-time local Host authority **per operation** with fresh-target retries in the same process. Wrong SQLCipher password must not consume the permit. CI and renewed operator acceptance are both required. Status: **FAILED / awaiting re-test**.
@@ -520,9 +526,9 @@ SQLCipher keys fail independently. The existing imported rows remain.
 No independent operator GUI acceptance, actual installed Python runtime
 or M2.08 single-use native consent is implied by this test.
 
-### M2.09 — Encrypted operational runtime
+### M2.09 — Encrypted operational runtime and independent application shell start
 
-- Launch the installed Alpha against the migrated encrypted SQLCipher file.
+- Launch the installed Alpha against the migrated encrypted SQLCipher file using a **documented standalone application shell command**, independent of both the portable Setup Manager GUI and installer CLI. The existing internal bounded `installed_alpha_launch.py` stdin frame is the basis, **not** yet the final user-facing command. Keep the SQLCipher key out of argv/environment/logs; opening the DB at runtime is not a new migration/encryption pass.
 - Verify ordinary login/session, Hosts, Effects, Jobs and Game storage survive
   process restart and remain tenant/Host-scoped.
 - Missing driver, missing key or wrong key must fail closed without silently
@@ -561,6 +567,7 @@ manifest as publisher trust or request packaging prematurely.
 
 ### M2.10 — Managed Python runtime and Minglefield application payload
 
+- Support a **new encrypted SQLCipher DB with no prior source**, besides migration of an existing DB. Both must be compatible with the same independently callable application shell launcher and local first-Host setup; no additional Remote Host claim acceptance.
 - On clean Windows/Linux/macOS environments, install the separately packaged
   Minglefield Alpha and verified pinned Python/SQLCipher runtime.
 - Launch without Git, Conda, developer Python or prior Minglefield checkout.
@@ -571,6 +578,7 @@ manifest as publisher trust or request packaging prematurely.
 
 ### M2.11 — Standard, Advanced and headless parity
 
+- Distinguish the **installer CLI** (currently `PLAN ONLY`, must invoke the real shared installation engine) from the **application shell command** already accepted as an M2.09 runtime capability. Verify both interfaces separately. The installer CLI must not fabricate authentication for existing imported user/Host ownership.
 - Standard: safe user-scoped defaults, suitable data directory and clear
   installation completion.
 - Advanced: selected destination/data paths, existing-install detection,
@@ -608,7 +616,7 @@ manifest as publisher trust or request packaging prematurely.
   non-PATH optional tools, manual custom paths, database migration and
   credential/Host conflicts.
 - Verify launch and recovery in native environments, not only successful
-  compilation of the GUI bundle.
+  compilation of the GUI bundle. Existing `mingleadmin` and valid local/remote Host grants must survive migrated-data installation without replacement; active Remote Host claims are outside the installer acceptance scope.
 - Run the representative nontechnical-user study for the approved 80%
   unaided-onboarding **target**; report observed outcomes rather than
   claiming the target from CI alone.

@@ -102,7 +102,7 @@ mod tests {
             "{\"type\":\"file\",\"size\":3,\"sha256\":",
             "\"cb8379ac2098aa165029e3938a51da0bcecfc008fd6795f401178647f96c5b34\"}}}"
         );
-        fs::write(source.join(INVENTORY_NAME), json).unwrap();
+        fs::write(source.join("managed-file-inventory.json"), json).unwrap();
         fs::write(source.join("runtime-manifest.json"), "{}").unwrap();
         (source, sha256_hex(json.as_bytes()))
     }

@@ -3,6 +3,7 @@
 
 mod alpha_application_install;
 mod alpha_first_run;
+mod install_execution;
 mod full_database_review;
 mod legacy_record_review;
 mod migration_review;
@@ -618,6 +619,7 @@ async fn browse_sqlite_file() -> Option<String> {
 fn main() {
     tauri::Builder::default()
         .manage(alpha_first_run::FirstRunState::default())
+        .manage(install_execution::InstallExecutionState::default())
         .invoke_handler(tauri::generate_handler![
             default_configuration,
             framework_license,
@@ -637,6 +639,7 @@ fn main() {
             alpha_application_install::install_alpha_application,
             alpha_first_run::activate_first_run_local_admin,
             alpha_first_run::start_installed_minglefield,
+            install_execution::install_minglefield,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

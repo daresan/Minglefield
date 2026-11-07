@@ -24,7 +24,7 @@ fn check_native_install_consent(confirmation: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn find_packaged_alpha_source(
+pub(crate) fn find_packaged_alpha_source(
     resource_dir: &Path,
     executable_dir: &Path,
     expected_digest: &str,

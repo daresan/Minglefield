@@ -175,7 +175,8 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
     {
         return Err("invalid native inventory digest");
     }
-    verify_installed_application(&root, digest)
+    // Inventory symlink containment comparisons also use canonical identities.
+    verify_installed_application(&canonical_root, digest)
         .map_err(|_| "native Minglefield package inventory verification failed")?;
     let python_name = if cfg!(windows) {
         "runtime/python/python.exe"

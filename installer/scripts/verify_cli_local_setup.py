@@ -7,6 +7,7 @@ against a machine's existing installed Minglefield directory.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import subprocess
@@ -202,6 +203,21 @@ assert store.principal("Bearer " + authorization) is not None
             assert wrong_key.returncode != 0
             assert "WrongCipherSecret9!" not in wrong_key.stdout
             assert "WrongCipherSecret9!" not in wrong_key.stderr
+
+            # Even without a desktop session, automation must never block
+            # for a GUI password when the operator selected verification.
+            headless_env = os.environ.copy()
+            headless_env.pop("MINGLEFIELD_DB_PASSWORD", None)
+            headless_env.pop("MINGLEFIELD_NEW_DB_PASSWORD", None)
+            missing_key = subprocess.run(
+                [str(native), "--database", str(database), "--verify-only"],
+                encoding="utf-8", errors="replace",
+                capture_output=True, timeout=15, check=False, env=headless_env,
+            )
+            assert missing_key.returncode != 0, (
+                "noninteractive verification unexpectedly obtained credentials"
+            )
+            assert TEST_DB_KEY not in missing_key.stderr
 
             # A second independent launch uses an *administrator-authored*
             # Bee-style version-3 configuration file next to Minglefield.

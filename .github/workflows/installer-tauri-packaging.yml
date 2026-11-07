@@ -41,6 +41,28 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Build pinned Python SQLCipher and Alpha application beside portable manager
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources
+          rm -rf src-tauri/resources/managed-alpha
+          python -B ../scripts/build_managed_alpha_runtime.py --output src-tauri/resources/managed-alpha
+      - name: Pin bundled managed Alpha inventory digest in Tauri binary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          inventory = Path("src-tauri/resources/managed-alpha/managed-file-inventory.json")
+          digest = hashlib.sha256(inventory.read_bytes()).hexdigest()
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write("MINGLEFIELD_ALPHA_INVENTORY_SHA256=" + digest + "\n")
+          print("Managed application inventory compiled SHA-256:", digest)
+          PY
       - name: Install Linux Tauri system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -112,12 +134,22 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: test -d 'src-tauri/target/release/bundle/macos/Minglefield Installer.app'
-      - name: Upload Windows executable preview
+      - name: Assemble portable Windows executable with its checked runtime payload
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path portable-windows -Force | Out-Null
+          Copy-Item src-tauri/target/release/minglefield-installer-gui.exe portable-windows/
+          Copy-Item src-tauri/resources/managed-alpha portable-windows/managed-alpha -Recurse
+          if (!(Test-Path portable-windows/managed-alpha/managed-file-inventory.json)) {
+            throw "Managed application resources are missing next to the Windows executable"
+          }
+      - name: Upload portable Windows executable and managed runtime (same directory)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
           name: tauri-portable-windows-exe
-          path: installer/gui/src-tauri/target/release/minglefield-installer-gui.exe
+          path: installer/gui/portable-windows/
           if-no-files-found: error
           retention-days: 7
       - name: Upload Linux AppImage preview

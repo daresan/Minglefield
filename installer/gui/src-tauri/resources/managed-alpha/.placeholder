@@ -1,0 +1,5 @@
+A placeholder only so ordinary Tauri fmt/check/test CI can load
+the resource mapping without downloading an entire application. The
+explicit portable packaging workflow replaces this directory with a
+version-pinned managed Python/SQLCipher+Minglefield runtime before build.
+Never distribute this placeholder as the app.

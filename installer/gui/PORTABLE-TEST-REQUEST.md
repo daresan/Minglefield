@@ -8,7 +8,7 @@ inventoried managed Alpha payload. No production release, branch merge or deploy
 
 **Milestone/subgoal:** M2.10 native application and M2.11 first-run + independent app launch.
 **Source branch:** `feat/game-integration-updates`
-**Reviewed implementation HEAD before marker:** `b5c0c589032984e5b2fac0c3bf3a00807d2b2284`
+**Reviewed implementation HEAD before retry marker:** `2cc12264b405b9b49a55f16fa272e03a92932c87`
 **Actual packaging SHA:** the marker commit that changes this file; record it from GitHub Actions,
 not the preceding implementation SHA.
 **Reason for new portable packages:** The currently approved M2.11 runtime handoff has
@@ -17,6 +17,20 @@ a runtime-only managed Alpha payload and omitted native `Minglefield.exe`.
 The packaging workflow now compiles and inventories the OS-native Minglefield executable
 on each platform, pins the resulting inventory digest into Tauri, checks the native
 program before packaging and independently verifies the re-downloaded Windows artifact.
+
+## Failed first attempt and bounded repair retry
+
+The first requested acceptance build [42409532310](https://github.com/daresan/Minglefield/actions/runs/42409532310)
+failed **Windows** during native application packaging, before upload:
+`native_minglefield_application_build_rejected`. The native builder intentionally
+suppresses arbitrary Cargo stderr, so that outcome alone cannot classify the Windows
+compiler/linker cause. The only repair is to expose the **same pinned release Cargo build**
+as a separate CI step with ordinary compiler diagnostics before rerunning the unchanged
+native runtime builder. No security checks were removed, no binaries replaced, and no
+publisher trust relaxed. This marker is explicitly the **failed-build repair retry**
+per MDCI T4; it is not an extra feature-acceptance milestone. The retry must still
+pass all three OS jobs and Windows upload/re-download integrity verification.
+No prior artifact is accepted, and this retry must not be treated as a release.
 
 ## Completed required engineering CI (MDCI T1–T3)
 

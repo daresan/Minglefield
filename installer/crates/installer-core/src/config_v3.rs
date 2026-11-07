@@ -54,10 +54,7 @@ impl SecretInput {
             stdin.map(str::to_owned)
         };
         if let Some(value) = &value {
-            if value.is_empty()
-                || value.len() > MAX_SECRET_BYTES
-                || value.as_bytes().contains(&0)
-            {
+            if value.is_empty() || value.len() > MAX_SECRET_BYTES || value.as_bytes().contains(&0) {
                 return Err("password value has invalid length or bytes");
             }
         }
@@ -226,7 +223,10 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(c.database.database_path.as_deref(), Some("/tmp/owner.db"));
-        assert_eq!(c.database.password.literal.as_deref(), Some("OwnerPass123!"));
+        assert_eq!(
+            c.database.password.literal.as_deref(),
+            Some("OwnerPass123!")
+        );
         assert!(c.preview(Mode::Silent).is_ok());
         assert!(
             InstallerConfigV3::parse(&format!("{BASE}db_password=x\ndb_password=y\n")).is_err()
@@ -283,10 +283,8 @@ mod tests {
             Some("CREATE EXPERIMENTAL ENCRYPTED COPY")
         );
         assert!(
-            InstallerConfigV3::parse(&format!(
-                "{BASE}schema_additions=duplicate,duplicate\n"
-            ))
-            .is_err()
+            InstallerConfigV3::parse(&format!("{BASE}schema_additions=duplicate,duplicate\n"))
+                .is_err()
         );
     }
 

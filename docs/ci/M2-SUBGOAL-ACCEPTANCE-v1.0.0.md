@@ -577,7 +577,7 @@ manifest as publisher trust or request packaging prematurely.
 
 ### M2.11 — Standard, Advanced and headless parity
 
-- The GUI and installer CLI **consume an already built and independently tested OS application package**: verify it, install the package in the user's selected program directory, migrate/create the DB at the independent selected data path and optionally start **the same application executable**. No source build, application runtime integration, or ongoing launcher-service dependency inside the Setup Manager. The native Minglefield app must remain launchable after the manager is deleted.
+- **First prebuilt Alpha acceptance:** GUI and installer CLI consume the independently built/tested official OS package, verify and install it into the selected program directory, migrate/create the separate encrypted DB and optionally launch the same native application executable. **This is not a prohibition on later builds**: the required subsequent source-build path uses official or explicitly user-selected compatible fork build definitions, fetches declared build/application dependencies, builds the native executable and installs it. In both modes, Minglefield must remain startable when the Setup Manager is deleted.
 - Distinguish the **installer CLI** (currently `PLAN ONLY`, must invoke the real shared installation engine) from the application-owned M2.09/M2.10 start path. Verify both independently. The installer CLI must not fabricate authentication for existing imported user/Host ownership.
 - Standard: safe user-scoped defaults, suitable data directory and clear
   installation completion.
@@ -589,7 +589,12 @@ manifest as publisher trust or request packaging prematurely.
   yield safe errors and deterministic no-mutation behavior.
 - **Packaging:** one three-OS acceptance build.
 
+**Future mandatory source-build acceptance, after prebuilt Alpha delivery (no new immediate M2.11 blocking gate):** Demonstrate an official-repository build and a separately consented compatible fork build using each source's versioned OS build template, documented dependency acquisition, a native OS executable artifact, independent launch, and safe failure for a missing/invalid template, incompatible dependencies or a rejected source. The developer of a custom fork is responsible for making its template compatible. Same backend operations must be callable from shell/CLI and GUI, with no arbitrary code execution on mere checkout discovery. This future capability must not be silently reclassified as an optional extra.
+
 ### M2.12 — Optional Conda and ComfyUI integration
+
+- Git, GitHub CLI, optional Conda/Miniforge and ComfyUI: detect/reuse first; with separate explicit consent, execute official documented OS-specific installer script/package-manager flow only after appropriate release/source verification. Without a supported safe automated installation path, open the official provider page in the default OS browser for a manual step. Never bundle complete optional third-party applications into the Setup Manager (except components actually needed as Minglefield build/runtime dependencies), auto-install ComfyUI models/custom nodes, or overwrite existing runtime data. Runtime settings remain Host-owned.
+- Test offline/unsupported OS handling, cancellation, no permission escalation without consent, and display of actionable official-source fallback.
 
 - Detect existing non-PATH Conda and a manually selected compatible runtime.
 - Detect/reuse/local-connect ComfyUI and only install the consented official

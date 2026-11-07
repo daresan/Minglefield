@@ -468,11 +468,7 @@ fn preview_install_plan(
             .unwrap_or("");
         if version == "3" {
             let config = InstallerConfigV3::parse(&text).map_err(str::to_string)?;
-            config
-                .base
-                .git_tools
-                .validate()
-                .map_err(str::to_string)?;
+            config.base.git_tools.validate().map_err(str::to_string)?;
             (config.base.base, config.base.git_tools, 3)
         } else if version == "2" {
             let config = InstallerConfigV2::parse(&text).map_err(str::to_string)?;

@@ -439,8 +439,13 @@ def include_offline_application_documents(target):
         (target / filename).write_bytes(data)
 
 
-def build_runtime(output):
-    """Prepare a reusable runtime; never modify an existing output directory."""
+def build_runtime(output, *, native_app_executable=None):
+    """Prepare a reusable runtime; optionally include a compiled OS-native app.
+
+    An explicitly supplied native binary is copied before the exact managed
+    inventory is constructed, so both the native entrypoint and its bundled
+    Python/SQLCipher worker are included in the same verified payload.
+    """
     variant = current_variant()
     triple, python_sha, wheel_name, wheel_sha = BUNDLES[variant]
     output = Path(output).absolute()
@@ -557,6 +562,21 @@ def build_runtime(output):
                     or b"installed_alpha_start_rejected" not in application_probe.stderr):
                 raise ValueError("managed Alpha application import/startup self-test failed")
             smoke_managed_application(executable, application_entrypoint)
+            native_name = "Minglefield.exe" if variant[0] == "windows" else "Minglefield"
+            if native_app_executable is not None:
+                native_source = Path(native_app_executable)
+                if (not native_source.is_absolute()
+                        or native_source.is_symlink()
+                        or not native_source.is_file()
+                        or native_source.stat().st_size < 1024
+                        or native_source.stat().st_size > MAX_DOWNLOAD):
+                    raise ValueError("native app must be a bounded, existing regular binary")
+                with native_source.open("rb") as source_binary, (
+                        staged / native_name).open("xb") as target_binary:
+                    shutil.copyfileobj(source_binary, target_binary)
+                if variant[0] != "windows":
+                    (staged / native_name).chmod(
+                        native_source.stat().st_mode & 0o777 | 0o500)
             inventory = managed_file_inventory(staged)
             inventory_bytes = (json.dumps(
                 inventory, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
@@ -593,6 +613,9 @@ def build_runtime(output):
                 "managedFileInventory": MANAGED_FILES_NAME,
                 "managedFileInventorySha256": inventory_digest,
                 "managedFileCount": len(inventory["files"]),
+                "nativeApplicationIncluded": native_app_executable is not None,
+                "nativeApplicationExecutable":
+                    native_name if native_app_executable is not None else None,
                 "fullRuntimeDependencyClosureVerified": False,
                 "publisherSignatureVerified": False,
                 "completeProductInstallation": False,
@@ -610,9 +633,13 @@ def build_runtime(output):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--native-app-executable", type=Path)
     args = parser.parse_args(argv)
     try:
-        result = build_runtime(args.output)
+        result = build_runtime(
+            args.output,
+            native_app_executable=args.native_app_executable,
+        )
     except (OSError, ValueError, tarfile.TarError, subprocess.TimeoutExpired):
         print("managed_alpha_runtime_build_rejected", file=sys.stderr)
         return 2

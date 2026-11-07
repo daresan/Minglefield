@@ -9,6 +9,9 @@ use minglefield_installer_core::local_first_run_worker::{
     run_verified_local_first_run_worker, validate_local_credentials,
 };
 use minglefield_installer_core::managed_alpha_install::verify_installed_application;
+use minglefield_installer_core::native_application_probe::{
+    ensure_native_starter, probe_installed_application,
+};
 use serde::Serialize;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -106,6 +109,25 @@ impl FirstRunState {
         Ok(())
     }
 
+    fn validate_native_starter(&self) -> Result<(), String> {
+        let root = {
+            let state = self
+                .inner
+                .lock()
+                .map_err(|_| "First-run authorization state unavailable".to_owned())?;
+            if state.active || state.database.is_none() {
+                return Err("Verified current-session setup required".to_owned());
+            }
+            state
+                .application
+                .clone()
+                .ok_or("Verified application installation required")?
+        };
+        let expected = option_env!("MINGLEFIELD_ALPHA_INVENTORY_SHA256")
+            .ok_or("Native setup manager has no packaged Alpha inventory")?;
+        ensure_native_starter(&root, expected).map_err(str::to_owned)
+    }
+
     fn validate_database_unlock(&self, password: &str) -> Result<(), String> {
         let path = {
             let state = self
@@ -176,6 +198,7 @@ fn activate_with_permit(
     login_user_id: String,
     login_password: String,
     database_password: String,
+    verify_native_start: bool,
 ) -> Result<FirstRunActivation, String> {
     let db_meta = fs::symlink_metadata(&permit.database.path)
         .map_err(|_| "New encrypted database missing at activation")?;
@@ -192,6 +215,9 @@ fn activate_with_permit(
     let expected = option_env!("MINGLEFIELD_ALPHA_INVENTORY_SHA256")
         .ok_or("Native setup manager is not bundled with a managed Alpha runtime")?;
     verify_installed_application(&permit.application, expected)?;
+    if verify_native_start {
+        ensure_native_starter(&permit.application, expected).map_err(str::to_owned)?;
+    }
     let host_id = format!("local.{}", permit.database.operation_id);
     let receipt = run_verified_local_first_run_worker(
         &permit.application,
@@ -201,12 +227,24 @@ fn activate_with_permit(
         &login_password,
         &host_id,
     )?;
+    if verify_native_start {
+        probe_installed_application(
+            &permit.application,
+            &permit.database.path,
+            &database_password,
+            expected,
+        )
+        .map_err(|_| {
+            "Local Host created, but native startup verification failed; preserve installed files and database for review"
+                .to_owned()
+        })?;
+    }
     Ok(FirstRunActivation {
         status: "local_host_admin_created",
         login_user_id: receipt.login_user_id,
         local_host_id: receipt.local_host_id,
         remote_host_authority_granted: receipt.remote_host_authority_granted,
-        application_launch_enabled: false,
+        application_launch_enabled: verify_native_start,
     })
 }
 
@@ -217,6 +255,7 @@ pub async fn activate_first_run_local_admin(
     login_password: String,
     database_password: String,
     confirmation: String,
+    verify_native_start: Option<bool>,
 ) -> Result<FirstRunActivation, String> {
     validate_local_credentials(
         &login_user_id,
@@ -228,9 +267,19 @@ pub async fn activate_first_run_local_admin(
     let state = app.state::<FirstRunState>();
     // A typo in the SQLCipher password must not consume the operation permit.
     state.validate_database_unlock(&database_password)?;
+    let verify_native_start = verify_native_start.unwrap_or(false);
+    if verify_native_start {
+        state.validate_native_starter()?;
+    }
     let permit = state.consume()?;
     let result = tauri::async_runtime::spawn_blocking(move || {
-        activate_with_permit(permit, login_user_id, login_password, database_password)
+        activate_with_permit(
+            permit,
+            login_user_id,
+            login_password,
+            database_password,
+            verify_native_start,
+        )
     })
     .await
     .map_err(|_| "Local first-run activation worker failed".to_owned());

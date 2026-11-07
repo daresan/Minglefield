@@ -32,7 +32,8 @@ test("activation requires verified current-session user actions", () => {
     loginUserId: "mingleadmin",
     loginPassword: "SeparateLoginSecret456!",
     databasePassword: "DatabaseSecret123!",
-    confirmation: "ACTIVATE LOCAL HOST ADMIN"
+    confirmation: "ACTIVATE LOCAL HOST ADMIN",
+    verifyNativeStart: false
   });
   for (const change of [
     { reviewedCopy: null },
@@ -48,7 +49,7 @@ test("activation requires verified current-session user actions", () => {
     assert.throws(() => prepareLocalFirstRun({ ...fixture, ...change }));
   }
 });
-test("native result cannot grant remote Hosts or application launch", () => {
+test("native result cannot grant remote Hosts or unrequested application launch", () => {
   assert.deepEqual(verifyLocalFirstRunResult(result, "mingleadmin"), {
     loginUserId: "mingleadmin", localHostId: result.localHostId
   });
@@ -63,6 +64,21 @@ test("native result cannot grant remote Hosts or application launch", () => {
     assert.throws(() => verifyLocalFirstRunResult(
       { ...result, ...change }, "mingleadmin"));
   }
+});
+
+test("explicit native probe must match its reported outcome", () => {
+  assert.equal(prepareLocalFirstRun({
+    ...fixture, verifyNativeStart: true
+  }).verifyNativeStart, true);
+  const checked = { ...result, applicationLaunchEnabled: true };
+  assert.deepEqual(verifyLocalFirstRunResult(
+    checked, "mingleadmin", true
+  ), { loginUserId: "mingleadmin", localHostId: result.localHostId });
+  assert.throws(() => verifyLocalFirstRunResult(checked, "mingleadmin", false));
+  assert.throws(() => verifyLocalFirstRunResult(result, "mingleadmin", true));
+  assert.throws(() => prepareLocalFirstRun({
+    ...fixture, verifyNativeStart: "true"
+  }));
 });
 
 function authTable(name, columns, rows) {

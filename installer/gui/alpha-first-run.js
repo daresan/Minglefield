@@ -9,7 +9,7 @@ const RESPONSE = [
 export function prepareLocalFirstRun({
   reviewedCopy, installedFiles, currentDestination,
   databasePassword, loginUserId, loginPassword, repeatPassword,
-  consent
+  consent, verifyNativeStart = false
 }) {
   if (reviewedCopy?.status !== "experimental_encrypted_copy_created" ||
       reviewedCopy.destinationPath !== currentDestination ||
@@ -30,13 +30,17 @@ export function prepareLocalFirstRun({
       typeof databasePassword !== "string" || !databasePassword) {
     throw new Error("Loginpasswort (12–256 Zeichen) getrennt vom SQLCipher-Passwort festlegen und bestätigen.");
   }
+  if (typeof verifyNativeStart !== "boolean") {
+    throw new Error("Die native Startprüfung muss ausdrücklich ausgewählt werden.");
+  }
   return {
     loginUserId, loginPassword, databasePassword,
-    confirmation: "ACTIVATE LOCAL HOST ADMIN"
+    confirmation: "ACTIVATE LOCAL HOST ADMIN",
+    verifyNativeStart
   };
 }
 
-export function verifyLocalFirstRunResult(response, requestedUser) {
+export function verifyLocalFirstRunResult(response, requestedUser, requestedProbe = false) {
   if (!response || typeof response !== "object" ||
       Array.isArray(response) ||
       Object.keys(response).length !== RESPONSE.length ||
@@ -46,7 +50,8 @@ export function verifyLocalFirstRunResult(response, requestedUser) {
       typeof response.localHostId !== "string" ||
       !/^local\.[0-9a-f]{32}$/.test(response.localHostId) ||
       response.remoteHostAuthorityGranted !== false ||
-      response.applicationLaunchEnabled !== false) {
+      typeof requestedProbe !== "boolean" ||
+      response.applicationLaunchEnabled !== requestedProbe) {
     throw new Error("Die Antwort bestätigt keine autorisierte lokale Erstaktivierung.");
   }
   return {

@@ -898,6 +898,7 @@ const firstRunLogin = document.querySelector("#alpha-first-run-login");
 const firstRunPassword = document.querySelector("#alpha-first-run-password");
 const firstRunPasswordAgain = document.querySelector("#alpha-first-run-confirm-password");
 const firstRunConsent = document.querySelector("#alpha-first-run-consent");
+const firstRunNativeProbe = document.querySelector("#alpha-first-run-native-probe");
 const firstRunResult = document.querySelector("#alpha-first-run-result");
 const firstRunButton = document.querySelector("#activate-alpha-first-run");
 function updateFirstRunGuidance() {
@@ -909,6 +910,7 @@ function updateFirstRunGuidance() {
   firstRunPassword.disabled = existing;
   firstRunPasswordAgain.disabled = existing;
   firstRunConsent.disabled = existing;
+  firstRunNativeProbe.disabled = existing;
   if (state === "existing_host_authorization") {
     firstRunResult.textContent =
       "BESTANDSDATENBANK: Benutzer und Hostzuordnungen sind bereits vorhanden. " +
@@ -952,7 +954,8 @@ firstRunButton.addEventListener("click", async () => {
       loginUserId: firstRunLogin.value.trim(),
       loginPassword: firstRunPassword.value,
       repeatPassword: firstRunPasswordAgain.value,
-      consent: firstRunConsent.checked
+      consent: firstRunConsent.checked,
+      verifyNativeStart: firstRunNativeProbe.checked
     });
   } catch (error) {
     firstRunResult.textContent = String(error);
@@ -964,12 +967,17 @@ firstRunButton.addEventListener("click", async () => {
     "Prüfe die aktuelle Installation und richte den lokalen Administrator ein…";
   try {
     const response = await invoke("activate_first_run_local_admin", request);
-    const result = verifyLocalFirstRunResult(response, request.loginUserId);
+    const result = verifyLocalFirstRunResult(
+      response, request.loginUserId, request.verifyNativeStart
+    );
     firstRunResult.textContent =
       "LOKALER HOST EINGERICHTET: " + result.localHostId +
       "\nAnmeldung: " + result.loginUserId +
       "\nDie Benutzer- und Hostdaten liegen in der neuen verschlüsselten Datenbank. " +
-      "Die Originaldatenbank wurde nicht verändert. Der Anwendungsstart folgt als eigener Schritt.";
+      "Die Originaldatenbank wurde nicht verändert. " +
+      (request.verifyNativeStart
+        ? "Der native Start wurde über Loopback geprüft und anschließend beendet."
+        : "Der Anwendungsstart folgt als eigener Schritt.");
   } catch (error) {
     firstRunResult.textContent =
       "Lokale Aktivierung nicht bestätigt: " + String(error) +
@@ -979,6 +987,7 @@ firstRunButton.addEventListener("click", async () => {
     firstRunPassword.value = "";
     firstRunPasswordAgain.value = "";
     firstRunConsent.checked = false;
+    firstRunNativeProbe.checked = false;
     firstRunBusy = false;
     firstRunButton.disabled = false;
   }

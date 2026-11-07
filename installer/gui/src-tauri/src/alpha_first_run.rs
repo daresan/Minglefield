@@ -75,7 +75,7 @@ impl FirstRunState {
             .inner
             .lock()
             .map_err(|_| "First-run authorization state unavailable".to_owned())?;
-        if state.active || state.consumed_operations.contains(operation_id) {
+        if state.active || state.launch_in_progress || state.consumed_operations.contains(operation_id) {
             return Err("First-run copy operation active or already consumed".to_owned());
         }
         if state
@@ -171,7 +171,11 @@ impl FirstRunState {
                 .inner
                 .lock()
                 .map_err(|_| "First-run authorization state unavailable")?;
-            if state.active || state.launch_in_progress || state.database.is_none() || state.application.is_none() {
+            if state.active
+                || state.launch_in_progress
+                || state.database.is_none()
+                || state.application.is_none()
+            {
                 return Err("Verified local database and application required".into());
             }
             state.database.as_ref().unwrap().path.clone()
@@ -196,7 +200,11 @@ impl FirstRunState {
             .inner
             .lock()
             .map_err(|_| "First-run authorization state unavailable")?;
-        if state.active || state.launch_in_progress || state.database.is_none() || state.application.is_none() {
+        if state.active
+            || state.launch_in_progress
+            || state.database.is_none()
+            || state.application.is_none()
+        {
             return Err("Verified current-session copy and installation required".to_owned());
         }
         let database = state.database.take().unwrap();
@@ -382,7 +390,9 @@ mod tests {
         let app = root.join("application");
         fs::write(&db, b"test-only-fake-sqlcipher-state").unwrap();
         fs::create_dir(&app).unwrap();
-        state.record_encrypted_copy(&db, "fedcba9876543210fedcba9876543210").unwrap();
+        state
+            .record_encrypted_copy(&db, "fedcba9876543210fedcba9876543210")
+            .unwrap();
         assert!(state.begin_launch().is_err());
         state.record_installed_application(&app).unwrap();
         let (selected_app, selected_db) = state.begin_launch().unwrap();
@@ -396,8 +406,13 @@ mod tests {
         assert!(state.begin_launch().is_err());
         let newer = root.join("another.sqlite3");
         fs::write(&newer, b"test-only-next-sqlcipher-state").unwrap();
-        state.record_encrypted_copy(&newer, "0123456789abcdef0123456789abcdef").unwrap();
-        assert_eq!(state.begin_launch().unwrap().1, fs::canonicalize(&newer).unwrap());
+        state
+            .record_encrypted_copy(&newer, "0123456789abcdef0123456789abcdef")
+            .unwrap();
+        assert_eq!(
+            state.begin_launch().unwrap().1,
+            fs::canonicalize(&newer).unwrap()
+        );
         state.finish_launch(false);
         fs::remove_dir_all(root).unwrap();
     }

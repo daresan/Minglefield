@@ -519,6 +519,27 @@ mod mandatory_database_password_tests {
     use super::preview_install_plan;
 
     #[test]
+    fn version_3_cli_config_uses_same_gui_native_preview_schema() {
+        let config = concat!(
+            "version=3\ninstall_optional_conda=false\n",
+            "install_optional_comfyui=false\nexplicit_optional_consent=false\n",
+            "install_optional_git=false\ninstall_optional_gh=false\n",
+            "offer_gh_login=false\nconsent_git=false\nconsent_gh=false\n",
+            "consent_login=false\ndb_password=AdministratorProvided9!\n",
+        );
+        let preview = preview_install_plan(
+            "ValidPass9!".to_owned(),
+            "ValidPass9!".to_owned(),
+            String::new(),
+            String::new(),
+            Some(config.to_owned()),
+        )
+        .unwrap();
+        assert_eq!(preview.version, 3);
+        assert!(!preview.execution_enabled);
+    }
+
+    #[test]
     fn rejects_missing_password_even_for_fresh_install_preview() {
         let result = preview_install_plan(
             String::new(),

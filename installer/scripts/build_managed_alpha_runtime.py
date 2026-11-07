@@ -11,7 +11,6 @@ import hashlib
 import http.client
 import json
 import os
-import queue
 from pathlib import Path, PurePosixPath
 import platform
 import shutil
@@ -19,7 +18,6 @@ import stat
 import subprocess
 import sys
 import tarfile
-import threading
 import tempfile
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
@@ -291,34 +289,13 @@ finally:
         if replay.returncode != 3:
             raise ValueError("bundled first-run Host activation replay was accepted")
 
-        process = subprocess.Popen(
-            [str(executable), "-I", "-B", str(application_entrypoint)],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, bufsize=0)
+        # The build smoke exercises the same private shell-start adapter
+        # used independently from the Setup Manager; no second start path.
+        from alpha_application_shell import start_installed_alpha
+        process, port = start_installed_alpha(
+            executable, application_entrypoint, database,
+            fixture["cipherKey"], timeout=140)
         try:
-            startup = {
-                "version": 1, "databasePath": str(database),
-                "sqlcipherKey": fixture["cipherKey"], "port": 0,
-            }
-            process.stdin.write(json.dumps(startup).encode("utf-8"))
-            process.stdin.close()
-            ready_lines = queue.Queue(maxsize=1)
-            threading.Thread(
-                target=lambda: ready_lines.put(process.stdout.readline()),
-                daemon=True).start()
-            try:
-                line = ready_lines.get(timeout=140)
-            except queue.Empty:
-                raise ValueError("embedded Alpha service start timeout") from None
-            if not line:
-                raise ValueError("embedded Alpha service terminated before readiness")
-            status = json.loads(line)
-            if (type(status) is not dict or status.get("status") != "ready"
-                    or status.get("bind") != "127.0.0.1"
-                    or type(status.get("port")) is not int
-                    or not 0 < status["port"] <= 65535):
-                raise ValueError("invalid embedded Alpha readiness response")
-            port = status["port"]
 
             def call(method, endpoint, body=None, session=None):
                 connection = http.client.HTTPConnection(
@@ -380,7 +357,8 @@ finally:
                 process.kill()
                 process.wait(timeout=15)
             process.stdout.close()
-            process.stderr.close()
+            if process.stderr is not None:
+                process.stderr.close()
     return True
 
 

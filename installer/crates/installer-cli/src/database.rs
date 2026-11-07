@@ -42,6 +42,27 @@ impl DatabaseAction {
         argument: &str,
         args: &mut impl Iterator<Item = String>,
     ) -> Result<bool, (u8, String)> {
+        // The "=VALUE" form allows passwords that begin with "--" and avoids
+        // mistaking the value for a new option. The ordinary two-argument
+        // spelling remains supported for compatibility with Bee-style CLIs.
+        if let Some((name, value)) = argument.split_once('=') {
+            let target = match name {
+                "--database" => &mut self.input.database_path,
+                "--source-db" => &mut self.input.source_path,
+                "--backup-db" => &mut self.input.backup_path,
+                "--db-password" => &mut self.input.password.literal,
+                "--db-password-file" => &mut self.input.password.file,
+                "--new-db-password" => &mut self.input.new_password.literal,
+                "--new-db-password-file" => &mut self.input.new_password.file,
+                "--confirm-db-copy" => &mut self.input.copy_confirmation,
+                _ => return Ok(false),
+            };
+            if target.is_some() {
+                return Err((2, "duplicate database option".to_owned()));
+            }
+            *target = Some(value.to_owned());
+            return Ok(true);
+        }
         match argument {
             "--verify-encrypted-db" if !self.verify => self.verify = true,
             "--create-encrypted-copy" if !self.copy => self.copy = true,
@@ -238,6 +259,18 @@ mod tests {
             2
         );
         assert!(!db.parse("--unknown", &mut std::iter::empty()).unwrap());
+    }
+
+    #[test]
+    fn accepts_equals_secrets_beginning_with_option_prefix() {
+        let mut db = DatabaseAction::default();
+        assert!(db
+            .parse("--db-password=--LeadingDash9!", &mut std::iter::empty())
+            .unwrap());
+        assert_eq!(
+            db.input.password.literal.as_deref(),
+            Some("--LeadingDash9!")
+        );
     }
 
     #[test]

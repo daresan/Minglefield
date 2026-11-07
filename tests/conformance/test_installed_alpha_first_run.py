@@ -86,10 +86,16 @@ class InstalledAlphaFirstRunTests(unittest.TestCase):
         self.assertEqual(wrong.returncode, 2)
         self.assertEqual(wrong.stdout, b"")
         self.assertNotIn(b"Incorrect-Cipher-Key123!", wrong.stderr)
+        self.assertEqual(self.db.read_bytes(), before)
         identical = self.invoke_worker(loginPassword=DB_KEY)
         self.assertEqual(identical.returncode, 3)
         self.assertEqual(json.loads(identical.stdout)["status"], "denied")
-        self.assertEqual(self.db.read_bytes(), before)
+        store = AlphaAuthStore(self.db, sqlcipher_key_provider=lambda: DB_KEY)
+        with store._tx() as connection:
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM alpha_users").fetchone()[0], 0)
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM sec01_host_owners").fetchone()[0], 0)
 
     def test_rejects_existing_host_or_existing_identity_without_reassignment(self):
         created = self.invoke_worker(loginUserId="user.one", localHostId="host.one")

@@ -16,6 +16,7 @@ from zipfile import ZipFile, ZipInfo, ZIP_STORED, BadZipFile
 from audit_alpha_runtime_imports import audit
 
 ENTRYPOINT = "installed_alpha_launch"
+FIRST_RUN_ENTRYPOINT = "installed_alpha_first_run"
 MANIFEST_NAME = "alpha-payload-manifest.json"
 MAX_SOURCE_BYTES = 2 * 1024 * 1024
 MAX_MANIFEST_BYTES = 512 * 1024
@@ -28,20 +29,31 @@ def _sha(data):
 
 def _source_inventory(server_dir):
     server_dir = Path(server_dir)
-    report = audit(server_dir, entrypoint=ENTRYPOINT)
-    if report["errors"]:
+    reports = (
+        audit(server_dir, entrypoint=ENTRYPOINT),
+        audit(server_dir, entrypoint=FIRST_RUN_ENTRYPOINT),
+    )
+    if any(report["errors"] for report in reports):
         raise ValueError("unresolved Alpha application import graph")
-    # A missing local import can be classified as external by the generic
-    # auditor. The fixed gateway/auth/Host application modules are mandatory.
+    # Each actual process entrypoint gets an independent transitive audit,
+    # including the private first-run transaction worker. No loose .py glob.
+    modules = sorted(set().union(*(report["scanned_modules"] for report in reports)))
     required = {
-        "installed_alpha_launch", "private_alpha_gateway",
-        "private_alpha_auth", "alpha_sqlcipher_runtime",
-        "sec01_integrated_alpha_admission", "sec01_host_commit_policy_sim"
+        "installed_alpha_launch", "installed_alpha_first_run",
+        "private_alpha_gateway", "private_alpha_auth",
+        "alpha_sqlcipher_runtime", "sec01_integrated_alpha_admission",
+        "sec01_host_commit_policy_sim"
     }
-    if not required.issubset(report["scanned_modules"]):
+    if not required.issubset(modules):
         raise ValueError("required installed Alpha module missing from import closure")
+    external = {}
+    sites = []
+    for report in reports:
+        for name, dependents in report["external_imports"].items():
+            external.setdefault(name, set()).update(dependents)
+        sites.extend(report["dynamic_import_sites"])
     blobs = {}
-    for name in report["scanned_modules"]:
+    for name in modules:
         # An imported name comes only from the audited, top-level .py inventory.
         source = server_dir / (name + ".py")
         metadata = source.lstat()
@@ -63,13 +75,17 @@ def _source_inventory(server_dir):
         "schemaVersion": 1,
         "kind": "minglefield-alpha-application-sources",
         "entrypoint": "server/installed_alpha_launch.py",
+        "firstRunEntrypoint": "server/installed_alpha_first_run.py",
         "pythonRuntimeIncluded": False,
         "runtimeDependencyLockVerified": False,
         "publisherSignatureVerified": False,
         "modules": {name: {"sha256": _sha(data), "size": len(data)}
                     for name, data in sorted(blobs.items())},
-        "externalImports": report["external_imports"],
-        "dynamicImportSites": report["dynamic_import_sites"],
+        "externalImports": {name: sorted(users) for name, users in sorted(external.items())},
+        "dynamicImportSites": sorted(
+            {json.dumps(site, sort_keys=True): site for site in sites}.values(),
+            key=lambda item: (item["module"], item["line"], item["call"])),
+
     }
     return manifest, blobs
 
@@ -116,6 +132,7 @@ def inspect_payload(path):
         if (type(manifest) is not dict or manifest.get("schemaVersion") != 1
                 or manifest.get("kind") != "minglefield-alpha-application-sources"
                 or manifest.get("entrypoint") != "server/installed_alpha_launch.py"
+                or manifest.get("firstRunEntrypoint") != "server/installed_alpha_first_run.py"
                 or manifest.get("pythonRuntimeIncluded") is not False
                 or manifest.get("runtimeDependencyLockVerified") is not False
                 or type(manifest.get("modules")) is not dict):

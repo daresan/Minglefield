@@ -20,6 +20,8 @@ on:
       - "server/private_alpha_auth.py"
       - "server/private_alpha_gateway.py"
       - "server/installed_alpha_launch.py"
+      - "server/installed_alpha_first_run.py"
+      - "tests/conformance/test_installed_alpha_first_run.py"
       - "tests/conformance/test_installed_local_alpha_gateway.py"
       - "tests/conformance/test_installed_local_alpha_process.py"
       - "installer/scripts/build_managed_alpha_runtime.py"
@@ -73,6 +75,6 @@ jobs:
       - name: Verify Rust staged and published fixture ciphertext with Python Host ownership
         run: cargo test -p minglefield-installer-core --locked cross_runtime_ -- --ignored
       - name: Verify installed encrypted Alpha login and Host scope over loopback
-        run: python -B -m unittest discover -s ../tests/conformance -p "test_installed_local_alpha_*.py" -v
+        run: python -B -m unittest discover -s ../tests/conformance -p "test_installed*alpha*.py" -v
       - name: Assemble pinned managed Python SQLCipher and complete Alpha sources (build-only)
         run: python -B scripts/build_managed_alpha_runtime.py --output ci-managed-alpha

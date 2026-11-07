@@ -26,6 +26,7 @@ class AlphaPayloadTests(unittest.TestCase):
             self.assertFalse(report["runtimeDependencyLockVerified"])
             manifest = inspect_payload(payload)
             self.assertIn("server/installed_alpha_launch.py", manifest["modules"])
+            self.assertIn("server/installed_alpha_first_run.py", manifest["modules"])
             self.assertIn("server/private_alpha_gateway.py", manifest["modules"])
             self.assertIn("server/private_alpha_auth.py", manifest["modules"])
             self.assertFalse(manifest["publisherSignatureVerified"])
@@ -174,6 +175,7 @@ class AlphaPayloadTests(unittest.TestCase):
             directory.mkdir()
             chain = [
                 ("installed_alpha_launch", "private_alpha_gateway"),
+                ("installed_alpha_first_run", "private_alpha_auth"),
                 ("private_alpha_gateway", "private_alpha_auth"),
                 ("private_alpha_auth", "alpha_sqlcipher_runtime"),
                 ("alpha_sqlcipher_runtime", "sec01_integrated_alpha_admission"),
@@ -189,7 +191,7 @@ class AlphaPayloadTests(unittest.TestCase):
             self.assertEqual(set(modules), {
                 "server/" + name + ".py" for name, _ in chain
             })
-            self.assertEqual(len(manifest["modules"]), 6)
+            self.assertEqual(len(manifest["modules"]), 7)
             (directory / "private_alpha_gateway.py").unlink()
             with self.assertRaises(ValueError):
                 _source_inventory(directory)
@@ -199,8 +201,8 @@ class AlphaPayloadTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             source_names = (
-                "installed_alpha_launch", "private_alpha_gateway",
-                "private_alpha_auth", "alpha_sqlcipher_runtime",
+                "installed_alpha_launch", "installed_alpha_first_run",
+                "private_alpha_gateway", "private_alpha_auth", "alpha_sqlcipher_runtime",
                 "sec01_integrated_alpha_admission", "sec01_host_commit_policy_sim"
             )
             for ending, dirname in ((b"\n", "unix"), (b"\r\n", "windows")):
@@ -224,6 +226,8 @@ class AlphaPayloadTests(unittest.TestCase):
             directory.mkdir()
             (directory / "installed_alpha_launch.py").write_text(
                 "import dependency\n", encoding="utf-8")
+            (directory / "installed_alpha_first_run.py").write_text(
+                "import private_alpha_auth\n", encoding="utf-8")
             actual = Path(temp) / "external.py"
             actual.write_text("PASS = True\n", encoding="utf-8")
             try:

@@ -149,10 +149,7 @@ pub fn verified_inventory(source: &Path, expected_digest: &str) -> Result<Invent
     Ok(inventory)
 }
 
-pub fn verify_installed_application(
-    source: &Path,
-    expected_digest: &str,
-) -> Result<(), String> {
+pub fn verify_installed_application(source: &Path, expected_digest: &str) -> Result<(), String> {
     verified_inventory(source, expected_digest).map(|_| ())
 }
 

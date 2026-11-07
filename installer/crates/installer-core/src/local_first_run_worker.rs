@@ -109,8 +109,8 @@ pub fn run_verified_local_first_run_worker(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| "Could not launch installed local first-run worker")?;
-    let payload = serde_json::to_vec(&request)
-        .map_err(|_| "Could not encode private first-run request")?;
+    let payload =
+        serde_json::to_vec(&request).map_err(|_| "Could not encode private first-run request")?;
     let delivered = child
         .stdin
         .take()
@@ -176,14 +176,26 @@ mod tests {
     #[test]
     fn explicit_approval_and_separate_passwords_required() {
         assert!(validate_local_credentials(
-            "mingleadmin", "SeparateLogin123!", "DatabaseCipher123!", LOCAL_ADMIN_CONFIRMATION
-        ).is_ok());
+            "mingleadmin",
+            "SeparateLogin123!",
+            "DatabaseCipher123!",
+            LOCAL_ADMIN_CONFIRMATION
+        )
+        .is_ok());
         assert!(validate_local_credentials(
-            "mingleadmin", "SharedPassword123!", "SharedPassword123!", LOCAL_ADMIN_CONFIRMATION
-        ).is_err());
+            "mingleadmin",
+            "SharedPassword123!",
+            "SharedPassword123!",
+            LOCAL_ADMIN_CONFIRMATION
+        )
+        .is_err());
         assert!(validate_local_credentials(
-            "mingleadmin", "SeparateLogin123!", "DatabaseCipher123!", "WRONG"
-        ).is_err());
+            "mingleadmin",
+            "SeparateLogin123!",
+            "DatabaseCipher123!",
+            "WRONG"
+        )
+        .is_err());
         assert!(!valid_login_name("../mingleadmin"));
         assert!(valid_login_name("mingleadmin"));
     }

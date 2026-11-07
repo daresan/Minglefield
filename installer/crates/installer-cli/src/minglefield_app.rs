@@ -214,6 +214,32 @@ fn interactive_dialogs_allowed(opts: &LaunchOptions) -> bool {
     !opts.no_dialog && !opts.verify_only && !opts.probe_exit && !opts.no_browser && !opts.stdin
 }
 
+/// Fill *missing* owner inputs only; a config, argument, file, environment
+/// secret or private stdin frame never triggers an extra password prompt.
+/// Injection of a dialog callback makes this rule testable without GUI events.
+fn complete_interactive_sources(
+    db: &mut DatabaseOptions,
+    allow: bool,
+    environment_key_selected: bool,
+    mut ask: impl FnMut(DialogKind) -> Result<String, &'static str>,
+) -> Result<(), &'static str> {
+    if !allow {
+        return Ok(());
+    }
+    if db.database_path.is_none() {
+        db.database_path = Some(ask(DialogKind::DatabaseFile)?);
+    }
+    let key_selected = db.password.literal.is_some()
+        || db.password.file.is_some()
+        || db.new_password.literal.is_some()
+        || db.new_password.file.is_some()
+        || environment_key_selected;
+    if !key_selected {
+        db.password.literal = Some(ask(DialogKind::CipherPassword)?);
+    }
+    Ok(())
+}
+
 fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &'static str> {
     let automatic = root.join("minglefield.conf");
     let config_path = opts.config.as_ref().or(if automatic.exists() {
@@ -231,18 +257,13 @@ fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &
         DatabaseOptions::default()
     };
     db.override_with(opts.database.clone());
-    if db.database_path.is_none() && interactive_dialogs_allowed(opts) {
-        db.database_path = Some(native_start_dialog::ask(DialogKind::DatabaseFile)?);
-    }
-    let credential_available = db.password.literal.is_some()
-        || db.password.file.is_some()
-        || db.new_password.literal.is_some()
-        || db.new_password.file.is_some()
-        || env::var_os("MINGLEFIELD_DB_PASSWORD").is_some()
-        || env::var_os("MINGLEFIELD_NEW_DB_PASSWORD").is_some();
-    if !credential_available && interactive_dialogs_allowed(opts) {
-        db.password.literal = Some(native_start_dialog::ask(DialogKind::CipherPassword)?);
-    }
+    complete_interactive_sources(
+        &mut db,
+        interactive_dialogs_allowed(opts),
+        env::var_os("MINGLEFIELD_DB_PASSWORD").is_some()
+            || env::var_os("MINGLEFIELD_NEW_DB_PASSWORD").is_some(),
+        native_start_dialog::ask,
+    )?;
     let database = db
         .database_path
         .as_deref()
@@ -578,6 +599,64 @@ mod tests {
             let options = parse_args([flag.to_owned()]).unwrap();
             assert!(!interactive_dialogs_allowed(&options));
         }
+    }
+
+    #[test]
+    fn interactive_inputs_only_fill_missing_fields_and_preserve_existing_secrets() {
+        let mut db = DatabaseOptions::default();
+        let mut asked = Vec::new();
+        complete_interactive_sources(&mut db, true, false, |kind| {
+            asked.push(kind);
+            Ok(match kind {
+                DialogKind::DatabaseFile => "/private/selected.db".to_owned(),
+                DialogKind::CipherPassword => "OwnerChosenPass9!".to_owned(),
+            })
+        })
+        .unwrap();
+        assert_eq!(
+            asked,
+            vec![DialogKind::DatabaseFile, DialogKind::CipherPassword]
+        );
+        assert_eq!(db.database_path.as_deref(), Some("/private/selected.db"));
+        assert_eq!(
+            db.password.literal.as_deref(),
+            Some("OwnerChosenPass9!")
+        );
+        asked.clear();
+        complete_interactive_sources(&mut db, true, false, |kind| {
+            asked.push(kind);
+            Err("unexpected GUI request")
+        })
+        .unwrap();
+        assert!(asked.is_empty());
+    }
+
+    #[test]
+    fn config_file_and_noninteractive_credentials_never_force_password_dialog() {
+        let mut db = DatabaseOptions::default();
+        db.database_path = Some("/private/from-config.db".to_owned());
+        db.password.file = Some("/private/credential.txt".to_owned());
+        complete_interactive_sources(&mut db, true, false, |_| {
+            Err("unexpected GUI request")
+        })
+        .unwrap();
+        assert!(db.password.literal.is_none());
+        let mut with_env_key = DatabaseOptions::default();
+        let mut requested = Vec::new();
+        complete_interactive_sources(&mut with_env_key, true, true, |kind| {
+            requested.push(kind);
+            Ok("/private/selected.db".to_owned())
+        })
+        .unwrap();
+        assert_eq!(requested, vec![DialogKind::DatabaseFile]);
+        assert!(with_env_key.password.literal.is_none());
+        let mut headless = DatabaseOptions::default();
+        complete_interactive_sources(&mut headless, false, false, |_| {
+            Err("unexpected GUI request")
+        })
+        .unwrap();
+        assert!(headless.database_path.is_none());
+        assert!(headless.password.literal.is_none());
     }
 
     #[test]

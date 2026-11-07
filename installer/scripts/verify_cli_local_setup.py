@@ -226,6 +226,42 @@ assert store.principal("Bearer " + authorization) is not None
             )
             config.unlink()
 
+            if platform.system().lower() == "darwin":
+                # Package the *already installed* and verified application
+                # using the conventional Finder .app layout. The same
+                # executable must restart inside Contents/MacOS without
+                # Setup Manager, system Python or a source checkout.
+                from package_macos_alpha_app import package_macos_app
+                bundle = root / "Minglefield.app"
+                bundle_result = package_macos_app(installed, bundle)
+                assert bundle_result["status"] == "native_macos_app_bundle_created"
+                assert bundle_result["codeSigningVerified"] is False
+                bundled_app = bundle / "Contents/MacOS/Minglefield"
+                bundle_launch = subprocess.run(
+                    [
+                        str(bundled_app), "--database", str(database),
+                        "--db-password", TEST_DB_KEY, "--probe-exit",
+                        "--no-browser",
+                    ],
+                    capture_output=True, encoding="utf-8",
+                    errors="replace", timeout=110, check=False,
+                )
+                safe_bundle_error = "unclassified_macos_bundle_start_failure"
+                if bundle_launch.stderr.startswith(
+                    "minglefield_native_launch_rejected: "
+                ):
+                    safe_bundle_error = bundle_launch.stderr.splitlines()[0]
+                assert bundle_launch.returncode == 0, (
+                    "native macOS .app executable failed to launch: "
+                    + safe_bundle_error
+                )
+                bundle_start = json.loads(bundle_launch.stdout)
+                assert bundle_start["status"] == (
+                    "native_minglefield_startup_verified"
+                )
+                assert bundle_start["bind"] == "127.0.0.1"
+                assert bundle_start["hostClaimBootstrapEnabled"] is False
+
         prior_db = fingerprint(database)
         prior_inventory = fingerprint(installed / "managed-file-inventory.json")
         again = subprocess.run(

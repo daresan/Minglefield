@@ -54,3 +54,35 @@ export function verifyLocalFirstRunResult(response, requestedUser) {
     localHostId: response.localHostId
   };
 }
+
+/** Read-only classification of the already verified, typed data-review rows.
+ * Migrated sessions/password verifiers and Host grants belong to the app.
+ * This UI helper never returns secret cell contents or authorizes Host claims.
+ */
+export function classifyImportedAlphaAuthorization(review) {
+  if (!review || !Array.isArray(review.tables)) return "unverified";
+  const tables = new Map(review.tables.map(table => [table.name, table]));
+  const users = tables.get("alpha_users");
+  const owners = tables.get("sec01_host_owners");
+  const executors = tables.get("alpha_executor_hosts");
+  for (const [table, required] of [
+    [users, ["user_id"]],
+    [owners, ["host_id", "owner_id"]],
+    [executors, ["host_id", "operator_id"]]
+  ]) {
+    if (!table || !Array.isArray(table.columns) || !Array.isArray(table.rows) ||
+        !required.every(name => table.columns.includes(name))) {
+      return "unverified";
+    }
+  }
+  // There may be non-mingleadmin owners, token-only legacy users and remote
+  // Hosts. Their existing rights are *not* a request to recreate local rights.
+  if (owners.rows.length > 0 && executors.rows.length > 0) {
+    return "existing_host_authorization";
+  }
+  if (users.rows.length > 0 || owners.rows.length > 0 ||
+      executors.rows.length > 0) {
+    return "existing_identity_or_host";
+  }
+  return "empty_first_run";
+}

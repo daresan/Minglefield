@@ -2,7 +2,8 @@
 //! Never changes Host permissions or silently creates users or sessions.
 use minglefield_installer_core::config_v3::{parse_stdin_secrets, DatabaseOptions, StdinSecrets};
 use minglefield_installer_core::db_operations::{
-    create_reviewed_encrypted_database_copy, verify_encrypted_database,
+    create_new_encrypted_database, create_reviewed_encrypted_database_copy,
+    verify_encrypted_database, NEW_ENCRYPTED_DATABASE_CONFIRMATION,
 };
 use minglefield_installer_core::encrypted_copy_preflight::EXPERIMENTAL_COPY_CONFIRMATION;
 use std::env;
@@ -12,6 +13,7 @@ use std::path::Path;
 pub struct DatabaseAction {
     pub verify: bool,
     pub copy: bool,
+    pub fresh: bool,
     pub input: DatabaseOptions,
     pub stdin: bool,
 }
@@ -34,7 +36,7 @@ fn flag_value(
 
 impl DatabaseAction {
     pub fn active(&self) -> bool {
-        self.verify || self.copy
+        self.verify || self.copy || self.fresh
     }
 
     pub fn parse(
@@ -55,6 +57,7 @@ impl DatabaseAction {
                 "--new-db-password" => &mut self.input.new_password.literal,
                 "--new-db-password-file" => &mut self.input.new_password.file,
                 "--confirm-db-copy" => &mut self.input.copy_confirmation,
+                "--confirm-new-db" => &mut self.input.new_db_confirmation,
                 _ => return Ok(false),
             };
             if target.is_some() {
@@ -66,8 +69,12 @@ impl DatabaseAction {
         match argument {
             "--verify-encrypted-db" if !self.verify => self.verify = true,
             "--create-encrypted-copy" if !self.copy => self.copy = true,
+            "--create-new-encrypted-db" if !self.fresh => self.fresh = true,
             "--secrets-stdin" if !self.stdin => self.stdin = true,
-            "--verify-encrypted-db" | "--create-encrypted-copy" | "--secrets-stdin" => {
+            "--verify-encrypted-db"
+            | "--create-encrypted-copy"
+            | "--create-new-encrypted-db"
+            | "--secrets-stdin" => {
                 return Err((2, "duplicate database action flag".to_owned()));
             }
             "--database" => flag_value(args, "--database", &mut self.input.database_path)?,
@@ -94,6 +101,9 @@ impl DatabaseAction {
             "--confirm-db-copy" => {
                 flag_value(args, "--confirm-db-copy", &mut self.input.copy_confirmation)?;
             }
+            "--confirm-new-db" => {
+                flag_value(args, "--confirm-new-db", &mut self.input.new_db_confirmation)?;
+            }
             "--schema-add" => {
                 let value = args
                     .next()
@@ -112,7 +122,8 @@ impl DatabaseAction {
     /// DB paths/config version are common with the GUI-facing core contract.
     /// The CLI only resolves secrets immediately before an actual DB action.
     pub fn execute(&self, base: Option<&DatabaseOptions>, json: bool) -> Result<(), (u8, String)> {
-        if !self.active() || (self.verify && self.copy) {
+        let selected = u8::from(self.verify) + u8::from(self.copy) + u8::from(self.fresh);
+        if selected != 1 {
             return Err((2, "select exactly one database operation".to_owned()));
         }
         let mut db = base.cloned().unwrap_or_default();
@@ -123,6 +134,7 @@ impl DatabaseAction {
                 || db.new_password.literal.is_some()
                 || db.new_password.file.is_some()
                 || db.copy_confirmation.is_some()
+                || db.new_db_confirmation.is_some()
                 || !db.schema_additions.is_empty())
         {
             return Err((
@@ -133,6 +145,26 @@ impl DatabaseAction {
         if self.copy && db.copy_confirmation.as_deref() != Some(EXPERIMENTAL_COPY_CONFIRMATION) {
             return Err((2, "explicit --confirm-db-copy approval is required".into()));
         }
+        if self.copy && db.new_db_confirmation.is_some() {
+            return Err((2, "new database creation options conflict with copy".into()));
+        }
+        if self.fresh {
+            if db.source_path.is_some()
+                || db.backup_path.is_some()
+                || db.password.literal.is_some()
+                || db.password.file.is_some()
+                || db.copy_confirmation.is_some()
+                || !db.schema_additions.is_empty()
+            {
+                return Err((
+                    2,
+                    "fresh database creation cannot import sources or existing ownership".into(),
+                ));
+            }
+            if db.new_db_confirmation.as_deref() != Some(NEW_ENCRYPTED_DATABASE_CONFIRMATION) {
+                return Err((2, "explicit --confirm-new-db approval is required".into()));
+            }
+        }
         let input = if self.stdin {
             parse_stdin_secrets(std::io::stdin().lock())
                 .map_err(|_| (3, "secrets stdin rejected".to_owned()))?
@@ -142,6 +174,43 @@ impl DatabaseAction {
                 new_db_password: None,
             }
         };
+        let destination = db.database_path.as_deref().ok_or((
+            2,
+            "--database is required for database operations".to_owned(),
+        ))?;
+        if self.fresh {
+            if input.db_password.is_some() {
+                return Err((3, "old database password is not accepted for a fresh DB".into()));
+            }
+            let new_password = db
+                .new_password
+                .resolve(
+                    env::var("MINGLEFIELD_NEW_DB_PASSWORD").ok(),
+                    input.new_db_password.as_deref(),
+                )
+                .map_err(|_| {
+                    (
+                        3,
+                        "conflicting or invalid new database password source".to_owned(),
+                    )
+                })?
+                .ok_or((3, "new SQLCipher database password is required".to_owned()))?;
+            let created = create_new_encrypted_database(
+                Path::new(destination),
+                &new_password,
+                NEW_ENCRYPTED_DATABASE_CONFIRMATION,
+            )
+            .map_err(|_| (4, "fresh encrypted database creation rejected".to_owned()))?;
+            if json {
+                println!(
+                    "{{\"schema_version\":1,\"status\":\"{}\",\"exit_code\":0,\"encrypted_database_verified\":true,\"host_provisioning_enabled\":false,\"application_launch_enabled\":false,\"full_installation_completed\":false}}",
+                    created.status
+                );
+            } else {
+                println!("New SQLCipher database created; no user or Host provisioned");
+            }
+            return Ok(());
+        }
         let key = db
             .password
             .resolve(
@@ -154,10 +223,7 @@ impl DatabaseAction {
                     "conflicting or invalid database password source".to_owned(),
                 )
             })?;
-        let destination = db.database_path.as_deref().ok_or((
-            2,
-            "--database is required for database operations".to_owned(),
-        ))?;
+
         if self.verify {
             if input.new_db_password.is_some() {
                 return Err((
@@ -299,6 +365,27 @@ mod tests {
             db.input.password.literal.as_deref(),
             Some("--LeadingDash9!")
         );
+    }
+
+    #[test]
+    fn fresh_database_without_exact_approval_cannot_touch_destination() {
+        let mut db = DatabaseAction {
+            fresh: true,
+            ..DatabaseAction::default()
+        };
+        db.input.database_path = Some("/definitely/not/created/first-run.db".to_owned());
+        db.input.new_password.literal = Some("NewCipherPassword9!".to_owned());
+        assert_eq!(db.execute(None, true).unwrap_err().0, 2);
+    }
+
+    #[test]
+    fn refuses_multiple_database_operations() {
+        let db = DatabaseAction {
+            fresh: true,
+            verify: true,
+            ..DatabaseAction::default()
+        };
+        assert_eq!(db.execute(None, true).unwrap_err().0, 2);
     }
 
     #[test]

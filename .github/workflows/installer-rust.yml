@@ -10,6 +10,10 @@ on:
       - "installer/Cargo.toml"
       - "installer/Cargo.lock"
       - "installer/scripts/**"
+      # Documentation under scripts is not executable test/build code.
+      # Keep docs-only commits from restarting an expensive native runtime CI.
+      - "!installer/scripts/**/*.md"
+      - "!installer/scripts/*.md"
       - "requirements-ci.txt"
       - "server/alpha_sqlcipher_runtime.py"
       - "server/private_alpha_auth.py"
@@ -28,6 +32,10 @@ on:
       - "installer/Cargo.toml"
       - "installer/Cargo.lock"
       - "installer/scripts/**"
+      # Documentation under scripts is not executable test/build code.
+      # Keep docs-only commits from restarting an expensive native runtime CI.
+      - "!installer/scripts/**/*.md"
+      - "!installer/scripts/*.md"
       - "requirements-ci.txt"
       - "server/alpha_sqlcipher_runtime.py"
       - "server/private_alpha_auth.py"

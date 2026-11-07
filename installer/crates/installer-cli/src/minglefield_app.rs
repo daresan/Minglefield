@@ -618,10 +618,7 @@ mod tests {
             vec![DialogKind::DatabaseFile, DialogKind::CipherPassword]
         );
         assert_eq!(db.database_path.as_deref(), Some("/private/selected.db"));
-        assert_eq!(
-            db.password.literal.as_deref(),
-            Some("OwnerChosenPass9!")
-        );
+        assert_eq!(db.password.literal.as_deref(), Some("OwnerChosenPass9!"));
         asked.clear();
         complete_interactive_sources(&mut db, true, false, |kind| {
             asked.push(kind);
@@ -636,10 +633,8 @@ mod tests {
         let mut db = DatabaseOptions::default();
         db.database_path = Some("/private/from-config.db".to_owned());
         db.password.file = Some("/private/credential.txt".to_owned());
-        complete_interactive_sources(&mut db, true, false, |_| {
-            Err("unexpected GUI request")
-        })
-        .unwrap();
+        complete_interactive_sources(&mut db, true, false, |_| Err("unexpected GUI request"))
+            .unwrap();
         assert!(db.password.literal.is_none());
         let mut with_env_key = DatabaseOptions::default();
         let mut requested = Vec::new();

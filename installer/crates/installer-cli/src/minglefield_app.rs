@@ -211,11 +211,7 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
 fn interactive_dialogs_allowed(opts: &LaunchOptions) -> bool {
     // Never make CI, scripts or private-stdin automation unexpectedly wait
     // for a graphical interaction. Ordinary double-click startup is allowed.
-    !opts.no_dialog
-        && !opts.verify_only
-        && !opts.probe_exit
-        && !opts.no_browser
-        && !opts.stdin
+    !opts.no_dialog && !opts.verify_only && !opts.probe_exit && !opts.no_browser && !opts.stdin
 }
 
 fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &'static str> {
@@ -572,7 +568,13 @@ mod tests {
     fn graphical_prompts_are_never_used_during_scripted_or_ci_launch() {
         let normal = parse_args(Vec::<String>::new()).unwrap();
         assert!(interactive_dialogs_allowed(&normal));
-        for flag in ["--verify-only", "--probe-exit", "--no-browser", "--secrets-stdin", "--no-dialog"] {
+        for flag in [
+            "--verify-only",
+            "--probe-exit",
+            "--no-browser",
+            "--secrets-stdin",
+            "--no-dialog",
+        ] {
             let options = parse_args([flag.to_owned()]).unwrap();
             assert!(!interactive_dialogs_allowed(&options));
         }

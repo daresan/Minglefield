@@ -363,6 +363,14 @@ finally:
                 session=session)
             if forbidden != 403:
                 raise ValueError("embedded Alpha foreign Host authorization failed")
+            for kind, prefix in (
+                ("readme", "# Minglefield"),
+                ("license", "GNU GENERAL PUBLIC LICENSE"),
+            ):
+                status, document = call(
+                    "GET", "/api/project-document?kind=" + kind)
+                if (status != 200 or not document.get("content", "").startswith(prefix)):
+                    raise ValueError("embedded Alpha application documentation unavailable")
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -434,6 +442,23 @@ def verify_managed_file_inventory(root, expected_sha256):
     if expected != actual:
         raise ValueError("managed runtime content changed after verification")
     return len(actual["files"])
+
+
+def include_offline_application_documents(target):
+    """Keep the application's actual README and GPL available after install."""
+    target = Path(target)
+    target.mkdir(parents=True, exist_ok=True)
+    for filename, required_prefix in (
+        ("README.md", b"# Minglefield"),
+        ("LICENSE", b"GNU GENERAL PUBLIC LICENSE"),
+    ):
+        original = ROOT / filename
+        if original.is_symlink() or not original.is_file():
+            raise ValueError("application license or README is unavailable")
+        data = original.read_bytes().replace(b"\r\n", b"\n")
+        if not data.startswith(required_prefix) or len(data) > 1024 * 1024:
+            raise ValueError("application license or README is invalid")
+        (target / filename).write_bytes(data)
 
 
 def build_runtime(output):
@@ -543,6 +568,7 @@ def build_runtime(output):
                     target_file.parent.mkdir(parents=True, exist_ok=True)
                     with source_zip.open(filename) as src, target_file.open("xb") as dst:
                         shutil.copyfileobj(src, dst)
+            include_offline_application_documents(staged / "application")
             application_entrypoint = (
                 staged / "application" / application_manifest["entrypoint"])
             application_probe = subprocess.run(
@@ -577,6 +603,7 @@ def build_runtime(output):
                 "pythonExecutable": executable.relative_to(staged).as_posix(),
                 "runtimeSmokeVerified": True,
                 "applicationSourceIncluded": True,
+                "applicationOfflineDocumentsIncluded": True,
                 "applicationEntrypoint": application_entrypoint.relative_to(staged).as_posix(),
                 "applicationArchiveSha256": sha256_file(application_archive),
                 "applicationModuleCount": len(application_manifest["modules"]),

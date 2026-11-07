@@ -1411,6 +1411,93 @@ class HostCommitPolicy:
             )
             return HostDecision("created", "first_run_local_host_admin_created")
 
+
+    def ensure_installer_local_admin_trusted(
+            self, local_host_id, login_password, *, login_user_id="mingleadmin"):
+        """Append the local installer administrator without replacing any identity.
+
+        This trusted OFFLINE method is callable only by the one-shot installed
+        SQLCipher worker after the native Setup Manager has verified its
+        target and received installation consent. It is NOT a gateway API.
+        Existing accounts and password verifiers are never reset; existing
+        Host operators, owners/admins, rules, jobs and remote grants are never
+        deleted or reassigned. A new account gains authority only for the
+        explicitly selected local.* Host, not an arbitrary imported Host.
+        """
+        store = self.authority.store
+        if (not callable(getattr(store, "_sqlcipher_key_provider", None))
+                or login_user_id != "mingleadmin"
+                or not ident(local_host_id)
+                or not local_host_id.startswith("local.")):
+            return HostDecision("denied", "invalid_installer_admin_scope")
+        try:
+            database_password = store._sqlcipher_key_provider()
+        except BaseException:
+            return HostDecision("denied", "database_key_unavailable")
+        if type(database_password) is not str or not database_password:
+            return HostDecision("denied", "database_key_unavailable")
+        with store._tx() as db:
+            row = db.execute(
+                "SELECT disabled FROM alpha_users WHERE user_id=?",
+                (login_user_id,),
+            ).fetchone()
+            if row is not None:
+                if row[0] != 0:
+                    return HostDecision("denied", "existing_installer_admin_disabled")
+                # The account is real. In particular, never rotate its
+                # password/session or create competing owner/Host records.
+                return HostDecision("existing", "installer_admin_preserved")
+            if (not store._password_ok(login_password)
+                    or hmac.compare_digest(
+                        login_password.encode("utf-8"),
+                        database_password.encode("utf-8"))):
+                return HostDecision("denied", "independent_login_password_required")
+            # A missing primary user with orphan references is NOT a
+            # permission to reuse that identity or activate its old grants.
+            for table, column in (
+                ("alpha_passwords", "user_id"),
+                ("alpha_sessions", "user_id"),
+                ("alpha_agents", "user_id"),
+                ("sec01_host_owners", "owner_id"),
+                ("sec01_host_admins", "admin_id"),
+                ("alpha_executor_hosts", "operator_id"),
+            ):
+                if db.execute(
+                    f"SELECT 1 FROM {table} WHERE {column}=? LIMIT 1",
+                    (login_user_id,),
+                ).fetchone():
+                    return HostDecision("denied", "orphan_installer_admin_identity")
+            host = db.execute(
+                "SELECT host_id FROM alpha_executor_hosts WHERE host_id=?",
+                (local_host_id,),
+            ).fetchone()
+            salt = os.urandom(16)
+            db.execute(
+                "INSERT INTO alpha_users(user_id) VALUES(?)",
+                (login_user_id,),
+            )
+            db.execute(
+                "INSERT INTO alpha_passwords(user_id,salt,password_hash) VALUES(?,?,?)",
+                (login_user_id, salt, store._derive(login_password, salt)),
+            )
+            if host is None:
+                db.execute(
+                    "INSERT INTO alpha_executor_hosts(host_id,operator_id,active) VALUES(?,?,1)",
+                    (local_host_id, login_user_id),
+                )
+                db.execute(
+                    "INSERT INTO sec01_host_owners(host_id,owner_id) VALUES(?,?)",
+                    (local_host_id, login_user_id),
+                )
+            else:
+                # This ADDITIVE administrator relation is recognized by
+                # HostCommitPolicy._admin; existing owners stay owners.
+                db.execute(
+                    "INSERT INTO sec01_host_admins(host_id,admin_id) VALUES(?,?)",
+                    (local_host_id, login_user_id),
+                )
+            return HostDecision("created", "installer_local_admin_appended")
+
     def claim_local_host(self, host_id, owner_id):
         """Only invoke after gateway-local bootstrap proof AND live Alpha session."""
         if not ident(host_id) or not ident(owner_id):

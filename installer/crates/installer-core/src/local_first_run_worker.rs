@@ -74,13 +74,54 @@ pub fn run_verified_local_first_run_worker(
     login_password: &str,
     local_host_id: &str,
 ) -> Result<LocalFirstRunResult, String> {
-    validate_local_credentials(
-        login_user_id,
-        login_password,
-        database_password,
-        LOCAL_ADMIN_CONFIRMATION,
+    call_local_admin_worker(
+        installed, database, database_password, login_user_id,
+        login_password, local_host_id, false,
     )
-    .map_err(str::to_owned)?;
+}
+
+/// Installation-only, append-or-reuse account operation. May be used with a
+/// newly migrated database that already contains other users or Host owners.
+/// Only the trusted native installer may call it on its selected SQLCipher
+/// destination after one explicit installation consent.
+pub fn ensure_verified_installer_local_admin(
+    installed: &Path,
+    database: &Path,
+    database_password: &str,
+    login_password: &str,
+    local_host_id: &str,
+) -> Result<LocalFirstRunResult, String> {
+    call_local_admin_worker(
+        installed, database, database_password, "mingleadmin",
+        login_password, local_host_id, true,
+    )
+}
+
+fn call_local_admin_worker(
+    installed: &Path,
+    database: &Path,
+    database_password: &str,
+    login_user_id: &str,
+    login_password: &str,
+    local_host_id: &str,
+    allow_existing: bool,
+) -> Result<LocalFirstRunResult, String> {
+    if !allow_existing {
+        validate_local_credentials(
+            login_user_id,
+            login_password,
+            database_password,
+            LOCAL_ADMIN_CONFIRMATION,
+        )
+        .map_err(str::to_owned)?;
+    } else if login_user_id != "mingleadmin"
+        || database_password.is_empty()
+        || database_password.len() > 4096
+        || login_password.len() > 256
+        || (!login_password.is_empty() && login_password == database_password)
+    {
+        return Err("Invalid separate installer administrator credentials".into());
+    }
     if !valid_login_name(local_host_id) || !local_host_id.starts_with("local.") {
         return Err("First-run Host ID must be local and well formed".into());
     }
@@ -92,14 +133,17 @@ pub fn run_verified_local_first_run_worker(
             return Err("Managed local first-run worker is not a regular file".into());
         }
     }
-    let request = serde_json::json!({
-        "version": 1,
+    let mut request = serde_json::json!({
+        "version": if allow_existing { 2 } else { 1 },
         "databasePath": database,
         "sqlcipherKey": database_password,
         "loginUserId": login_user_id,
         "loginPassword": login_password,
         "localHostId": local_host_id,
     });
+    if allow_existing {
+        request["mode"] = serde_json::json!("ensure_local_admin");
+    }
     let mut child = Command::new(&python)
         .arg("-I")
         .arg("-B")
@@ -155,7 +199,8 @@ pub fn run_verified_local_first_run_worker(
     }
     let receipt: WorkerResponse = serde_json::from_slice(&response)
         .map_err(|_| "Unrecognized installed first-run receipt")?;
-    if receipt.status != "local_host_admin_created"
+    if !matches!(receipt.status.as_str(), "local_host_admin_created" | "local_host_admin_existing")
+        || (!allow_existing && receipt.status != "local_host_admin_created")
         || receipt.login_user_id != login_user_id
         || receipt.local_host_id != local_host_id
         || receipt.remote_host_authority_granted

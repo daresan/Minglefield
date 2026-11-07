@@ -21,6 +21,7 @@ FIELDS = frozenset({
     "version", "databasePath", "sqlcipherKey", "loginUserId",
     "loginPassword", "localHostId"
 })
+INSTALLER_FIELDS = FIELDS | {"mode"}
 
 
 def main():
@@ -29,9 +30,13 @@ def main():
         if not frame or len(frame) > MAX_FRAME:
             raise ValueError("invalid first-run frame length")
         message = json.loads(frame)
-        if (type(message) is not dict or set(message) != FIELDS
-                or type(message["version"]) is not int or message["version"] != 1
-                or any(type(message[key]) is not str for key in FIELDS - {"version"})):
+        if type(message) is not dict or type(message.get("version")) is not int:
+            raise ValueError("invalid first-run request")
+        ensure_mode = message["version"] == 2
+        fields = INSTALLER_FIELDS if ensure_mode else FIELDS
+        if (message["version"] not in (1, 2) or set(message) != fields
+                or any(type(message[key]) is not str for key in FIELDS - {"version"})
+                or (ensure_mode and message["mode"] != "ensure_local_admin")):
             raise ValueError("invalid first-run request")
         db = Path(message["databasePath"])
         if not db.is_absolute() or db.is_symlink() or not db.is_file():
@@ -39,7 +44,8 @@ def main():
         secret = message["sqlcipherKey"]
         login_password = message["loginPassword"]
         if (not secret or len(secret) > 4096 or "\x00" in secret
-                or not login_password or len(login_password) > 256):
+                or len(login_password) > 256
+                or (not ensure_mode and not login_password)):
             raise ValueError("invalid first-run credentials")
         # Fail before the existing Alpha store can create any table for an
         # invalid key/plaintext source. The native launcher authorizes this
@@ -50,15 +56,21 @@ def main():
         finally:
             opened.close()
         store = AlphaAuthStore(db, sqlcipher_key_provider=lambda: secret)
-        result = HostCommitPolicy(IntegratedAlphaAdmission(store)).provision_first_run_local_host_admin_trusted(
-            message["localHostId"], login_password,
-            login_user_id=message["loginUserId"])
-        if result.state != "created":
+        policy = HostCommitPolicy(IntegratedAlphaAdmission(store))
+        if ensure_mode:
+            result = policy.ensure_installer_local_admin_trusted(
+                message["localHostId"], login_password,
+                login_user_id=message["loginUserId"])
+        else:
+            result = policy.provision_first_run_local_host_admin_trusted(
+                message["localHostId"], login_password,
+                login_user_id=message["loginUserId"])
+        if result.state not in (("created", "existing") if ensure_mode else ("created",)):
             # Denial reasons are fixed internal enums, never user inputs.
             print(json.dumps({"status": "denied", "reason": result.reason}), flush=True)
             return 3
         print(json.dumps({
-            "status": "local_host_admin_created",
+            "status": "local_host_admin_existing" if result.state == "existing" else "local_host_admin_created",
             "loginUserId": message["loginUserId"],
             "localHostId": message["localHostId"],
             "remoteHostAuthorityGranted": False,

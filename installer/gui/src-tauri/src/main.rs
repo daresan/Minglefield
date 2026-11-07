@@ -1,10 +1,10 @@
 // GUI-only entrypoint: suppress the Windows console subsystem window in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod alpha_application_install;
 mod full_database_review;
 mod legacy_record_review;
 mod migration_review;
-mod alpha_application_install;
 
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;

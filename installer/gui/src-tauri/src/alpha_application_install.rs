@@ -44,15 +44,18 @@ fn relative_install_path(name: &str) -> Result<PathBuf, String> {
         return Err("Invalid application inventory file name".to_owned());
     }
     let path = Path::new(name);
-    if path.components().any(|part| !matches!(part, Component::Normal(_))) {
+    if path
+        .components()
+        .any(|part| !matches!(part, Component::Normal(_)))
+    {
         return Err("Application inventory contains an unsafe path".to_owned());
     }
     Ok(path.to_path_buf())
 }
 
 fn check_regular_file(path: &Path, expected_size: u64, digest: &str) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| "Missing managed Alpha source file".to_owned())?;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| "Missing managed Alpha source file".to_owned())?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
         || metadata.len() != expected_size
@@ -90,7 +93,9 @@ fn verified_inventory(source: &Path, expected_digest: &str) -> Result<Inventory,
     }
     let inventory: Inventory =
         serde_json::from_slice(&contents).map_err(|_| "Invalid managed Alpha inventory")?;
-    if inventory.schema_version != 1 || inventory.files.is_empty() || inventory.files.len() > MAX_FILES
+    if inventory.schema_version != 1
+        || inventory.files.is_empty()
+        || inventory.files.len() > MAX_FILES
     {
         return Err("Unsupported or oversized managed Alpha inventory".to_owned());
     }
@@ -131,7 +136,9 @@ fn verified_inventory(source: &Path, expected_digest: &str) -> Result<Inventory,
                 let actual = fs::canonicalize(&source_file)
                     .map_err(|_| "Cannot resolve Alpha runtime symlink")?;
                 if !actual.starts_with(source) {
-                    return Err("Managed Alpha runtime link leaves the installation source".to_owned());
+                    return Err(
+                        "Managed Alpha runtime link leaves the installation source".to_owned()
+                    );
                 }
             }
         }
@@ -155,8 +162,7 @@ fn install_from_verified_root(
     if source_meta.file_type().is_symlink() || !source_meta.is_dir() {
         return Err("Managed Alpha source must be a real directory".to_owned());
     }
-    let source =
-        fs::canonicalize(source).map_err(|_| "Cannot identify managed Alpha source")?;
+    let source = fs::canonicalize(source).map_err(|_| "Cannot identify managed Alpha source")?;
     if !destination.is_absolute()
         || destination
             .components()
@@ -197,9 +203,6 @@ fn install_from_verified_root(
     for (name, entry) in &inventory.files {
         let relative = relative_install_path(name)?;
         let dest = target.join(&relative);
-        dest.parent()
-            .ok_or("Managed application entry has no parent")?
-            .to_path_buf();
         fs::create_dir_all(
             dest.parent()
                 .ok_or("Managed application entry has no parent")?,
@@ -209,8 +212,7 @@ fn install_from_verified_root(
             InventoryEntry::File { size, sha256 } => {
                 let src = source.join(&relative);
                 check_regular_file(&src, *size, sha256)?;
-                fs::copy(&src, &dest)
-                    .map_err(|_| "Cannot copy managed Alpha application file")?;
+                fs::copy(&src, &dest).map_err(|_| "Cannot copy managed Alpha application file")?;
                 check_regular_file(&dest, *size, sha256)?;
             }
             InventoryEntry::Symlink { target: link } => links.push((dest, link.clone(), relative)),
@@ -229,8 +231,8 @@ fn install_from_verified_root(
             .map_err(|_| "Cannot recreate managed Alpha runtime symlink")?;
         #[cfg(windows)]
         {
-            let target_metadata = fs::metadata(&src)
-                .map_err(|_| "Cannot identify managed Alpha link target")?;
+            let target_metadata =
+                fs::metadata(&src).map_err(|_| "Cannot identify managed Alpha link target")?;
             if target_metadata.is_dir() {
                 std::os::windows::fs::symlink_dir(&link, &dest)
                     .map_err(|_| "Cannot recreate managed Alpha runtime directory symlink")?;
@@ -244,7 +246,9 @@ fn install_from_verified_root(
         let src = source.join(name);
         let metadata = fs::symlink_metadata(&src)
             .map_err(|_| "Managed Alpha installation metadata is absent")?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_INVENTORY_BYTES
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > MAX_INVENTORY_BYTES
         {
             return Err("Managed Alpha installation metadata is invalid".to_owned());
         }
@@ -340,8 +344,14 @@ mod tests {
         assert_eq!(result.installed_entries, 2);
         assert!(!result.host_provisioning_enabled);
         assert!(!result.application_launch_enabled);
-        assert_eq!(fs::read(src.join("application/server/installed_alpha_launch.py")).unwrap(), first);
-        assert_eq!(fs::read(dst.join("application/server/installed_alpha_launch.py")).unwrap(), first);
+        assert_eq!(
+            fs::read(src.join("application/server/installed_alpha_launch.py")).unwrap(),
+            first
+        );
+        assert_eq!(
+            fs::read(dst.join("application/server/installed_alpha_launch.py")).unwrap(),
+            first
+        );
         assert!(install_from_verified_root(&src, &dst, &digest).is_err());
         fs::remove_dir_all(root).unwrap();
     }

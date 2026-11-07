@@ -1,6 +1,6 @@
 # Setup Manager: existing configuration and database adoption
 
-Status: accepted product requirement (2026-11-04). This document describes required behavior, **not** an implemented migration.
+Status: accepted data-adoption contract (2026-11-04), with **bounded executable Alpha SQLCipher copy already implemented/accepted for its earlier scope**, and M2.08 full application/operator acceptance still failed/pending (updated 2026-11-07). Historical proof-stage sections below describe their dated scope, not current overall implementation status.
 
 ## Separate application code from user data
 
@@ -20,7 +20,7 @@ The existing `inspect_source_path` command is a narrow source-checkout classifie
 - Present a preview and allow explicit per-category selection; explain destination, conflicts, transformations, unsupported fields and omissions.
 - Parse only allowlisted keys and recognized schema versions. Preserve unrecognized fields in a separate report/backup where possible; never silently discard them or interpret them as executable configuration.
 - For SQLite, obtain a consistent snapshot using SQLite's backup API (or equivalent) rather than copying a live DB file alone; inspect integrity and schema in an isolated working copy. Never mutate the source DB.
-- Stage all output outside live application directories; maintain a backup, audit/receipt and recoverable rollback for destination changes. Do not overwrite existing data without explicit conflict resolution.
+- Use isolated staging, independent source backup and receipt/audit for mutations; never overwrite existing data. **Current experimental Alpha exception:** interruption/failure can be retried at a different, fresh unoccupied destination while source and independently verified backup remain unchanged; automatic rollback and crash-durable recovery are deferred to M2.13–M2.15.
 - Validate and migrate data using versioned, tested transformations. No dynamic code execution, untrusted SQL scripts, or automatic credential import.
 - On failure, leave originals intact and report partial progress clearly.
 
@@ -34,9 +34,9 @@ The existing `inspect_source_path` command is a narrow source-checkout classifie
 6. A clean laptop without existing data installs using defaults, without a misleading migration warning.
 7. Re-running migration is idempotent or requires explicit conflict handling; failed staging can recover safely.
 
-## Binding implementation order (confirmed 2026-11-05)
+## Historical binding implementation order (confirmed 2026-11-05; superseded in execution by later accepted Alpha milestones)
 
-**Immediate priority: finish the existing GUI database-data review and editable fields before implementing executable migration or application installation.** Do not switch to migration/installation execution merely because read-only inspection and preview are available.
+**At that checkpoint,** the immediate priority was the GUI database-data review before executable migration. The subsequent M2.06 controlled non-overwriting SQLCipher destination copy and M2.08 application/Host slices are now implemented at limited experimental scope; the earlier sequencing is preserved as history, not as a demand to repeat completed checkpoints.
 
 1. **Reuse existing discovery and inspection:** The selected repository/data directory and known per-user data locations already have read-only candidate inventory; retain their bounded search and repository-independent data detection. Extend coverage only for demonstrated missing actual data paths.
 2. **Complete the existing wizard data-review UI:** Load verified, recognized application records from the inspected database into the existing Login, Hosts, Effects, Jobs and Games review tabs. Distinguish available records, unsupported schemas and missing categories; do not invent placeholder records or silently omit data.
@@ -44,7 +44,7 @@ The existing `inspect_source_path` command is a narrow source-checkout classifie
 4. **Complete the final review:** Present original versus proposed values, selections, validation errors, exclusions and destination/conflict implications; require explicit confirmation before any later mutation. Provide focused regression tests and a build with visible, usable review functionality for maintainer acceptance.
 5. **Only after the GUI review is complete and accepted:** Implement tested consistent SQLite snapshot/staging, versioned migration transformations, destination backups/rollback and real Minglefield application installation. Integrate authenticated local Host first-run provisioning through the existing Hosts architecture, not a parallel Host system.
 
-Until executable paths are implemented and verified, `migration_enabled` and `execution_enabled` must remain false. Their values are safety gates, not an indication that the read-only discovery or review work must be restarted. Do not change these flags merely to make the wizard appear complete.
+**Rehearsal API invariant:** `migration_enabled` and `execution_enabled` remain false in *read-only and non-publishing preview responses*. Actual separately authorized execution APIs report their own results truthfully. Do not recast an old rehearsal response as the overall installer execution state.
 
 ## Next safety checkpoint: full in-memory row fidelity (implemented 2026-11-05)
 
@@ -77,7 +77,7 @@ Limits are explicit and fail closed: currently one million rows per table,
 destination is created, no files are published, and the original Alpha
 database is not modified.
 
-**Binding remaining blockers for actual migration:** (1) manual acceptance
+**Historical remaining blockers at the 2026-11-05 proof checkpoint (subsequent Alpha copy satisfies a bounded subset):** (1) manual acceptance
 of the existing GUI data-review on Shadow; (2) a recognized/versioned
 source-to-target transformation/preservation contract covering all data
 and schema objects; (3) safe staging of a *real encrypted SQLCipher
@@ -113,11 +113,12 @@ objects and the exact staged correction count must match. Authentication,
 owner binding, stale-value rejection and trigger checks reuse the existing
 migration_dry_run Rust policy instead of duplicating mutable rules.
 
-This is **NOT a completed migration**. No persistent SQLCipher output,
-Minglefield installation, recovery checkpoint, or local Host claim has been
-authorized or performed. All execution flags remain false. The remaining
-gates for a durable destination are a versioned recognized schema mapping
-covering the entire source, exclusive target publication with reliable
-rollback, conflict/race handling, persistent reopen verification, the
-already established strong-password requirement for every new
-installation, and the existing authenticated Hosts workflow.
+**At the date of this ephemeral proof only,** no persistent SQLCipher output, Minglefield installation, recovery checkpoint, or local Host claim was performed, and the rehearsal execution flags remained false. **Later status (2026-11-07):** the separately authorized Alpha copy creates and verifies a real non-overwriting encrypted destination, and experimental native application-file/first-run setup exists; their combined GUI operator acceptance is still failed/pending. Complete automatic rollback/crash-durable recovery remains deferred, without weakening current source/backup preservation and fresh-target retry.
+
+## Current adopted-data and ownership invariant (approved 2026-11-07)
+
+The first Alpha installs application code only from the bundled, verified official package. The selected source checkout or data directory may supply **data** but must not become an executable application source. Source-based application installation is a separate, deferred Advanced/Developer capability.
+
+An imported SQLCipher/SQLite Alpha database retains every existing, recognized user and salted login verifier, owner/operator/admin mapping, Host identity, stored local and remote-Host grant, delegated agent, Hosts runtime/settings, Effect, Job, Game and schema/extension record under the migration preservation contract. Existing imported `mingleadmin` credentials, Host ownership and saved remote Host rights remain intact. A verified, already matching local Host owner is **already configured**, not an invitation to create a duplicate account or reassign the Host. Genuine conflicting/unverified ownership may block a *new assignment*, not erase an otherwise valid source or independent backup. The native implementation still lacks the verified-existing-host classification and stable cross-install Host identity; these are open implementation gaps, not a reason to extend Remote Host functionality.
+
+**Current Alpha retry:** An interruption may leave the earlier destination/receipt occupied; retry only with a separately authorized operation at another unused destination. No automatic cleanup/recovery, no source mutation, and no assertion that a previously reserved output is safe to reuse. New encrypted DB creation without import is due in M2.10, after independent M2.09 application shell/runtime verification. Remote-Host online claiming and client-only installation are outside these data-adoption acceptance gates; existing remote rows are nevertheless preserved and checked for fidelity.

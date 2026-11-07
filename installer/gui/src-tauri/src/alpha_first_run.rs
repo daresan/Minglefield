@@ -3,14 +3,14 @@
 //! from this process's native encrypted-copy and application-file writers can
 //! arm an activation; neither an IPC-supplied path nor a DB password alone can.
 use minglefield_installer_core::integrity::sha256_reader_hex;
+use minglefield_installer_core::local_first_run_worker::{
+    run_verified_local_first_run_worker, valid_login_name, validate_local_credentials,
+};
 use minglefield_installer_core::managed_alpha_install::verify_installed_application;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::fs::{self, File};
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
 use tauri::Manager;
 
 #[derive(Default)]
@@ -159,15 +159,6 @@ impl FirstRunState {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkerResponse {
-    status: String,
-    login_user_id: String,
-    local_host_id: String,
-    remote_host_authority_granted: bool,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FirstRunActivation {
@@ -176,24 +167,6 @@ pub struct FirstRunActivation {
     local_host_id: String,
     remote_host_authority_granted: bool,
     application_launch_enabled: bool,
-}
-
-fn valid_login_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 128
-        && name
-            .bytes()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, b'.' | b'_' | b'-'))
-}
-
-fn runtime_paths(installed: &Path) -> (PathBuf, PathBuf) {
-    let python = if cfg!(windows) {
-        installed.join("runtime/python/python.exe")
-    } else {
-        installed.join("runtime/python/bin/python3.11")
-    };
-    let worker = installed.join("application/server/installed_alpha_first_run.py");
-    (python, worker)
 }
 
 fn activate_with_permit(
@@ -217,90 +190,20 @@ fn activate_with_permit(
     let expected = option_env!("MINGLEFIELD_ALPHA_INVENTORY_SHA256")
         .ok_or("Native setup manager is not bundled with a managed Alpha runtime")?;
     verify_installed_application(&permit.application, expected)?;
-    let (python, worker) = runtime_paths(&permit.application);
-    for path in [&python, &worker] {
-        let meta =
-            fs::symlink_metadata(path).map_err(|_| "Managed Alpha first-run executable missing")?;
-        if !meta.is_file() || meta.file_type().is_symlink() {
-            return Err("Managed Alpha first-run executable is not a regular file".to_owned());
-        }
-    }
     let host_id = format!("local.{}", permit.database.operation_id);
-    let request = serde_json::json!({
-        "version": 1,
-        "databasePath": permit.database.path,
-        "sqlcipherKey": database_password,
-        "loginUserId": login_user_id,
-        "loginPassword": login_password,
-        "localHostId": host_id,
-    });
-    let mut child = Command::new(&python)
-        .arg("-I")
-        .arg("-B")
-        .arg(&worker)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|_| "Could not start trusted local first-run worker")?;
-    let payload =
-        serde_json::to_vec(&request).map_err(|_| "Could not prepare first-run request")?;
-    let write_ok = child
-        .stdin
-        .take()
-        .ok_or("No private first-run input pipe")
-        .and_then(|mut input| {
-            input
-                .write_all(&payload)
-                .map_err(|_| "Could not deliver private first-run input")
-        });
-    if write_ok.is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err("Could not deliver private first-run input".to_owned());
-    }
-    let deadline = Instant::now() + Duration::from_secs(150);
-    let success = loop {
-        match child.try_wait() {
-            Ok(Some(result)) => break result.success(),
-            Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("Local first-run worker did not finish successfully".to_owned());
-            }
-        }
-    };
-    if !success {
-        return Err("Local first-run Host activation was refused".to_owned());
-    }
-    let mut response = Vec::new();
-    child
-        .stdout
-        .take()
-        .ok_or("Missing first-run worker result")?
-        .take(8193)
-        .read_to_end(&mut response)
-        .map_err(|_| "Cannot read first-run worker result")?;
-    if response.len() > 8192 {
-        return Err("First-run worker result is oversized".to_owned());
-    }
-    let receipt: WorkerResponse = serde_json::from_slice(&response)
-        .map_err(|_| "Unrecognized first-run activation result")?;
-    if receipt.status != "local_host_admin_created"
-        || receipt.login_user_id != login_user_id
-        || receipt.local_host_id != host_id
-        || receipt.remote_host_authority_granted
-    {
-        return Err("First-run activation did not match local authorization".to_owned());
-    }
+    let receipt = run_verified_local_first_run_worker(
+        &permit.application,
+        &permit.database.path,
+        &database_password,
+        &login_user_id,
+        &login_password,
+        &host_id,
+    )?;
     Ok(FirstRunActivation {
         status: "local_host_admin_created",
-        login_user_id,
-        local_host_id: host_id,
-        remote_host_authority_granted: false,
+        login_user_id: receipt.login_user_id,
+        local_host_id: receipt.local_host_id,
+        remote_host_authority_granted: receipt.remote_host_authority_granted,
         application_launch_enabled: false,
     })
 }
@@ -313,17 +216,13 @@ pub async fn activate_first_run_local_admin(
     database_password: String,
     confirmation: String,
 ) -> Result<FirstRunActivation, String> {
-    if confirmation != "ACTIVATE LOCAL HOST ADMIN"
-        || !valid_login_name(&login_user_id)
-        || !(12..=256).contains(&login_password.len())
-        || login_password == database_password
-        || database_password.is_empty()
-        || database_password.len() > 4096
-    {
-        return Err(
-            "Valid separate local first-run credentials and consent are required".to_owned(),
-        );
-    }
+    validate_local_credentials(
+        &login_user_id,
+        &login_password,
+        &database_password,
+        &confirmation,
+    )
+    .map_err(str::to_owned)?;
     let state = app.state::<FirstRunState>();
     // A typo in the SQLCipher password must not consume the operation permit.
     state.validate_database_unlock(&database_password)?;

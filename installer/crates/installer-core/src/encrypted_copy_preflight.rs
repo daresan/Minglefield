@@ -1925,17 +1925,17 @@ mod tests {
         let encrypted =
             Connection::open_with_flags(&dest, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         encrypted.pragma_update(None, "key", "NewKey123!").unwrap();
-        let restored: i64 = encrypted.query_row(
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name='sec01_host_rules'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let restored: i64 = encrypted
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name='sec01_host_rules'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(restored, 1);
-        let original: String = encrypted.query_row(
-            "SELECT note FROM legacy_extension",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let original: String = encrypted
+            .query_row("SELECT note FROM legacy_extension", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(original, "preserve-this-value");
         drop(encrypted);
         assert_eq!(fs::read(&source).unwrap(), before);

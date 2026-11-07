@@ -22,6 +22,10 @@ on:
       - "server/installed_alpha_launch.py"
       - "tests/conformance/test_installed_local_alpha_gateway.py"
       - "tests/conformance/test_installed_local_alpha_process.py"
+      - "installer/scripts/build_managed_alpha_runtime.py"
+      - "installer/scripts/test_build_managed_alpha_runtime.py"
+      - "installer/scripts/build_alpha_application_payload.py"
+      - "installer/scripts/audit_alpha_runtime_imports.py"
       - "server/sec01_host_commit_policy_sim.py"
       - "server/sec01_integrated_alpha_admission.py"
       - "requirements-ci.txt"
@@ -70,3 +74,5 @@ jobs:
         run: cargo test -p minglefield-installer-core --locked cross_runtime_ -- --ignored
       - name: Verify installed encrypted Alpha login and Host scope over loopback
         run: python -B -m unittest discover -s ../tests/conformance -p "test_installed_local_alpha_*.py" -v
+      - name: Assemble pinned managed Python SQLCipher and complete Alpha sources (build-only)
+        run: python -B scripts/build_managed_alpha_runtime.py --output ci-managed-alpha

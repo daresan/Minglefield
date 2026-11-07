@@ -107,6 +107,7 @@ name = "minglefield-installer-cli"
 version = "0.1.0"
 dependencies = [
  "minglefield-installer-core",
+ "serde_json",
 ]
 
 [[package]]

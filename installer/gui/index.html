@@ -93,6 +93,15 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <button id="inspect-interrupted-copy" type="button" class="secondary">Recovery-Zustand prüfen (nur lesen)</button>
 <pre id="read-only-recovery-result" role="status" aria-live="polite">Noch keine Recovery-Prüfung durchgeführt. Vorhandene Belege und Zieldateien niemals automatisch löschen oder überschreiben.</pre>
 </fieldset>
+<fieldset id="alpha-application-install-controls">
+<legend>Minglefield-Alpha-Anwendungsdateien installieren (separater Schritt)</legend>
+<p class="help">Der portable Setup Manager kann die mitgelieferte und im nativen Backend überprüfte Python-/SQLCipher-Laufzeit mit den Minglefield-Anwendungsdateien in einen <strong>neuen, unbenutzten Zielpfad</strong> kopieren. Vorhandene Installationen und Benutzerdaten werden niemals überschrieben. Ist in dieser Testversion kein gültiges Anwendungspaket enthalten, wird der Vorgang abgelehnt. Dies ist noch keine Host-Registrierung und kein Anwendungsstart.</p>
+<p class="help">Ziel ist das oben unter „Installation directory“ angezeigte Verzeichnis. Bestätige die gesonderte Schreiboperation ausdrücklich; eine Datenbankmigration oder ein Installationsplan alleine erteilt keine Freigabe.</p>
+<label for="alpha-application-install-confirmation">Bestätigung: INSTALL MINGLEFIELD ALPHA FILES</label>
+<input id="alpha-application-install-confirmation" spellcheck="false" autocomplete="off" aria-label="Bestätigung zum Kopieren der Minglefield-Anwendungsdateien" />
+<button type="button" id="install-alpha-application-files">Geprüfte Alpha-Anwendungsdateien installieren</button>
+<pre id="alpha-application-install-result" role="status" aria-live="polite">Noch keine Anwendungsdateien installiert. Lokale Host-Aktivierung und Anwendungsstart bleiben gesperrt.</pre>
+</fieldset>
 <h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
 <small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>

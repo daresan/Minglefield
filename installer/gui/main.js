@@ -13,6 +13,7 @@ import { validateExperimentalCopyRequest } from "./experimental-copy-review.js";
 import { validateSchemaAdditionSelection } from "./schema-addition-selection.js";
 import { assessReadOnlyRecoveryStatus } from "./read-only-recovery-status.js";
 import { prepareReadOnlyRecoveryRequest } from "./read-only-recovery-request.js";
+import { prepareAlphaApplicationInstall, verifyAlphaApplicationInstallResult } from "./alpha-application-install.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -845,6 +846,46 @@ async function inspectRecovery(mode) {
 }
 fullRecoveryButton.addEventListener("click", () => inspectRecovery("full"));
 briefRecoveryButton.addEventListener("click", () => inspectRecovery("reservation_only"));
+
+// A separate, explicitly consented *files-only* installation.
+// No SQLCipher credentials, Host ownership, or launch permission is granted.
+const alphaFilesResult = document.querySelector("#alpha-application-install-result");
+const alphaFilesConsent = document.querySelector("#alpha-application-install-confirmation");
+const alphaFilesButton = document.querySelector("#install-alpha-application-files");
+let alphaFilesBusy = false;
+alphaFilesButton.addEventListener("click", async () => {
+  if (alphaFilesBusy) return;
+  let request;
+  try {
+    request = prepareAlphaApplicationInstall({
+      installDir: document.querySelector("#review-install-dir").value,
+      confirmation: alphaFilesConsent.value
+    });
+  } catch (error) {
+    alphaFilesResult.textContent = "Alpha-Anwendungsdateien nicht installiert: " + String(error);
+    return;
+  }
+  alphaFilesBusy = true;
+  alphaFilesButton.disabled = true;
+  alphaFilesResult.textContent =
+    "Prüfe die mitgelieferte Anwendung und kopiere ausschließlich in einen neuen Zielordner…";
+  try {
+    const response = await invoke("install_alpha_application", request);
+    const checked = verifyAlphaApplicationInstallResult(response);
+    alphaFilesResult.textContent = "Minglefield-Alpha-Anwendungsdateien kopiert: " +
+      checked.installedEntries + " geprüfte Einträge in " + checked.installDir +
+      ". Die Benutzer- und Host-Einrichtung sowie der Anwendungsstart sind weiterhin getrennt.";
+  } catch (error) {
+    alphaFilesResult.textContent = "Keine bestätigte vollständige Dateiinstallation: " +
+      String(error) + ". Ein eventuell angelegter neuer Zielordner darf " +
+      "nicht automatisch überschrieben oder entfernt werden. Für einen neuen Versuch " +
+      "einen anderen, unbenutzten Zielpfad wählen.";
+  } finally {
+    alphaFilesConsent.value = "";
+    alphaFilesBusy = false;
+    alphaFilesButton.disabled = false;
+  }
+});
 
 // Wizard navigation preserves the existing form controls and their values.
 // No page transition authorizes a download, filesystem write, or installation.

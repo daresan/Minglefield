@@ -52,7 +52,6 @@ pub fn success_v2(
     )
 }
 
-
 /// Reports only the bounded verified file copy. This is NOT a complete
 /// application install, database migration, or local Host activation.
 pub fn installed_alpha_files(install_dir: &str, entries: usize) -> String {

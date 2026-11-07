@@ -15,6 +15,7 @@ pub mod integrity;
 pub mod legacy_alpha_constraints;
 pub mod legacy_alpha_mapping;
 pub mod managed_alpha_install;
+pub mod local_first_run_worker;
 pub mod manifest;
 pub mod migration_destination;
 pub mod migration_dry_run;

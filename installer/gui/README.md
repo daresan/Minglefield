@@ -7,7 +7,30 @@ The portable build passed CI but **failed its first manual Windows acceptance**.
 
 The Setup Manager reuses the shared Rust `minglefield-installer-core` planner and the existing Alpha/Host implementations. **Current controlled Alpha behavior (2026-11-07):** An explicitly consented, backup-verified SQLCipher migration creates a separate, non-overwriting encrypted destination. A second, separately approved Tauri command copies the bundled, pinned Python 3.11 + SQLCipher runtime and Minglefield application files into a *new, unoccupied* installation directory after independently checking the compiled managed-file inventory. A third consented step uses native, single-use in-process proof of **both successful operations in this Setup Manager session** to create an editable local `mingleadmin` user and its owner-scoped local Host through the existing atomic `HostCommitPolicy` transaction. The sign-in password is separate from the database key, the console bootstrap token is not reused, and no global/remote Host authority is granted.
 
-**Still unavailable:** creating a fresh empty encrypted database without a migratable source, starting the installed Minglefield application through the native GUI, full release-publisher provenance, repair/update automation, unattended local Host activation, and manual cross-platform portable user acceptance. The existing M2.07 interruption diagnostics remain optional and read-only; a failed copy can be repeated at a new unused destination without touching the source or independent verified backup. The earlier README sections below describe the *historical* non-installing preview gates; this current capability summary supersedes their old statements about installation being impossible. Neither green CI nor a database-only copy establishes a completed end-user installation.
+**Still unavailable in the portable GUI:** creating a fresh empty encrypted database without a migratable source, a persistent end-user application launch from the installer, full release-publisher provenance, repair/update automation, and manual cross-platform portable user acceptance. The headless CLI already provides a separately approved fresh DB/local Host path, and both GUI and CLI now support an explicitly selected short native startup probe using the same Rust core; neither feature by itself completes M2.11. The existing M2.07 interruption diagnostics remain optional and read-only; a failed copy can be repeated at a new unused destination without touching the source or independent verified backup. The earlier README sections below describe the *historical* non-installing preview gates; this current capability summary supersedes their old statements about installation being impossible. Neither green CI nor a database-only copy establishes a completed end-user installation.
+
+## M2.11 optional native post-first-run check (focused technical milestone)
+
+The final Review page has an unchecked option to **verify native Minglefield startup**
+when initializing a new local Host. It is not an extra Host claim or a
+persisted application-start setting. The Tauri backend first checks the
+current-session verified SQLCipher copy and pinned installed application,
+then validates the native executable **before consuming** the single-use
+first-run permit. When requested, the original Host admission worker creates
+the owner-scoped account/Host; `installer-core::native_application_probe`
+starts the exact installed native program with `--probe-exit --no-browser
+--no-dialog --secrets-stdin` and verifies encrypted loopback readiness.
+Credentials never appear on child command lines or in success receipts;
+the separate account password is not forwarded. Without the checkbox,
+existing first-run behavior is unchanged. A failed post-first-run probe
+leaves the created data and Host for manual review; no automatic replay
+or destructive rollback is permitted. The actual application is **not
+left running** after a successful probe.
+
+This is engineering CI scope only. Real GUI clicks, a console-free Windows
+application starter, full Windows Shadow acceptance, Linux desktop packaging,
+macOS Finder usability and complete Standard/Advanced/silent parity still
+require separate user-visible acceptance.
 
 On a trusted developer workstation with Node.js/npm, Rust and Tauri OS prerequisites:
 

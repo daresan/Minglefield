@@ -211,7 +211,14 @@ verifier and Host owner/operator records using the canonical Alpha
 authorization/Host policy. It grants **no remote Host authority** and
 requires no legacy invitation code for this narrowly approved first run.
 The GUI retains its independent same-session current-copy and installation
-permit before invoking the **same** shared Rust worker launcher.
+permit before invoking the **same** shared Rust worker launcher. For an
+explicitly selected post-first-run test, the GUI and CLI now also share
+`installer-core::native_application_probe`: the native starter must be a
+regular file in the verified managed inventory, and its real SQLCipher-backed
+loopback start is checked with a private stdin key frame. The probe exits
+without launching a browser, keeps no installer process running, and creates
+no additional Host authority. A failed post-provision probe does not erase
+the newly initialized Host or permit first-run replay.
 
 Successful completion reports `local_host_admin_created`, with
 `application_files_installed=true` and
@@ -240,16 +247,17 @@ end-user desktop or portable Setup Manager acceptance is implied.
 The **binding Bee-like credential contract** is documented in
 [the installer phase](../docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md#binding-target-bee-style-cli-and-unattended-credential-configuration-approved-2026-11-07):
 CLI values, password files, administrator-authored configuration, environment
-variables, prompt and private stdin. **The noninteractive credential sources
-are now implemented for the focused SQLCipher verification/encrypted-copy
-actions**, not for every future application/installer operation. Interactive
-prompt, local Host/user initialization and verification against the newly
-created database, a separately launched native app, and end-to-end silent
-installation **remain unfinished**. Do not infer
-the complete acceptance from a successful file-copy or encrypted-copy
-action. The eventual CLI, Tauri UI and native
-Minglefield application must use the same versioned installation/config
-contract and respect existing Host ownership.
+variables, prompt and private stdin. Noninteractive sources are implemented
+for the focused SQLCipher verification/copy and fresh local Host CLI path;
+the optional native launch probe is shared with the Tauri GUI. **Still
+unfinished:** interactive CLI password prompts, migration of an existing
+user database as part of one complete installation transaction, a persistent
+application launch/desktop UX after setup, full Standard/Advanced/silent
+parameter parity, and manual native end-user acceptance. A verified probe
+is not a persistent running application and never replaces account login.
+Do not infer complete M2.11 acceptance from green focused CI. The CLI,
+Tauri UI and independently launched Minglefield application must continue
+to respect existing Host ownership and the single versioned config contract.
 
 The next Alpha accepts **prebuilt official OS application packages**; a later
 mandatory installer expansion will also execute complete native builds from

@@ -3,8 +3,10 @@
 
 pub mod config;
 pub mod config_v2;
+pub mod config_v3;
 pub mod consent;
 pub mod data_inventory;
+pub mod db_operations;
 pub mod database_password;
 pub mod discovery;
 pub mod encrypted_copy_preflight;

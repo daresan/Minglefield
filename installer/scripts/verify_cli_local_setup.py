@@ -192,6 +192,25 @@ assert store.principal("Bearer " + authorization) is not None
         assert again.returncode != 0, "repeated local first-run setup was accepted"
         assert fingerprint(database) == prior_db
         assert fingerprint(installed / "managed-file-inventory.json") == prior_inventory
+        if has_native:
+            # The native program must reject tampered managed application
+            # content *before* unlocking the DB or opening a gateway.
+            application_script = (
+                installed / "application" / "server" / "installed_alpha_launch.py"
+            )
+            application_script.write_bytes(
+                application_script.read_bytes() + b"\n# altered after install\n"
+            )
+            rejected = subprocess.run(
+                [str(native), "--database", str(database), "--verify-only",
+                 "--db-password", TEST_DB_KEY],
+                text=True, capture_output=True, timeout=30, check=False,
+            )
+            assert rejected.returncode != 0, (
+                "native app accepted modified installed application content"
+            )
+            assert TEST_DB_KEY not in rejected.stderr
+            assert fingerprint(database) == prior_db
     return {
         "status": "cli_local_first_run_verified",
         "native_application_launch": has_native,

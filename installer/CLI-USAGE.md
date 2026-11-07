@@ -214,13 +214,26 @@ The GUI retains its independent same-session current-copy and installation
 permit before invoking the **same** shared Rust worker launcher.
 
 Successful completion reports `local_host_admin_created`, with
-`application_files_installed=true`,
-`encrypted_database_created=true`, and
-`native_application_launch_enabled=false`. It does **not** establish a
-native `Minglefield.exe`/macOS app/Linux executable or prove the complete
-silent-install and app-launch milestone. It may be invoked non-interactively
-but **all required consents and distinct credentials must be supplied**;
-`--silent --defaults` never invents a login password.
+`application_files_installed=true` and
+`encrypted_database_created=true`. Without the optional native probe,
+`native_application_launch_enabled=false`. Add
+`--verify-native-start` **only alongside** the approved fresh
+`--setup-local-host` operation to launch the inventory-bound installed
+`Minglefield` binary, verify its SQLCipher-backed loopback readiness and
+stop it without opening a browser. The CLI forwards the new database
+password over the existing private JSON stdin protocol, not on the child
+process command line. A successful requested probe reports
+`native_application_launch_enabled=true`; it does **not** keep the
+application running or establish complete GUI/silent installation acceptance.
+The flag is rejected without the fresh first-run operation, and a missing
+native executable is rejected before new installation writes. A failed
+post-setup launch probe leaves the already-created files, encrypted database
+and Host unchanged for manual inspection; first-run is never replayed.
+
+This operation may be invoked non-interactively, but **all required
+consents and distinct credentials must be supplied**;
+`--silent --defaults` never invents a login password. No complete
+end-user desktop or portable Setup Manager acceptance is implied.
 
 ## Unfinished required CLI parity
 

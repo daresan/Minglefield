@@ -13,6 +13,8 @@ on:
       - "installer/gui/package-lock.json"
       - "installer/crates/installer-core/src/lib.rs"
       - "installer/crates/installer-core/src/managed_alpha_install.rs"
+      - "installer/crates/installer-core/src/config_v3.rs"
+      - "installer/crates/installer-core/src/db_operations.rs"
       - "installer/crates/installer-core/Cargo.toml"
       - ".github/workflows/installer-gui-native.yml"
   pull_request:

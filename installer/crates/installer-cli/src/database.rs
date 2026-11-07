@@ -127,9 +127,7 @@ impl DatabaseAction {
             .as_deref()
             .ok_or((2, "--database is required for database operations".to_owned()))?;
         if self.verify {
-            if input.new_db_password.is_some()
-                || env::var_os("MINGLEFIELD_NEW_DB_PASSWORD").is_some()
-            {
+            if input.new_db_password.is_some() {
                 return Err((
                     3,
                     "new database password must not be supplied for verification".into(),

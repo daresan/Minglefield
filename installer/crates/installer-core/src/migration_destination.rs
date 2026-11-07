@@ -653,7 +653,9 @@ mod tests {
         ).unwrap();
         assert_eq!(
             same_name_elsewhere.destination,
-            fs::canonicalize(&target_dir).unwrap().join("alpha.sqlite3")
+            fs::canonicalize(&target_dir)
+                .unwrap()
+                .join("alpha.sqlite3")
         );
         let destination = target_dir.join("new.sqlite3");
         fs::write(&destination, b"existing").unwrap();

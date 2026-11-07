@@ -536,6 +536,28 @@ mod mandatory_database_password_tests {
     }
 
     #[test]
+    fn new_sqlcipher_database_config_remains_preview_only_in_gui() {
+        let config = concat!(
+            "version=3\ninstall_optional_conda=false\n",
+            "install_optional_comfyui=false\nexplicit_optional_consent=false\n",
+            "install_optional_git=false\ninstall_optional_gh=false\n",
+            "offer_gh_login=false\nconsent_git=false\nconsent_gh=false\n",
+            "consent_login=false\nconfirm_new_db=CREATE NEW ENCRYPTED DATABASE\n",
+            "database_path=/tmp/not-created-by-preview.db\n",
+        );
+        let result = preview_install_plan(
+            "FreshPassword9!".to_owned(),
+            "FreshPassword9!".to_owned(),
+            String::new(),
+            String::new(),
+            Some(config.to_owned()),
+        )
+        .unwrap();
+        assert_eq!(result.version, 3);
+        assert!(!result.execution_enabled);
+    }
+
+    #[test]
     fn rejects_missing_password_even_for_fresh_install_preview() {
         let result = preview_install_plan(
             String::new(),

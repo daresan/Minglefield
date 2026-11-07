@@ -26,10 +26,15 @@ directly to the existing `application/server/installed_alpha_launch.py` process
 through an anonymous stdin pipe, opens the local web UI at its verified
 127.0.0.1-only port, and shuts down with the invoking shell. It does **not**
 provision/reassign Host rights, reset any user or token, migrate/re-encrypt the
-DB or depend on a running Setup Manager. No password argument/environment
-variable or plaintext key file is accepted. It requires an interactive
-terminal for the development adapter; a later native application provides
-an application-owned graphical key prompt.
+DB or depend on a running Setup Manager. **This current development adapter**
+does not yet accept password arguments, environment variables or plaintext
+config files; its interactive-terminal requirement is a temporary
+implementation limitation, **not an intended security prohibition**.
+For M2.11 acceptance the public CLI, silent installer and GUI MUST support
+the full [Bee-style credential input contract](../../docs/MINGLEFIELD-INSTALLER-AND-ONBOARDING-PHASE.md#binding-target-bee-style-cli-and-unattended-credential-configuration-approved-2026-11-07),
+including explicitly supplied literal arguments, password files, admin-authored
+config, environment variables, prompt or stdin. A native application will
+provide an app-owned GUI prompt. Internal private stdin forwarding may remain.
 
 **Security and acceptance boundaries:** the self-declared runtime manifest
 and hash inventory detect local changes but do not establish publisher

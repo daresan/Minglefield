@@ -8,7 +8,7 @@ inventoried managed Alpha payload. No production release, branch merge or deploy
 
 **Milestone/subgoal:** M2.10 native application and M2.11 first-run + independent app launch.
 **Source branch:** `feat/game-integration-updates`
-**Reviewed implementation HEAD before retry marker:** `2cc12264b405b9b49a55f16fa272e03a92932c87`
+**Reviewed implementation HEAD before current repair marker:** `9c7bc9c060531f680930b0f218d3aaf041989902`
 **Actual packaging SHA:** the marker commit that changes this file; record it from GitHub Actions,
 not the preceding implementation SHA.
 **Reason for new portable packages:** The currently approved M2.11 runtime handoff has
@@ -31,6 +31,17 @@ publisher trust relaxed. This marker is explicitly the **failed-build repair ret
 per MDCI T4; it is not an extra feature-acceptance milestone. The retry must still
 pass all three OS jobs and Windows upload/re-download integrity verification.
 No prior artifact is accepted, and this retry must not be treated as a release.
+
+**Second failed-build repair attempt:** [42409827099](https://github.com/daresan/Minglefield/actions/runs/42409827099)
+exposed the precise Windows toolchain problem. Git Bash selected a minimal
+`/usr/bin/perl`, and vendored OpenSSL's `./Configure` failed because
+`Locale/Maketext/Simple.pm` was missing. The ordinary Windows Native
+Security CI had succeeded with the same builder under PowerShell.
+The Windows portable workflow now uses `pwsh` for **both** the native
+Cargo release build and its Python runtime-packaging wrapper; Unix runners
+continue using Bash. No dependency hashes, security policies, user data or
+distribution scope were changed. This is the second focused **failed-build
+repair retry**, not a new T4 feature build.
 
 ## Completed required engineering CI (MDCI T1–T3)
 

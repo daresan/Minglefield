@@ -151,7 +151,42 @@ jobs:
           name: tauri-portable-windows-exe
           path: installer/gui/portable-windows/
           if-no-files-found: error
+          # The pinned runtime inventory includes valid dot-prefixed, empty
+          # Python distribution files. Omitting them made a green build unusable.
+          include-hidden-files: true
           retention-days: 7
+      # Verify the *published* payload, not only the pre-upload staging folder.
+      # A missing file, including an empty hidden file, now fails packaging.
+      - name: Re-download uploaded Windows artifact for inventory validation
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v8
+        with:
+          name: tauri-portable-windows-exe
+          path: installer/gui/portable-windows-reextracted
+          digest-mismatch: error
+      - name: Verify re-extracted Windows artifact against binary-pinned inventory
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          @'
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, str(Path("../scripts").resolve()))
+          from build_managed_alpha_runtime import verify_managed_file_inventory
+
+          delivered = Path("portable-windows-reextracted")
+          if not (delivered / "minglefield-installer-gui.exe").is_file():
+              raise SystemExit("downloaded portable Windows executable missing")
+          root = delivered / "managed-alpha"
+          if not (root / "runtime-manifest.json").is_file():
+              raise SystemExit("downloaded runtime manifest missing")
+          count = verify_managed_file_inventory(
+              root, os.environ["MINGLEFIELD_ALPHA_INVENTORY_SHA256"])
+          if count <= 0:
+              raise SystemExit("downloaded managed runtime inventory is empty")
+          print("Re-downloaded Windows managed Alpha inventory verified:", count, "entries")
+          '@ | python -B -
       - name: Upload Linux AppImage preview
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7

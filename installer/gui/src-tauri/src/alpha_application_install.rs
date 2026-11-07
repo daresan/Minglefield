@@ -149,6 +149,13 @@ fn verified_inventory(source: &Path, expected_digest: &str) -> Result<Inventory,
     Ok(inventory)
 }
 
+pub(crate) fn verify_installed_application(
+    source: &Path,
+    expected_digest: &str,
+) -> Result<(), String> {
+    verified_inventory(source, expected_digest).map(|_| ())
+}
+
 /// Copy only manifest-declared files into a never-before-existing directory.
 /// Failure leaves an incomplete NEW directory for manual inspection; the
 /// original application data, database and independent backup are not touched.
@@ -299,11 +306,14 @@ pub async fn install_alpha_application(
             .ok_or("Cannot locate portable Setup Manager directory")?
             .join("managed-alpha")
     };
-    tauri::async_runtime::spawn_blocking(move || {
+    let installed = tauri::async_runtime::spawn_blocking(move || {
         install_from_verified_root(&source, Path::new(&install_dir), expected)
     })
     .await
-    .map_err(|_| "Managed Alpha installation worker failed".to_owned())?
+    .map_err(|_| "Managed Alpha installation worker failed".to_owned())??;
+    app.state::<crate::alpha_first_run::FirstRunState>()
+        .record_installed_application(Path::new(&installed.install_dir))?;
+    Ok(installed)
 }
 
 #[cfg(test)]

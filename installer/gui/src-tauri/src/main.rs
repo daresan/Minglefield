@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod alpha_application_install;
+mod alpha_first_run;
 mod full_database_review;
 mod legacy_record_review;
 mod migration_review;
@@ -568,6 +569,7 @@ async fn browse_sqlite_file() -> Option<String> {
 
 fn main() {
     tauri::Builder::default()
+        .manage(alpha_first_run::FirstRunState::default())
         .invoke_handler(tauri::generate_handler![
             default_configuration,
             framework_license,
@@ -585,6 +587,7 @@ fn main() {
             migration_review::create_experimental_encrypted_copy,
             migration_review::inspect_interrupted_encrypted_copy_status,
             alpha_application_install::install_alpha_application,
+            alpha_first_run::activate_first_run_local_admin,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

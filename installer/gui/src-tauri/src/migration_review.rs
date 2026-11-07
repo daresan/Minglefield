@@ -9,6 +9,7 @@ use minglefield_installer_core::migration_dry_run::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FullCellValue {
@@ -476,6 +477,7 @@ pub struct ExperimentalEncryptedCopyResult {
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_experimental_encrypted_copy(
+    app: tauri::AppHandle,
     source_path: String,
     destination_path: String,
     backup_path: String,
@@ -486,7 +488,8 @@ pub async fn create_experimental_encrypted_copy(
     confirmation: String,
 ) -> Result<ExperimentalEncryptedCopyResult, String> {
     verify_local_experimental_approval(&backup_path, &confirmation)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let intended_destination = destination_path.clone();
+    let completed = tauri::async_runtime::spawn_blocking(move || {
         let changes: Vec<ReviewCorrection> = corrections
             .into_iter()
             .map(ReviewCorrection::from)
@@ -547,7 +550,14 @@ pub async fn create_experimental_encrypted_copy(
         })
     })
     .await
-    .map_err(|_| "Experimental encrypted copy worker failed".to_owned())?
+    .map_err(|_| "Experimental encrypted copy worker failed".to_owned())??;
+    let operation = completed
+        .recovery_operation_id
+        .as_deref()
+        .ok_or("Verified SQLCipher copy lacks a current operation identity")?;
+    app.state::<crate::alpha_first_run::FirstRunState>()
+        .record_encrypted_copy(Path::new(&intended_destination), operation)?;
+    Ok(completed)
 }
 
 #[derive(Debug, Serialize)]

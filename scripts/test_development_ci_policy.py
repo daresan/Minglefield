@@ -37,6 +37,16 @@ class DevelopmentCIPolicyTests(unittest.TestCase):
         self.assertIn("installer/gui/PORTABLE-TEST-REQUEST.md", marker)
         self.assertIn("  workflow_dispatch:", marker)
 
+    def test_windows_portable_upload_preserves_and_rechecks_complete_inventory(self):
+        packaging = workflow("installer-tauri-packaging.yml")
+        self.assertIn("include-hidden-files: true", packaging)
+        self.assertIn("actions/download-artifact@v8", packaging)
+        self.assertIn("name: tauri-portable-windows-exe", packaging)
+        self.assertIn("digest-mismatch: error", packaging)
+        self.assertIn("verify_managed_file_inventory", packaging)
+        self.assertIn("MINGLEFIELD_ALPHA_INVENTORY_SHA256", packaging)
+        self.assertIn("portable-windows-reextracted", packaging)
+
     def test_routine_core_checks_do_not_build_every_gui_or_document_edit(self):
         core_events = events("installer-rust.yml")
         self.assertIn('installer/crates/**', core_events)

@@ -36,8 +36,9 @@ fn require_option_value(
         .ok_or((2, format!("{name} requires a value")))
 }
 
-/// One real install operation: both the GUI and CLI invoke the shared Rust
-/// core's exact inventory validation and non-overwriting file writer.
+/// One shared CLI dispatch boundary covers plan, file, database and Host setup.
+/// The suboperations remain in the shared installer-core implementations.
+#[allow(clippy::too_many_arguments)]
 fn complete(
     plan: &InstallPlan,
     preview: String,

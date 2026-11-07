@@ -3,11 +3,11 @@
 //! from this process's native encrypted-copy and application-file writers can
 //! arm an activation; neither an IPC-supplied path nor a DB password alone can.
 use minglefield_installer_core::integrity::sha256_reader_hex;
+#[cfg(test)]
+use minglefield_installer_core::local_first_run_worker::valid_login_name;
 use minglefield_installer_core::local_first_run_worker::{
     run_verified_local_first_run_worker, validate_local_credentials,
 };
-#[cfg(test)]
-use minglefield_installer_core::local_first_run_worker::valid_login_name;
 use minglefield_installer_core::managed_alpha_install::verify_installed_application;
 use serde::Serialize;
 use std::fs::{self, File};

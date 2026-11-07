@@ -52,6 +52,16 @@ pub fn success_v2(
     )
 }
 
+
+/// Reports only the bounded verified file copy. This is NOT a complete
+/// application install, database migration, or local Host activation.
+pub fn installed_alpha_files(install_dir: &str, entries: usize) -> String {
+    format!(
+        "{{\"schema_version\":1,\"status\":\"alpha_application_files_installed\",\"exit_code\":0,\"execution_enabled\":true,\"application_launch_enabled\":false,\"host_provisioning_enabled\":false,\"install_dir\":{},\"installed_entries\":{entries}}}",
+        quoted(install_dir)
+    )
+}
+
 pub fn failure(code: u8, message: &str) -> String {
     format!(
         "{{\"schema_version\":1,\"status\":\"error\",\"exit_code\":{code},\"execution_enabled\":false,\"error\":{}}}",

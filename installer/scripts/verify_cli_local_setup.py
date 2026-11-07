@@ -135,10 +135,19 @@ assert store.principal("Bearer " + authorization) is not None
                 "--db-password", TEST_DB_KEY, "--no-browser", "--probe-exit",
             ]
             launched = subprocess.run(
-                command_native, text=True, capture_output=True,
-                timeout=110, check=False,
+                command_native, capture_output=True, encoding="utf-8",
+                errors="replace", timeout=110, check=False,
             )
-            assert launched.returncode == 0, "native app failed independent startup"
+            # The runner's Windows cp1252 locale must not corrupt UTF-8
+            # native process output. Only print *fixed native error reasons*,
+            # never arbitrary stdout, database paths, argv or passwords.
+            safe_failure = "unclassified_native_failure"
+            if launched.stderr.startswith("minglefield_native_launch_rejected: "):
+                safe_failure = launched.stderr.splitlines()[0]
+            assert launched.returncode == 0, (
+                "native app failed independent startup: "
+                + safe_failure + " rc=" + str(launched.returncode)
+            )
             report = json.loads(launched.stdout)
             assert report["status"] == "native_minglefield_startup_verified"
             assert report["encryptedDatabase"] is True

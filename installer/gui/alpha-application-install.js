@@ -17,7 +17,7 @@ export function prepareAlphaApplicationInstall({ installDir, confirmation }) {
   if (confirmation !== ACK) {
     throw new Error("Die separate Bestätigung für das Kopieren der Anwendung fehlt.");
   }
-  return { installDir: installDir.trim() };
+  return { installDir: installDir.trim(), confirmation: ACK };
 }
 export function verifyAlphaApplicationInstallResult(response) {
   if (!response || typeof response !== "object" || Array.isArray(response) ||

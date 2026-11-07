@@ -266,11 +266,22 @@ fn install_from_verified_root(
 
 /// The compiled hash must come from the trusted application bundle build,
 /// never from JavaScript, a selected source directory or a command argument.
+const INSTALL_ALPHA_CONSENT: &str = "INSTALL MINGLEFIELD ALPHA FILES";
+
+fn check_native_install_consent(confirmation: &str) -> Result<(), String> {
+    if confirmation != INSTALL_ALPHA_CONSENT {
+        return Err("Explicit native approval for Alpha application file installation is required".to_owned());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn install_alpha_application(
     app: tauri::AppHandle,
     install_dir: String,
+    confirmation: String,
 ) -> Result<ApplicationFilesInstalled, String> {
+    check_native_install_consent(&confirmation)?;
     let expected = option_env!("MINGLEFIELD_ALPHA_INVENTORY_SHA256")
         .ok_or("Managed Alpha application has not been bundled into this Setup Manager")?;
     let resources = app
@@ -331,6 +342,14 @@ mod tests {
         fs::write(source.join(INVENTORY_NAME), json).unwrap();
         fs::write(source.join("runtime-manifest.json"), "{}").unwrap();
         (source, sha256_hex(json.as_bytes()))
+    }
+
+    #[test]
+    fn backend_requires_separate_exact_file_install_consent() {
+        assert!(check_native_install_consent("").is_err());
+        assert!(check_native_install_consent("INSTALL MINGLEFIELD ALPHA").is_err());
+        assert!(check_native_install_consent("install minglefield alpha files").is_err());
+        assert!(check_native_install_consent(INSTALL_ALPHA_CONSENT).is_ok());
     }
 
     #[test]

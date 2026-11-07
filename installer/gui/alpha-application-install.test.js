@@ -15,7 +15,7 @@ test("only explicit file-install consent reaches native invocation", () => {
   assert.deepEqual(prepareAlphaApplicationInstall({
     installDir: "  /existing/new-minglefield-alpha  ",
     confirmation: "INSTALL MINGLEFIELD ALPHA FILES"
-  }), { installDir: "/existing/new-minglefield-alpha" });
+  }), { installDir: "/existing/new-minglefield-alpha", confirmation: "INSTALL MINGLEFIELD ALPHA FILES" });
   for (const confirmation of ["", "INSTALL MINGLEFIELD ALPHA", "install minglefield alpha files"]) {
     assert.throws(() => prepareAlphaApplicationInstall({
       installDir: "/valid", confirmation

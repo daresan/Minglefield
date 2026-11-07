@@ -45,6 +45,83 @@ Without `--install-alpha-files`, `--silent --defaults` (or
 emits bounded structured results. Errors use nonzero exit codes and do not
 serialize raw package source paths or credential values in JSON error fields.
 
+## Actual encrypted database actions (new CLI development slice)
+
+The installer CLI also invokes the *existing*, shared SQLCipher Rust
+inspection/export paths. These are separate actions: the CLI does **not**
+yet orchestrate one complete file + DB + Host + application installation.
+
+**Read-only verification of an existing encrypted database:**
+
+```sh
+cargo run -p minglefield-installer-cli -- --silent --defaults \
+  --verify-encrypted-db --database /absolute/path/user.db \
+  --db-password 'existing-SQLCipher-password' --json
+```
+
+**Create a verified encrypted copy from an original and its independent backup:**
+
+```sh
+cargo run -p minglefield-installer-cli -- --silent --defaults \
+  --create-encrypted-copy \
+  --source-db /absolute/original.db \
+  --backup-db /absolute/separate-backup.db \
+  --database /absolute/new-encrypted.db \
+  --db-password 'original-SQLCipher-password' \
+  --new-db-password 'new-SQLCipher-password' \
+  --confirm-db-copy 'CREATE EXPERIMENTAL ENCRYPTED COPY' \
+  --json
+```
+
+The copy action does not modify its original or verified backup, refuses
+an occupied destination, writes a separate recovery receipt, verifies the
+result under the **new** SQLCipher key and returns a non-secret operation
+identity. It does **not** create a fresh Host, alter existing owner records,
+perform a local user login, or install/launch the application. A **plaintext
+legacy source** may omit \`--db-password\`; an encrypted source cannot be
+opened without its key. Both the actual migration and native application
+startup must be accepted independently for M2.11.
+
+**Bee-like password sources already available for these DB operations:**
+\`--db-password VALUE\`, \`--db-password-file PATH\`,
+\`MINGLEFIELD_DB_PASSWORD\`, an explicit \`db_password=VALUE\` or
+\`db_password_file=PATH\` in an administrator-authored **version 3** config,
+and \`--secrets-stdin\` with a single bounded JSON frame
+\`{"db_password":"...","new_db_password":"..."}\`. Equivalent \`new_db_password\`
+sources exist for new SQLCipher destination keys. Explicitly conflicting
+source types are rejected rather than silently chosen; an explicit flag
+overrides the **same** config field. Plaintext passwords in administrator-chosen
+CLI arguments and configs are accepted by design. Minglefield never writes
+those values into generated plans, receipts or logs.
+
+The native SQLCipher worker continues to receive its key over a private
+internal stdin pipe, regardless of the external administrator input source.
+A terminal prompt with confirmation for a **new** key remains a required
+future interactive-CLI/native application behavior. Current \`--silent\`
+operations never prompt.
+
+Example version-3 config is a UTF-8 \`key=value\` text file (the project
+does not yet parse Bee's YAML syntax):
+
+```ini
+version=3
+install_optional_conda=false
+install_optional_comfyui=false
+explicit_optional_consent=false
+install_optional_git=false
+install_optional_gh=false
+offer_gh_login=false
+consent_git=false
+consent_gh=false
+consent_login=false
+database_path=/absolute/path/user.db
+db_password_file=/absolute/private/sqlcipher-password.txt
+```
+
+Use this with \`--silent --config /absolute/path/config.conf
+--verify-encrypted-db\`. The text config is authored and protected by the
+Host administrator; generated defaults never silently persist a password.
+
 ## Unfinished required CLI parity
 
 The **binding Bee-like credential contract** is documented in

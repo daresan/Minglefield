@@ -52,6 +52,7 @@ def run_smoke(package, *, require_native=False):
             "--setup-local-host",
             "--login-user-id", "mingleadmin",
             "--confirm-local-admin", HOST_CONFIRM,
+            "--verify-native-start",
             "--secrets-stdin",
         ]
         # Exercise the shared version-3 private credential channel in a REAL
@@ -76,7 +77,7 @@ def run_smoke(package, *, require_native=False):
         assert receipt["encrypted_database_created"] is True
         assert receipt["application_files_installed"] is True
         assert receipt["remote_host_authority_granted"] is False
-        assert receipt["native_application_launch_enabled"] is False
+        assert receipt["native_application_launch_enabled"] is True
         assert receipt["full_installation_completed"] is False
         assert receipt["login_user_id"] == "mingleadmin"
         host_id = receipt["local_host_id"]

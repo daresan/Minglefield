@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  prepareLocalFirstRun, verifyLocalFirstRunResult
+  prepareLocalFirstRun, verifyLocalFirstRunResult,
+  classifyImportedAlphaAuthorization
 } from "./alpha-first-run.js";
 const fixture = {
   reviewedCopy: {
@@ -62,4 +63,48 @@ test("native result cannot grant remote Hosts or application launch", () => {
     assert.throws(() => verifyLocalFirstRunResult(
       { ...result, ...change }, "mingleadmin"));
   }
+});
+
+function authTable(name, columns, rows) {
+  return {name, columns, rows: rows.map(values => ({
+    rowId: null, cells: values.map(value => ({kind: "text", value}))
+  }))};
+}
+test("existing encrypted-database authorization is retained without first-run", () => {
+  const review = {tables: [
+    authTable("alpha_users", ["user_id"], [["mingleadmin"], ["user.other"]]),
+    authTable("alpha_executor_hosts", ["host_id", "operator_id"],
+      [["host.local", "mingleadmin"], ["host.remote", "user.other"]]),
+    authTable("sec01_host_owners", ["host_id", "owner_id"],
+      [["host.local", "mingleadmin"], ["host.remote", "user.other"]]),
+    authTable("alpha_sessions", ["token_hash", "user_id"],
+      [["private-existing-hash-never-exposed", "mingleadmin"]])
+  ]};
+  const before = JSON.stringify(review);
+  assert.equal(classifyImportedAlphaAuthorization(review),
+    "existing_host_authorization");
+  assert.equal(JSON.stringify(review), before);
+  assert.ok(!classifyImportedAlphaAuthorization(review).includes("private"));
+});
+test("partial legacy account/Host data never becomes a fresh admin", () => {
+  assert.equal(classifyImportedAlphaAuthorization({tables: [
+    authTable("alpha_users", ["user_id"], [["mingleadmin"]])
+  ]}), "existing_identity_or_host");
+  assert.equal(classifyImportedAlphaAuthorization({tables: [
+    authTable("sec01_host_owners", ["host_id", "owner_id"],
+      [["host.local", "mingleadmin"]])
+  ]}), "existing_identity_or_host");
+});
+test("only a verified empty authentication schema permits initial setup", () => {
+  const fresh = {tables: [
+    authTable("alpha_users", ["user_id"], []),
+    authTable("alpha_executor_hosts", ["host_id", "operator_id"], []),
+    authTable("sec01_host_owners", ["host_id", "owner_id"], [])
+  ]};
+  assert.equal(classifyImportedAlphaAuthorization(fresh), "empty_first_run");
+  assert.equal(classifyImportedAlphaAuthorization(null), "unverified");
+  assert.equal(classifyImportedAlphaAuthorization({tables: []}), "unverified");
+  assert.equal(classifyImportedAlphaAuthorization({tables: [
+    authTable("alpha_users", ["unexpected_field"], [])
+  ]}), "unverified");
 });

@@ -75,7 +75,10 @@ impl FirstRunState {
             .inner
             .lock()
             .map_err(|_| "First-run authorization state unavailable".to_owned())?;
-        if state.active || state.launch_in_progress || state.consumed_operations.contains(operation_id) {
+        if state.active
+            || state.launch_in_progress
+            || state.consumed_operations.contains(operation_id)
+        {
             return Err("First-run copy operation active or already consumed".to_owned());
         }
         if state

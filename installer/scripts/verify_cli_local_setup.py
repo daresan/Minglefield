@@ -27,7 +27,7 @@ def fingerprint(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def run_smoke(package):
+def run_smoke(package, *, require_native=False):
     package = package.resolve(strict=True)
     manifest = json.loads((package / "runtime-manifest.json").read_text(encoding="utf-8"))
     digest = manifest["managedFileInventorySha256"]
@@ -119,6 +119,71 @@ assert store.principal("Bearer " + authorization) is not None
             capture_output=True, text=True, timeout=120, check=False,
         )
         assert check.returncode == 0, "installed SQLCipher Host/login verification failed"
+        has_native = manifest.get("nativeApplicationIncluded") is True
+        if require_native:
+            assert has_native, "build did not include OS-native Minglefield executable"
+        if has_native:
+            entry = manifest["nativeApplicationExecutable"]
+            assert entry in ("Minglefield", "Minglefield.exe")
+            native = installed / entry
+            assert native.is_file() and not native.is_symlink()
+            # The native binary, not Python or the Setup Manager, is the
+            # direct process entrypoint. The gateway is actually started and
+            # reached on loopback, then cleanly stopped in probe mode.
+            command_native = [
+                str(native), "--database", str(database),
+                "--db-password", TEST_DB_KEY, "--no-browser", "--probe-exit",
+            ]
+            launched = subprocess.run(
+                command_native, text=True, capture_output=True,
+                timeout=110, check=False,
+            )
+            assert launched.returncode == 0, "native app failed independent startup"
+            report = json.loads(launched.stdout)
+            assert report["status"] == "native_minglefield_startup_verified"
+            assert report["encryptedDatabase"] is True
+            assert report["hostClaimBootstrapEnabled"] is False
+            assert report["hostProvisioningEnabled"] is False
+            assert report["bind"] == "127.0.0.1"
+
+            wrong_key = subprocess.run(
+                [str(native), "--database", str(database), "--verify-only",
+                 "--db-password", "WrongCipherSecret9!"],
+                text=True, capture_output=True, timeout=30, check=False,
+            )
+            assert wrong_key.returncode != 0
+            assert "WrongCipherSecret9!" not in wrong_key.stdout
+            assert "WrongCipherSecret9!" not in wrong_key.stderr
+
+            # A second independent launch uses an *administrator-authored*
+            # Bee-style version-3 configuration file next to Minglefield.
+            # This is not a default generated secret file.
+            config = installed / "minglefield.conf"
+            config.write_text(
+                "version=3\n"
+                "install_optional_conda=false\n"
+                "install_optional_comfyui=false\n"
+                "explicit_optional_consent=false\n"
+                "install_optional_git=false\n"
+                "install_optional_gh=false\n"
+                "offer_gh_login=false\n"
+                "consent_git=false\n"
+                "consent_gh=false\n"
+                "consent_login=false\n"
+                "database_path=" + str(database) + "\n"
+                "db_password=" + TEST_DB_KEY + "\n",
+                encoding="utf-8",
+            )
+            restarted = subprocess.run(
+                [str(native), "--no-browser", "--probe-exit"],
+                text=True, capture_output=True, timeout=110, check=False,
+            )
+            assert restarted.returncode == 0, "native app restart using owner config failed"
+            assert json.loads(restarted.stdout)["status"] == (
+                "native_minglefield_startup_verified"
+            )
+            config.unlink()
+
         prior_db = fingerprint(database)
         prior_inventory = fingerprint(installed / "managed-file-inventory.json")
         again = subprocess.run(
@@ -127,14 +192,22 @@ assert store.principal("Bearer " + authorization) is not None
         assert again.returncode != 0, "repeated local first-run setup was accepted"
         assert fingerprint(database) == prior_db
         assert fingerprint(installed / "managed-file-inventory.json") == prior_inventory
-    return {"status": "cli_local_first_run_verified", "native_application_launch": False}
+    return {
+        "status": "cli_local_first_run_verified",
+        "native_application_launch": has_native,
+        "native_application_restart_verified": has_native,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--package", type=Path, required=True)
+    parser.add_argument("--require-native", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(run_smoke(args.package), sort_keys=True))
+    print(json.dumps(
+        run_smoke(args.package, require_native=args.require_native),
+        sort_keys=True,
+    ))
 
 
 if __name__ == "__main__":

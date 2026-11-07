@@ -481,9 +481,14 @@ fn main() -> std::process::ExitCode {
     let result = std::panic::catch_unwind(|| run(env::args().skip(1)));
     match result {
         Ok(Ok(())) => std::process::ExitCode::SUCCESS,
-        _ => {
-            // Never echo raw environment, argv, config, DB paths or keys.
-            eprintln!("minglefield_native_launch_rejected");
+        Ok(Err(reason)) => {
+            // Every error is a static developer-authored string. Never echo
+            // raw environment, argv, config, DB paths or SQLCipher keys.
+            eprintln!("minglefield_native_launch_rejected: {reason}");
+            std::process::ExitCode::from(2)
+        }
+        Err(_) => {
+            eprintln!("minglefield_native_launch_rejected: internal_panic");
             std::process::ExitCode::from(2)
         }
     }

@@ -77,8 +77,7 @@ const MAC_FILE_SCRIPT: &str =
     r#"POSIX path of (choose file with prompt "Select existing Minglefield SQLCipher database")"#;
 
 #[cfg(target_os = "macos")]
-const MAC_PASSWORD_SCRIPT: &str =
-    r#"text returned of (display dialog "SQLCipher database password" default answer "" with hidden answer buttons {"Cancel", "Unlock"} default button "Unlock")"#;
+const MAC_PASSWORD_SCRIPT: &str = r#"text returned of (display dialog "SQLCipher database password" default answer "" with hidden answer buttons {"Cancel", "Unlock"} default button "Unlock")"#;
 
 /// No operator input is ever interpolated into these program arguments.
 /// The final secret is returned through the dialog process' private stdout.
@@ -147,19 +146,15 @@ fn dialog_command(kind: DialogKind) -> Result<Command, &'static str> {
     }
 }
 
-fn interpret_reply(
-    kind: DialogKind,
-    status_ok: bool,
-    data: &[u8],
-) -> Result<String, &'static str> {
+fn interpret_reply(kind: DialogKind, status_ok: bool, data: &[u8]) -> Result<String, &'static str> {
     if !status_ok {
         return Err("native Minglefield startup dialog cancelled or unavailable");
     }
     if data.len() > MAX_DIALOG_REPLY {
         return Err("native Minglefield startup dialog response too long");
     }
-    let decoded = std::str::from_utf8(data)
-        .map_err(|_| "native Minglefield startup dialog is not UTF-8")?;
+    let decoded =
+        std::str::from_utf8(data).map_err(|_| "native Minglefield startup dialog is not UTF-8")?;
     // Dialog subprocesses conventionally append one line ending to stdout.
     // Do not trim other whitespace: spaces can be part of a password.
     let text = decoded
@@ -222,7 +217,10 @@ mod tests {
     #[test]
     fn dialog_command_does_not_include_any_runtime_secret_or_db_path() {
         if let Ok(cmd) = dialog_command(DialogKind::CipherPassword) {
-            let args = cmd.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
+            let args = cmd
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
             assert!(!args.iter().any(|x| x.contains("owner.sqlite3")));
             assert!(!args.iter().any(|x| x.contains("secret-name")));
         }

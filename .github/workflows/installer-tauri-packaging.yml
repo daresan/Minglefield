@@ -44,21 +44,35 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - name: Compile independent native Minglefield starter with visible diagnostics
+      # Windows Git Bash shadows the hosted MSVC-compatible Perl with its
+      # incomplete /usr/bin/perl. Vendored OpenSSL then fails to find
+      # Locale::Maketext::Simple. Match the CI-proven native-security
+      # PowerShell environment for BOTH Cargo and its Python build wrapper.
+      - name: Compile Windows native Minglefield starter (MSVC/PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cargo build --release --locked --manifest-path ../Cargo.toml -p minglefield-installer-cli --bin Minglefield
+      - name: Compile Unix native Minglefield starter
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          # A separate visible compile makes Windows-specific toolchain or
-          # linker failures actionable. The pinned native builder otherwise
-          # captures Cargo stderr and reports only a generic error code.
           cargo build --release --locked --manifest-path ../Cargo.toml \
             -p minglefield-installer-cli --bin Minglefield
-      - name: Build pinned OS-native Minglefield starter and managed Alpha runtime
+      - name: Build pinned Windows native starter and managed Alpha runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path src-tauri/resources -Force | Out-Null
+          if (Test-Path src-tauri/resources/managed-alpha) {
+            Remove-Item src-tauri/resources/managed-alpha -Recurse -Force
+          }
+          python -B ../scripts/build_native_alpha_application.py --output src-tauri/resources/managed-alpha
+      - name: Build pinned Unix native starter and managed Alpha runtime
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p src-tauri/resources
           rm -rf src-tauri/resources/managed-alpha
-          # Reuse the reviewed builder. Cargo is already compiled above;
-          # its incremental second invocation must not alter the target.
           python -B ../scripts/build_native_alpha_application.py --output src-tauri/resources/managed-alpha
       - name: Verify packaged native application before compiling Setup Manager
         shell: bash

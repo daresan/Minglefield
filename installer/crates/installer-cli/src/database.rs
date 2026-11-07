@@ -78,10 +78,18 @@ impl DatabaseAction {
                 flag_value(args, "--db-password-file", &mut self.input.password.file)?;
             }
             "--new-db-password" => {
-                flag_value(args, "--new-db-password", &mut self.input.new_password.literal)?;
+                flag_value(
+                    args,
+                    "--new-db-password",
+                    &mut self.input.new_password.literal,
+                )?;
             }
             "--new-db-password-file" => {
-                flag_value(args, "--new-db-password-file", &mut self.input.new_password.file)?;
+                flag_value(
+                    args,
+                    "--new-db-password-file",
+                    &mut self.input.new_password.file,
+                )?;
             }
             "--confirm-db-copy" => {
                 flag_value(args, "--confirm-db-copy", &mut self.input.copy_confirmation)?;
@@ -122,9 +130,7 @@ impl DatabaseAction {
                 "unexpected database-copy options for read-only verification".into(),
             ));
         }
-        if self.copy
-            && db.copy_confirmation.as_deref() != Some(EXPERIMENTAL_COPY_CONFIRMATION)
-        {
+        if self.copy && db.copy_confirmation.as_deref() != Some(EXPERIMENTAL_COPY_CONFIRMATION) {
             return Err((2, "explicit --confirm-db-copy approval is required".into()));
         }
         let input = if self.stdin {
@@ -142,11 +148,16 @@ impl DatabaseAction {
                 env::var("MINGLEFIELD_DB_PASSWORD").ok(),
                 input.db_password.as_deref(),
             )
-            .map_err(|_| (3, "conflicting or invalid database password source".to_owned()))?;
-        let destination = db
-            .database_path
-            .as_deref()
-            .ok_or((2, "--database is required for database operations".to_owned()))?;
+            .map_err(|_| {
+                (
+                    3,
+                    "conflicting or invalid database password source".to_owned(),
+                )
+            })?;
+        let destination = db.database_path.as_deref().ok_or((
+            2,
+            "--database is required for database operations".to_owned(),
+        ))?;
         if self.verify {
             if input.new_db_password.is_some() {
                 return Err((
@@ -184,7 +195,12 @@ impl DatabaseAction {
                 env::var("MINGLEFIELD_NEW_DB_PASSWORD").ok(),
                 input.new_db_password.as_deref(),
             )
-            .map_err(|_| (3, "conflicting or invalid new database password source".to_owned()))?
+            .map_err(|_| {
+                (
+                    3,
+                    "conflicting or invalid new database password source".to_owned(),
+                )
+            })?
             .ok_or((3, "new SQLCipher database password is required".to_owned()))?;
         let report = create_reviewed_encrypted_database_copy(
             Path::new(source),
@@ -195,13 +211,21 @@ impl DatabaseAction {
             &db.schema_additions,
             EXPERIMENTAL_COPY_CONFIRMATION,
         )
-        .map_err(|_| (4, "reviewed encrypted database publication rejected".to_owned()))?;
+        .map_err(|_| {
+            (
+                4,
+                "reviewed encrypted database publication rejected".to_owned(),
+            )
+        })?;
         if !report.encrypted_destination_verified
             || !report.full_disk_copy_verified
             || !report.destination_created
             || !report.temporary_files_removed
         {
-            return Err((4, "published ciphertext did not pass verification".to_owned()));
+            return Err((
+                4,
+                "published ciphertext did not pass verification".to_owned(),
+            ));
         }
         // The publication operation identity is a non-secret receipt, NOT
         // a newly minted Host ID. The separate first-run contract governs
@@ -215,7 +239,10 @@ impl DatabaseAction {
                 .bytes()
                 .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
         {
-            return Err((4, "published ciphertext operation receipt invalid".to_owned()));
+            return Err((
+                4,
+                "published ciphertext operation receipt invalid".to_owned(),
+            ));
         }
         if json {
             println!(
@@ -255,7 +282,8 @@ mod tests {
         assert_eq!(db.input.password.literal.as_deref(), Some("private"));
         assert_eq!(
             db.parse("--db-password", &mut ["ignored".to_owned()].into_iter())
-                .unwrap_err().0,
+                .unwrap_err()
+                .0,
             2
         );
         assert!(!db.parse("--unknown", &mut std::iter::empty()).unwrap());

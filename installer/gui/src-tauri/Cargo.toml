@@ -11,5 +11,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 minglefield-installer-core = { path = "../../crates/installer-core" }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 rfd = "0.15"
 rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }

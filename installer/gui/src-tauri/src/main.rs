@@ -4,6 +4,7 @@
 mod full_database_review;
 mod legacy_record_review;
 mod migration_review;
+mod alpha_application_install;
 
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
@@ -583,6 +584,7 @@ fn main() {
             migration_review::verify_temporary_encrypted_copy,
             migration_review::create_experimental_encrypted_copy,
             migration_review::inspect_interrupted_encrypted_copy_status,
+            alpha_application_install::install_alpha_application,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

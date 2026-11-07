@@ -567,18 +567,25 @@ mod tests {
         db.execute_batch(
             "DROP INDEX uq_game_install_one_active_project;
              CREATE TABLE extension_data(note TEXT);
-             INSERT INTO extension_data VALUES('preserved');"
-        ).unwrap();
+             INSERT INTO extension_data VALUES('preserved');",
+        )
+        .unwrap();
         let selected = vec!["uq_game_install_one_active_project".to_owned()];
         let result = add_selected_registered_schema_objects(&mut db, &selected).unwrap();
         assert_eq!(result.added_objects, selected);
-        assert_eq!(db.query_row(
-            "SELECT note FROM extension_data", [], |row| row.get::<_, String>(0)
-        ).unwrap(), "preserved");
-        assert!(db.query_row(
-            "SELECT name FROM sqlite_schema WHERE name='uq_game_install_one_active_project'",
-            [], |row| row.get::<_, String>(0)
-        ).is_ok());
+        assert_eq!(
+            db.query_row("SELECT note FROM extension_data", [], |row| row
+                .get::<_, String>(0))
+                .unwrap(),
+            "preserved"
+        );
+        assert!(db
+            .query_row(
+                "SELECT name FROM sqlite_schema WHERE name='uq_game_install_one_active_project'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .is_ok());
     }
 
     #[test]

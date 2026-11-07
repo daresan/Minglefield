@@ -138,7 +138,10 @@ impl FirstRunState {
             return Err("Verified current-session copy and installation required".to_owned());
         }
         let database = state.database.take().unwrap();
-        if !state.consumed_operations.insert(database.operation_id.clone()) {
+        if !state
+            .consumed_operations
+            .insert(database.operation_id.clone())
+        {
             return Err("Already used first-run operation".to_owned());
         }
         state.active = true;

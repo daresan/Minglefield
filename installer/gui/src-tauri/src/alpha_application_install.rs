@@ -166,7 +166,8 @@ fn ensure_real_directories(directory: &Path) -> Result<(), String> {
             Ok(_) => return Err("Install path includes a file or symlink".to_owned()),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 absent.push(path.clone());
-                path = path.parent()
+                path = path
+                    .parent()
                     .ok_or("Cannot find existing installation ancestor")?
                     .to_path_buf();
             }
@@ -202,7 +203,9 @@ fn install_from_verified_root(
         return Err("Installation destination must be a new absolute directory".to_owned());
     }
     let inventory = verified_inventory(&source, expected_digest)?;
-    let parent = destination.parent().ok_or("Installation destination has no parent")?;
+    let parent = destination
+        .parent()
+        .ok_or("Installation destination has no parent")?;
 
     // Do not create anything during preview or while inventory verification
     // is still pending. A new parent is a perfectly normal first-install path.
@@ -213,8 +216,8 @@ fn install_from_verified_root(
         }
         cursor = cursor.parent().ok_or("Installation ancestor is missing")?;
     }
-    let ancestor = fs::symlink_metadata(cursor)
-        .map_err(|_| "Cannot validate installation ancestor")?;
+    let ancestor =
+        fs::symlink_metadata(cursor).map_err(|_| "Cannot validate installation ancestor")?;
     if ancestor.file_type().is_symlink() || !ancestor.is_dir() {
         return Err("Installation ancestor must be a real directory".into());
     }
@@ -233,11 +236,17 @@ fn install_from_verified_root(
     }
     if existing {
         for name in inventory.files.keys() {
-            let top = Path::new(name).components().next()
+            let top = Path::new(name)
+                .components()
+                .next()
                 .ok_or("Managed application inventory has no root component")?;
             let item = destination.join(top.as_os_str());
             match fs::symlink_metadata(item) {
-                Ok(_) => return Err("Existing application files would conflict with installation".into()),
+                Ok(_) => {
+                    return Err(
+                        "Existing application files would conflict with installation".into(),
+                    )
+                }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {}
                 Err(_) => return Err("Cannot inspect existing application entries".into()),
             }
@@ -268,17 +277,25 @@ fn install_from_verified_root(
             InventoryEntry::File { size, sha256 } => {
                 let src = source.join(&relative);
                 check_regular_file(&src, *size, sha256)?;
-                let mut input = File::open(&src)
-                    .map_err(|_| "Cannot reopen verified managed Alpha file")?;
-                let mut output = OpenOptions::new().write(true).create_new(true).open(&dest)
+                let mut input =
+                    File::open(&src).map_err(|_| "Cannot reopen verified managed Alpha file")?;
+                let mut output = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&dest)
                     .map_err(|_| "Cannot exclusively create managed application file")?;
                 io::copy(&mut input, &mut output)
                     .map_err(|_| "Cannot copy managed Alpha application bytes")?;
-                output.sync_all()
+                output
+                    .sync_all()
                     .map_err(|_| "Cannot flush managed Alpha application file")?;
-                fs::set_permissions(&dest, fs::metadata(&src)
-                    .map_err(|_| "Cannot inspect managed Alpha permissions")?.permissions())
-                    .map_err(|_| "Cannot preserve managed Alpha file permissions")?;
+                fs::set_permissions(
+                    &dest,
+                    fs::metadata(&src)
+                        .map_err(|_| "Cannot inspect managed Alpha permissions")?
+                        .permissions(),
+                )
+                .map_err(|_| "Cannot preserve managed Alpha file permissions")?;
                 check_regular_file(&dest, *size, sha256)?;
             }
             InventoryEntry::Symlink { target: link } => links.push((dest, link.clone(), relative)),
@@ -318,9 +335,11 @@ fn install_from_verified_root(
         {
             return Err("Managed Alpha installation metadata is invalid".to_owned());
         }
-        let mut input = File::open(&src)
-            .map_err(|_| "Cannot open managed Alpha installation metadata")?;
-        let mut output = OpenOptions::new().write(true).create_new(true)
+        let mut input =
+            File::open(&src).map_err(|_| "Cannot open managed Alpha installation metadata")?;
+        let mut output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
             .open(target.join(name))
             .map_err(|_| "Managed Alpha installation metadata is already occupied")?;
         io::copy(&mut input, &mut output)
@@ -459,7 +478,9 @@ mod tests {
         let nested = root.join("never-created").join("application-install");
         assert!(!nested.parent().unwrap().exists());
         assert!(install_from_verified_root(&src, &nested, &digest).is_ok());
-        assert!(nested.join("application/server/installed_alpha_launch.py").is_file());
+        assert!(nested
+            .join("application/server/installed_alpha_launch.py")
+            .is_file());
         let with_db = root.join("existing-data");
         fs::create_dir(&with_db).unwrap();
         let database = with_db.join("user-alpha.sqlite3");

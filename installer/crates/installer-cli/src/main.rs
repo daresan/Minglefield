@@ -575,6 +575,38 @@ mod tests {
     }
 
     #[test]
+    fn creates_and_reopens_a_genuinely_new_sqlcipher_database() {
+        let root = std::env::temp_dir().join(format!(
+            "mf-cli-fresh-db-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let database = root.join("new-database.sqlite3");
+        let args = vec![
+            "--silent".to_owned(),
+            "--defaults".to_owned(),
+            "--create-new-encrypted-db".to_owned(),
+            "--database".to_owned(),
+            database.to_string_lossy().into_owned(),
+            "--new-db-password".to_owned(),
+            "FreshSecret9!".to_owned(),
+            "--confirm-new-db".to_owned(),
+            "CREATE NEW ENCRYPTED DATABASE".to_owned(),
+        ];
+        run(args.clone()).unwrap();
+        assert!(minglefield_installer_core::db_operations::verify_encrypted_database(
+            &database,
+            "FreshSecret9!",
+        )
+        .is_ok());
+        let before = std::fs::read(&database).unwrap();
+        assert_eq!(run(args).unwrap_err().0, 4);
+        assert_eq!(std::fs::read(&database).unwrap(), before);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn v3_admin_authored_config_accepts_plaintext_password_field() {
         let root = std::env::temp_dir().join(format!("mf-cli-v3-conf-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();

@@ -75,6 +75,9 @@ fn complete(
             json,
         );
     }
+    if host_action.verify_native_start {
+        return Err((2, "--verify-native-start requires --setup-local-host".into()));
+    }
     if host_action.input.has_any() {
         return Err((2, "local login inputs require --setup-local-host".into()));
     }
@@ -269,6 +272,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 println!("  --setup-local-host --login-user-id mingleadmin --login-password VALUE");
                 println!("  --confirm-local-admin 'ACTIVATE LOCAL HOST ADMIN'");
                 println!("  plus the distinct file and new DB flags and consents above.");
+                println!("Optional fresh-setup native readiness probe: --verify-native-start.");
                 println!("This single-process path cannot adopt an existing DB or remote Host.");
                 println!("Native application launch remains a separate incomplete milestone.");
                 return Ok(());

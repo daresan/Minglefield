@@ -589,7 +589,15 @@ pub fn execute_reviewed_encrypted_copy_with_schema(
         .destination
         .parent()
         .ok_or("Destination parent unavailable")?;
-    let guard = PinnedDestinationParent::open(&before)?;
+    crate::migration_destination::create_missing_destination_parent(&before.destination)?;
+    // Newly created parents must still resolve to the same approved path;
+    // an existing symlink or occupied destination is never accepted.
+    let checked = preview_migration_destination(source, destination_path)
+        .map_err(|_| "Migration destination changed before publication")?;
+    if checked.destination != before.destination {
+        return Err("Migration destination path changed".into());
+    }
+    let guard = PinnedDestinationParent::open(&checked)?;
     // Explicitly request a durable output filename only after consent and
     // the independent source/backup comparison; use the proven same-volume
     // encrypted staging and exclusive hard-link copy.

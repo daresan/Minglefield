@@ -27,6 +27,67 @@ pub struct MigrationDestinationPreview {
     pub execution_enabled: bool,
 }
 
+fn inspected_future_parent(parent: &Path) -> Result<PathBuf, MigrationDestinationError> {
+    let mut cursor = parent.to_path_buf();
+    let mut absent = Vec::new();
+    loop {
+        match fs::symlink_metadata(&cursor) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    return Err(MigrationDestinationError::DestinationParentIsSymlink);
+                }
+                if !metadata.is_dir() {
+                    return Err(MigrationDestinationError::DestinationParentNotDirectory);
+                }
+                let mut resolved =
+                    fs::canonicalize(&cursor).map_err(|_| MigrationDestinationError::IoError)?;
+                for name in absent.into_iter().rev() {
+                    resolved.push(name);
+                }
+                return Ok(resolved);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let name = cursor
+                    .file_name()
+                    .ok_or(MigrationDestinationError::DestinationParentUnavailable)?
+                    .to_os_string();
+                absent.push(name);
+                cursor = cursor
+                    .parent()
+                    .ok_or(MigrationDestinationError::DestinationParentUnavailable)?
+                    .to_path_buf();
+            }
+            Err(_) => return Err(MigrationDestinationError::IoError),
+        }
+    }
+}
+
+/// Called ONLY by the already-authorized SQLCipher writer after validating
+/// source and independent backup. A preview never creates the directories.
+pub(crate) fn create_missing_destination_parent(destination: &Path) -> Result<(), String> {
+    let parent = destination.parent().ok_or("Missing destination parent")?;
+    let mut absent = Vec::new();
+    let mut cursor = parent.to_path_buf();
+    loop {
+        match fs::symlink_metadata(&cursor) {
+            Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => break,
+            Ok(_) => return Err("Unsafe destination directory component".into()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                absent.push(cursor.clone());
+                cursor = cursor.parent()
+                    .ok_or("Cannot find real ancestor of destination")?
+                    .to_path_buf();
+            }
+            Err(_) => return Err("Cannot inspect destination directory".into()),
+        }
+    }
+    for dir in absent.iter().rev() {
+        // Atomic create-directory never replaces an existing symlink or file.
+        fs::create_dir(dir).map_err(|_| "Cannot create selected destination directory")?;
+    }
+    Ok(())
+}
+
 /// Fail closed when the source is missing, the destination exists, or a path
 /// cannot be validated. The destination may share the source directory,
 /// but must use a different filename; it must not replace a WAL/SHM sidecar.
@@ -61,15 +122,9 @@ pub fn preview_migration_destination(
     let parent = destination
         .parent()
         .ok_or(MigrationDestinationError::DestinationParentUnavailable)?;
-    let parent_metadata = fs::symlink_metadata(parent)
-        .map_err(|_| MigrationDestinationError::DestinationParentUnavailable)?;
-    if parent_metadata.file_type().is_symlink() {
-        return Err(MigrationDestinationError::DestinationParentIsSymlink);
-    }
-    if !parent_metadata.is_dir() {
-        return Err(MigrationDestinationError::DestinationParentNotDirectory);
-    }
-    let parent = fs::canonicalize(parent).map_err(|_| MigrationDestinationError::IoError)?;
+    // A brand-new installation may choose a not-yet-created data directory.
+    // Preview inspects the existing ancestor without creating any directory.
+    let parent = inspected_future_parent(parent)?;
     // A same-directory destination must never claim one of SQLite's possible
     // live sidecar filenames, even when that sidecar does not exist yet.
     if parent == source.parent().unwrap_or_else(|| Path::new("")) {
@@ -434,6 +489,24 @@ mod tests {
         assert!(!preview.execution_enabled);
         assert_eq!(fs::read(&source).unwrap(), b"fixture");
         assert!(!destination.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn uncreated_data_parent_is_allowed_without_preview_side_effects() {
+        let root = temp_root();
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("old.sqlite3");
+        fs::write(&source, b"original").unwrap();
+        let destination = root.join("data").join("nested").join("new.sqlite3");
+        let preview = preview_migration_destination(&source, &destination).unwrap();
+        assert_eq!(preview.destination, destination);
+        assert!(!destination.parent().unwrap().exists());
+        create_missing_destination_parent(&destination).unwrap();
+        assert!(destination.parent().unwrap().is_dir());
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&source).unwrap(), b"original");
+        assert!(preview_migration_destination(&source, &destination).is_ok());
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -200,6 +200,7 @@ pub fn ask(kind: DialogKind) -> Result<String, &'static str> {
 /// attempt failed. Neither SQLCipher keys, paths, argv nor worker diagnostics
 /// enter GUI command arguments. Scripts and headless operation never call it.
 pub fn show_unlock_error() {
+    #[cfg(all(unix, not(target_os = "macos")))]
     const MESSAGE: &str =
         "Could not open the encrypted database. Check the selected file and SQLCipher password.";
     #[cfg(windows)]

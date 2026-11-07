@@ -243,9 +243,6 @@ import json,sys
 a=json.loads(sys.stdin.read())
 sys.path.insert(0,a["moduleDir"])
 from alpha_sqlcipher_runtime import sqlcipher_driver
-from private_alpha_auth import AlphaAuthStore
-from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
-from sec01_host_commit_policy_sim import HostCommitPolicy
 db=sqlcipher_driver().connect(a["database"])
 try:
     db.execute("PRAGMA key = '" + a["cipherKey"].replace("'", "''") + "'")
@@ -254,10 +251,6 @@ try:
     db.commit()
 finally:
     db.close()
-store=AlphaAuthStore(a["database"],sqlcipher_key_provider=lambda:a["cipherKey"])
-result=HostCommitPolicy(IntegratedAlphaAdmission(store)).provision_first_run_local_host_admin_trusted(
-    "host.alpha",a["loginKey"])
-assert result.state=="created", "failed to seed local test Host"
 """
         init = subprocess.run(
             [str(executable), "-I", "-B", "-c", initialization],
@@ -267,6 +260,36 @@ assert result.state=="created", "failed to seed local test Host"
             raise ValueError("embedded Alpha fixture initialization failed")
         if not database.is_file():
             raise ValueError("embedded Alpha fixture not created")
+
+        # Actually run the *packaged* private one-shot worker, not a
+        # test-only reimplementation of the storage transaction.
+        host_id = "local.0123456789abcdef0123456789abcdef"
+        worker = application_entrypoint.parent / "installed_alpha_first_run.py"
+        frame = {
+            "version": 1, "databasePath": str(database),
+            "sqlcipherKey": fixture["cipherKey"],
+            "loginUserId": "mingleadmin",
+            "loginPassword": fixture["loginKey"],
+            "localHostId": host_id,
+        }
+        activated = subprocess.run(
+            [str(executable), "-I", "-B", str(worker)],
+            input=json.dumps(frame).encode("utf-8"),
+            capture_output=True, timeout=120, check=False)
+        if activated.returncode != 0:
+            raise ValueError("bundled first-run Host activation failed")
+        receipt = json.loads(activated.stdout)
+        if (receipt.get("status") != "local_host_admin_created"
+                or receipt.get("localHostId") != host_id
+                or receipt.get("loginUserId") != "mingleadmin"
+                or receipt.get("remoteHostAuthorityGranted") is not False):
+            raise ValueError("bundled first-run Host authority mismatch")
+        replay = subprocess.run(
+            [str(executable), "-I", "-B", str(worker)],
+            input=json.dumps(frame).encode("utf-8"),
+            capture_output=True, timeout=120, check=False)
+        if replay.returncode != 3:
+            raise ValueError("bundled first-run Host activation replay was accepted")
 
         process = subprocess.Popen(
             [str(executable), "-I", "-B", str(application_entrypoint)],
@@ -325,11 +348,11 @@ assert result.state=="created", "failed to seed local test Host"
                 raise ValueError("embedded Alpha login failed")
             session = login["session_token"]
             owner, hosts = call("GET", "/api/hosts", session=session)
-            if owner != 200 or [h["host_id"] for h in hosts["hosts"]] != ["host.alpha"]:
+            if owner != 200 or [h["host_id"] for h in hosts["hosts"]] != [host_id]:
                 raise ValueError("embedded Alpha Host ownership mismatch")
             p = str(work / "game")
             created, _ = call("POST", "/api/game/projects", {
-                "host_id": "host.alpha", "project_id": "game.alpha",
+                "host_id": host_id, "project_id": "game.alpha",
                 "name": "Managed Alpha", "repository_root": p,
                 "job_attachments_root": p, "output_root": p,
             }, session=session)
@@ -560,6 +583,8 @@ def build_runtime(output):
                 "managedApplicationStartupVerified": True,
                 "managedApplicationHttpLoginVerified": True,
                 "managedHostAndGameApisVerified": True,
+                "bundledFirstRunWorkerVerified": True,
+                "bundledFirstRunReplayDenied": True,
                 "managedFileInventory": MANAGED_FILES_NAME,
                 "managedFileInventorySha256": inventory_digest,
                 "managedFileCount": len(inventory["files"]),

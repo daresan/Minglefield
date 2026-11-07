@@ -188,7 +188,10 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             "--defaults" if !defaults => defaults = true,
             "--install-alpha-files" if !action.enabled => action.enabled = true,
             "--setup-local-host" if !host_action.enabled => host_action.enabled = true,
-            "--silent" | "--json" | "--defaults" | "--install-alpha-files"
+            "--silent"
+            | "--json"
+            | "--defaults"
+            | "--install-alpha-files"
             | "--setup-local-host" => {
                 return Err((2, format!("duplicate argument: {arg}")));
             }
@@ -270,9 +273,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 return Ok(());
             }
             _ => {
-                if !db_action.parse(&arg, &mut args)?
-                    && !host_action.parse(&arg, &mut args)?
-                {
+                if !db_action.parse(&arg, &mut args)? && !host_action.parse(&arg, &mut args)? {
                     return Err((2, "unsupported argument; use --help".to_owned()));
                 }
             }

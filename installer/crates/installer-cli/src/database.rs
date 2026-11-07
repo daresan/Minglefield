@@ -18,7 +18,7 @@ pub struct DatabaseAction {
     pub stdin: bool,
 }
 
-fn flag_value(
+pub fn flag_value(
     args: &mut impl Iterator<Item = String>,
     name: &'static str,
     field: &mut Option<String>,

@@ -95,10 +95,27 @@ assert connection.execute(
 ).fetchone()[0] == 1
 assert connection.execute("SELECT count(*) FROM alpha_sessions").fetchone()[0] == 0
 connection.close()
+# The actual embedded application's login policy must accept only the
+# independent account credential, not the SQLCipher encryption key.
+from pathlib import Path
+sys.path.insert(0, str(Path(message["installed"]) / "application" / "server"))
+from private_alpha_auth import AlphaAuthStore
+store = AlphaAuthStore(
+    message["database"],
+    sqlcipher_key_provider=lambda: message["key"],
+)
+assert store.login("mingleadmin", message["key"]) is None
+assert store.login("mingleadmin", "WrongLoginPassword9!") is None
+authorization = store.login("mingleadmin", message["login"])
+assert authorization is not None
+assert store.principal(authorization) is not None
 """
         check = subprocess.run(
             [str(embedded), "-I", "-B", "-c", probe_script],
-            input=json.dumps({"database": str(database), "key": TEST_DB_KEY, "host": host_id}),
+            input=json.dumps({
+                "database": str(database), "key": TEST_DB_KEY, "host": host_id,
+                "login": TEST_LOGIN, "installed": str(installed),
+            }),
             capture_output=True, text=True, timeout=120, check=False,
         )
         assert check.returncode == 0, "installed SQLCipher Host/login verification failed"

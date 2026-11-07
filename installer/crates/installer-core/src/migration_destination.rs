@@ -501,7 +501,12 @@ mod tests {
         fs::write(&source, b"original").unwrap();
         let destination = root.join("data").join("nested").join("new.sqlite3");
         let preview = preview_migration_destination(&source, &destination).unwrap();
-        assert_eq!(preview.destination, destination);
+        // macOS transparently resolves /var to /private/var. Compare with
+        // the canonical existing ancestor rather than its textual alias.
+        assert_eq!(
+            preview.destination,
+            fs::canonicalize(&root).unwrap().join("data/nested/new.sqlite3")
+        );
         assert!(!destination.parent().unwrap().exists());
         create_missing_destination_parent(&destination).unwrap();
         assert!(destination.parent().unwrap().is_dir());

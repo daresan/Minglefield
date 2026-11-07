@@ -368,6 +368,22 @@ fn check_native_install_consent(confirmation: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn find_packaged_alpha_source(
+    resource_dir: &Path,
+    executable_dir: &Path,
+    expected_digest: &str,
+) -> Result<PathBuf, String> {
+    for candidate in [
+        resource_dir.join("managed-alpha"),
+        executable_dir.join("managed-alpha"),
+    ] {
+        if candidate.is_dir() && verified_inventory(&candidate, expected_digest).is_ok() {
+            return Ok(candidate);
+        }
+    }
+    Err("Alpha application package is missing or incomplete: extract the full portable archive with managed-alpha next to the executable".to_owned())
+}
+
 #[tauri::command]
 pub async fn install_alpha_application(
     app: tauri::AppHandle,
@@ -381,18 +397,14 @@ pub async fn install_alpha_application(
         .path()
         .resource_dir()
         .map_err(|_| "Cannot locate application resources")?;
-    let bundled = resources.join("managed-alpha");
-    let source = if bundled.is_dir() {
-        bundled
-    } else {
-        let executable =
-            std::env::current_exe().map_err(|_| "Cannot locate portable Setup Manager")?;
-        executable
-            .parent()
-            .ok_or("Cannot locate portable Setup Manager directory")?
-            .join("managed-alpha")
-    };
+    let executable =
+        std::env::current_exe().map_err(|_| "Cannot locate portable Setup Manager")?;
+    let executable_dir = executable
+        .parent()
+        .ok_or("Cannot locate portable Setup Manager directory")?
+        .to_path_buf();
     let installed = tauri::async_runtime::spawn_blocking(move || {
+        let source = find_packaged_alpha_source(&resources, &executable_dir, expected)?;
         install_from_verified_root(&source, Path::new(&install_dir), expected)
     })
     .await
@@ -489,6 +501,23 @@ mod tests {
         assert_eq!(fs::read(&database).unwrap(), b"private data to preserve");
         assert!(install_from_verified_root(&src, &with_db, &digest).is_err());
         assert_eq!(fs::read(&database).unwrap(), b"private data to preserve");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn portable_sibling_package_is_found_when_resource_folder_is_only_a_placeholder() {
+        let root = fixture_root();
+        let (source, digest) = fixture(&root);
+        let placeholder = root.join("resources/managed-alpha");
+        fs::create_dir_all(&placeholder).unwrap();
+        let exe = root.join("portable");
+        fs::create_dir(&exe).unwrap();
+        fs::rename(&source, exe.join("managed-alpha")).unwrap();
+        assert_eq!(
+            find_packaged_alpha_source(&root.join("resources"), &exe, &digest).unwrap(),
+            exe.join("managed-alpha")
+        );
+        assert!(find_packaged_alpha_source(&root.join("resources"), &exe, &"0".repeat(64)).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 

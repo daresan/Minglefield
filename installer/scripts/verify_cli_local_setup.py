@@ -108,7 +108,7 @@ assert store.login("mingleadmin", message["key"]) is None
 assert store.login("mingleadmin", "WrongLoginPassword9!") is None
 authorization = store.login("mingleadmin", message["login"])
 assert authorization is not None
-assert store.principal(authorization) is not None
+assert store.principal("Bearer " + authorization) is not None
 """
         check = subprocess.run(
             [str(embedded), "-I", "-B", "-c", probe_script],

@@ -11,6 +11,8 @@ use minglefield_installer_core::config_v3::{
 use minglefield_installer_core::db_operations::verify_encrypted_database;
 use minglefield_installer_core::managed_alpha_install::verify_installed_application;
 use serde_json::{json, Value};
+mod native_start_dialog;
+use native_start_dialog::DialogKind;
 use std::env;
 use std::fs;
 use std::io::{Read, Write};
@@ -32,6 +34,7 @@ struct LaunchOptions {
     verify_only: bool,
     no_browser: bool,
     probe_exit: bool,
+    no_dialog: bool,
 }
 
 fn option_value(
@@ -83,6 +86,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<LaunchOptions, &
             "--verify-only" if !opts.verify_only => opts.verify_only = true,
             "--no-browser" if !opts.no_browser => opts.no_browser = true,
             "--probe-exit" if !opts.probe_exit => opts.probe_exit = true,
+            "--no-dialog" if !opts.no_dialog => opts.no_dialog = true,
             _ => return Err("unsupported or duplicate native application option"),
         }
     }
@@ -204,6 +208,16 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
     })
 }
 
+fn interactive_dialogs_allowed(opts: &LaunchOptions) -> bool {
+    // Never make CI, scripts or private-stdin automation unexpectedly wait
+    // for a graphical interaction. Ordinary double-click startup is allowed.
+    !opts.no_dialog
+        && !opts.verify_only
+        && !opts.probe_exit
+        && !opts.no_browser
+        && !opts.stdin
+}
+
 fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &'static str> {
     let automatic = root.join("minglefield.conf");
     let config_path = opts.config.as_ref().or(if automatic.exists() {
@@ -221,6 +235,18 @@ fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &
         DatabaseOptions::default()
     };
     db.override_with(opts.database.clone());
+    if db.database_path.is_none() && interactive_dialogs_allowed(opts) {
+        db.database_path = Some(native_start_dialog::ask(DialogKind::DatabaseFile)?);
+    }
+    let credential_available = db.password.literal.is_some()
+        || db.password.file.is_some()
+        || db.new_password.literal.is_some()
+        || db.new_password.file.is_some()
+        || env::var_os("MINGLEFIELD_DB_PASSWORD").is_some()
+        || env::var_os("MINGLEFIELD_NEW_DB_PASSWORD").is_some();
+    if !credential_available && interactive_dialogs_allowed(opts) {
+        db.password.literal = Some(native_start_dialog::ask(DialogKind::CipherPassword)?);
+    }
     let database = db
         .database_path
         .as_deref()
@@ -440,7 +466,8 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), &'static str> {
         println!("Minglefield native Alpha application");
         println!("Usage: Minglefield --database ABSOLUTE_PATH [--db-password VALUE]");
         println!("  [--db-password-file PATH] [--config CONFIG_V3] [--secrets-stdin]");
-        println!("  [--verify-only] [--no-browser] [--probe-exit]");
+        println!("  [--verify-only] [--no-browser] [--probe-exit] [--no-dialog]");
+        println!("When needed, normal desktop launch opens the OS file/password dialogs.");
         println!("Supports MINGLEFIELD_DB_PASSWORD and administrator-authored V3 settings.");
         println!("No Setup Manager or system Python is needed to launch installed Alpha.");
         return Ok(());
@@ -539,6 +566,16 @@ mod tests {
             br#"{"version":1,"status":"ready","bind":"127.0.0.1","port":32111,"encryptedDatabase":true,"hostClaimBootstrapEnabled":true}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn graphical_prompts_are_never_used_during_scripted_or_ci_launch() {
+        let normal = parse_args(Vec::<String>::new()).unwrap();
+        assert!(interactive_dialogs_allowed(&normal));
+        for flag in ["--verify-only", "--probe-exit", "--no-browser", "--secrets-stdin", "--no-dialog"] {
+            let options = parse_args([flag.to_owned()]).unwrap();
+            assert!(!interactive_dialogs_allowed(&options));
+        }
     }
 
     #[test]

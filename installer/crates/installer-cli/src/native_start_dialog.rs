@@ -90,7 +90,7 @@ fn dialog_command(kind: DialogKind) -> Result<Command, &'static str> {
             DialogKind::DatabaseFile => WINDOWS_FILE_SCRIPT,
             DialogKind::CipherPassword => WINDOWS_PASSWORD_SCRIPT,
         });
-        return Ok(cmd);
+        Ok(cmd)
     }
     #[cfg(target_os = "macos")]
     {
@@ -100,7 +100,7 @@ fn dialog_command(kind: DialogKind) -> Result<Command, &'static str> {
             DialogKind::DatabaseFile => MAC_FILE_SCRIPT,
             DialogKind::CipherPassword => MAC_PASSWORD_SCRIPT,
         });
-        return Ok(cmd);
+        Ok(cmd)
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {

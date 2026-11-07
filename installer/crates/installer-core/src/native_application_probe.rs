@@ -23,10 +23,7 @@ fn native_path(root: &Path) -> std::path::PathBuf {
 
 /// Validate the installed native starter and every managed package entry.
 /// May be called *before* a current-session first-run permit is consumed.
-pub fn ensure_native_starter(
-    root: &Path,
-    pinned_inventory: &str,
-) -> Result<(), &'static str> {
+pub fn ensure_native_starter(root: &Path, pinned_inventory: &str) -> Result<(), &'static str> {
     verify_installed_application(root, pinned_inventory)
         .map_err(|_| "installed native package inventory rejected")?;
     let metadata = fs::symlink_metadata(native_path(root))
@@ -43,11 +40,16 @@ fn verify_response(stdout: &[u8]) -> Result<(), &'static str> {
     }
     let report: Value =
         serde_json::from_slice(stdout).map_err(|_| "invalid native readiness response")?;
-    if report.get("status").and_then(Value::as_str)
-        != Some("native_minglefield_startup_verified")
+    if report.get("status").and_then(Value::as_str) != Some("native_minglefield_startup_verified")
         || report.get("encryptedDatabase").and_then(Value::as_bool) != Some(true)
-        || report.get("hostProvisioningEnabled").and_then(Value::as_bool) != Some(false)
-        || report.get("hostClaimBootstrapEnabled").and_then(Value::as_bool) != Some(false)
+        || report
+            .get("hostProvisioningEnabled")
+            .and_then(Value::as_bool)
+            != Some(false)
+        || report
+            .get("hostClaimBootstrapEnabled")
+            .and_then(Value::as_bool)
+            != Some(false)
         || report.get("bind").and_then(Value::as_str) != Some("127.0.0.1")
     {
         return Err("native application readiness contract rejected");
@@ -88,7 +90,9 @@ pub fn probe_installed_application(
         let mut stdin = child.stdin.take().ok_or("native stdin unavailable")?;
         serde_json::to_writer(&mut stdin, &frame)
             .map_err(|_| "cannot deliver native private key frame")?;
-        stdin.flush().map_err(|_| "cannot flush private key frame")?;
+        stdin
+            .flush()
+            .map_err(|_| "cannot flush private key frame")?;
         Ok(())
     })();
     if let Err(reason) = delivery {

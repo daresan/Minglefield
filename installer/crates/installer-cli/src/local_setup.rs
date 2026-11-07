@@ -18,10 +18,10 @@ use minglefield_installer_core::local_first_run_worker::{
 use minglefield_installer_core::managed_alpha_install::{
     install_from_verified_root, verified_inventory, verify_installed_application,
 };
-use std::env;
 use minglefield_installer_core::native_application_probe::{
     ensure_native_starter, probe_installed_application,
 };
+use std::env;
 use std::io::Read;
 use std::path::Path;
 

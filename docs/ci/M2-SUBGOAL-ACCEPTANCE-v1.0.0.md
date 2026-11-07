@@ -526,9 +526,11 @@ SQLCipher keys fail independently. The existing imported rows remain.
 No independent operator GUI acceptance, actual installed Python runtime
 or M2.08 single-use native consent is implied by this test.
 
+**Latest operator evidence — [M2.08 portable build #20](https://github.com/daresan/Minglefield/actions/runs/42342372030), 2026-11-07:** All three native packaging jobs passed. The operator clicked Alpha installation on Shadow and confirmed **4,156 verified managed entries** copied into the selected application directory. The previously missing hidden-files error did not recur. **No actual native Minglefield executable was installed**: the destination primarily contains Python modules and a portable Python distribution; only the **file-copy step** has been operator-tested successfully. The `mingleadmin` inputs were unavailable after detecting existing user/Host data, consistent with avoiding unwanted re-provisioning, but a full installed-app login still awaits independent application launch. Do not mark M2.08 end-to-end or complete M2.10 from this file inventory. **Next action:** prove M2.09 direct application launch and M2.10 real OS application binaries before repackaging the Setup Manager; no new milestone is introduced.
+
 ### M2.09 — Encrypted operational runtime and independent application shell start
 
-- Launch the installed Alpha against the migrated encrypted SQLCipher file using a **documented standalone application shell command**, independent of both the portable Setup Manager GUI and installer CLI. The existing internal bounded `installed_alpha_launch.py` stdin frame is the basis, **not** yet the final user-facing command. Keep the SQLCipher key out of argv/environment/logs; opening the DB at runtime is not a new migration/encryption pass.
+- Launch the real installed Alpha against its selected encrypted SQLCipher DB using an **application-owned** invocation independent of both Setup Manager and installer CLI. Reuse `installed_alpha_launch.py` internally; no end user must call Python or operate the interpreter. The M2.09 development shell start is a testable stepping stone to the actual native M2.10 application entrypoint, **not** the final desktop deliverable. Keep SQLCipher keys out of argv/environment/logs; opening a DB is not migration/re-encryption.
 - Verify ordinary login/session, Hosts, Effects, Jobs and Game storage survive
   process restart and remain tenant/Host-scoped.
 - Missing driver, missing key or wrong key must fail closed without silently
@@ -568,17 +570,15 @@ manifest as publisher trust or request packaging prematurely.
 ### M2.10 — Managed Python runtime and Minglefield application payload
 
 - Support a **new encrypted SQLCipher DB with no prior source**, besides migration of an existing DB. Both must be compatible with the same independently callable application shell launcher and local first-Host setup; no additional Remote Host claim acceptance.
-- On clean Windows/Linux/macOS environments, install the separately packaged
-  Minglefield Alpha and verified pinned Python/SQLCipher runtime.
-- Launch without Git, Conda, developer Python or prior Minglefield checkout.
-- Verify manifest, runtime dependency closure and checksum/integrity.
-- Close or remove the portable Setup Manager; installed app and user data
-  must remain available.
+- Build the **Minglefield application itself independently of the Setup Manager** for Windows, Linux and macOS: direct OS start via the appropriate native `Minglefield.exe`, Linux executable/app distribution and `Minglefield.app`. Bundle the verified Python/SQLCipher engine internally if it remains the chosen implementation; **a Python file tree with an interpreter alone is not a native application deliverable**.
+- On clean target OS environments, prove native launch, DB selection/unlock, existing-account authentication and persisted Host/Effects/Jobs/Games across restart; no Git, Conda, developer Python, shell scripts or installer process is allowed as a runtime requirement. Verify inventory/runtime closure, release integrity and negative wrong-key/removed-file cases.
+- Close or remove the portable Setup Manager **before** the direct application launch test; app executable, user data and credentials remain usable. No hardcoded machine paths or installer-issued Host rights.
 - **Packaging:** one three-OS acceptance build.
 
 ### M2.11 — Standard, Advanced and headless parity
 
-- Distinguish the **installer CLI** (currently `PLAN ONLY`, must invoke the real shared installation engine) from the **application shell command** already accepted as an M2.09 runtime capability. Verify both interfaces separately. The installer CLI must not fabricate authentication for existing imported user/Host ownership.
+- The GUI and installer CLI **consume an already built and independently tested OS application package**: verify it, install the package in the user's selected program directory, migrate/create the DB at the independent selected data path and optionally start **the same application executable**. No source build, application runtime integration, or ongoing launcher-service dependency inside the Setup Manager. The native Minglefield app must remain launchable after the manager is deleted.
+- Distinguish the **installer CLI** (currently `PLAN ONLY`, must invoke the real shared installation engine) from the application-owned M2.09/M2.10 start path. Verify both independently. The installer CLI must not fabricate authentication for existing imported user/Host ownership.
 - Standard: safe user-scoped defaults, suitable data directory and clear
   installation completion.
 - Advanced: selected destination/data paths, existing-install detection,

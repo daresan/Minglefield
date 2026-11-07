@@ -7,7 +7,8 @@ import unittest
 from zipfile import ZipFile
 
 from build_managed_alpha_runtime import (
-    BUNDLES, RUNTIME_REQUIREMENTS, _safe_relative, current_variant,
+    BUNDLES, RUNTIME_REQUIREMENTS, PINNED_APPLICATION_WHEELS,
+    _safe_relative, current_variant,
     extract_sqlcipher_wheel, extract_standalone, verify_pinned_file,
 )
 
@@ -35,6 +36,27 @@ class ManagedAlphaRuntimeBuildTests(unittest.TestCase):
             self.assertNotIn(">", version)
             self.assertNotIn("<", version)
             self.assertNotIn("*", version)
+
+    def test_every_supported_platform_has_exactly_pinned_dependency_hashes(self):
+        common = {filename for filename in PINNED_APPLICATION_WHEELS
+                  if not filename.startswith("rpds_py-")}
+        self.assertEqual(len(common), 6)
+        for variant in BUNDLES:
+            if variant[0] == "windows":
+                rpds_platform = "win_amd64"
+            elif variant[0] == "linux":
+                rpds_platform = "manylinux_2_17_x86_64"
+            else:
+                rpds_platform = ("macosx_11_0_arm64" if variant[1] == "aarch64"
+                                 else "macosx_10_12_x86_64")
+            candidates = [filename for filename in PINNED_APPLICATION_WHEELS
+                          if filename.startswith("rpds_py-")
+                          and rpds_platform in filename]
+            self.assertEqual(len(candidates), 1)
+            self.assertEqual(len(common | set(candidates)), len(RUNTIME_REQUIREMENTS))
+        self.assertTrue(all(len(digest) == 64 and
+                            all(character in "0123456789abcdef" for character in digest)
+                            for digest in PINNED_APPLICATION_WHEELS.values()))
 
     def test_checksum_fails_closed(self):
         with TemporaryDirectory() as tmp:

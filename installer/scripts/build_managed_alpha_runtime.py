@@ -44,6 +44,32 @@ RUNTIME_REQUIREMENTS = (
     ("typing_extensions", "4.15.0"),
 )
 
+# Exact build-time supply-chain inputs, not only version constraints.
+# Universal Python wheels have identical hashes on every operating system.
+# The rpds native wheel differs by platform and requires an exact match.
+PINNED_APPLICATION_WHEELS = {
+    "attrs-25.4.0-py3-none-any.whl":
+        "adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373",
+    "jsonschema-4.26.0-py3-none-any.whl":
+        "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce",
+    "jsonschema_specifications-2025.9.1-py3-none-any.whl":
+        "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe",
+    "packaging-25.0-py3-none-any.whl":
+        "29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484",
+    "referencing-0.36.2-py3-none-any.whl":
+        "e8699adbbf8b5c7de96d8ffa0eb5c158b3beafce084968e2ea8bb08c6794dcd0",
+    "typing_extensions-4.15.0-py3-none-any.whl":
+        "f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548",
+    "rpds_py-0.27.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl":
+        "cb56c6210ef77caa58e16e8c17d35c63fe3f5b60fd9ba9d424470c3400bcf9ed",
+    "rpds_py-0.27.1-cp311-cp311-win_amd64.whl":
+        "b4938466c6b257b2f5c4ff98acd8128ec36b5059e5c8f8372d79316b1c36bb15",
+    "rpds_py-0.27.1-cp311-cp311-macosx_11_0_arm64.whl":
+        "62ac3d4e3e07b58ee0ddecd71d6ce3b1637de2d373501412df395a0ec5f9beb5",
+    "rpds_py-0.27.1-cp311-cp311-macosx_10_12_x86_64.whl":
+        "be898f271f851f68b318872ce6ebebbc62f303b654e43bf72683dbdc25b7c881",
+}
+
 # These release-digest values are source-pinned and deliberately platform exact.
 # macOS has separate arm64 and Intel builds; other unsupported machines fail.
 BUNDLES = {
@@ -384,6 +410,9 @@ def build_runtime(output):
             package, version = parts[:2]
             if required.get(package) != version or package in found:
                 raise ValueError("unexpected Alpha dependency wheel or version")
+            if wheel.name not in PINNED_APPLICATION_WHEELS:
+                raise ValueError("unapproved Alpha dependency wheel filename")
+            verify_pinned_file(wheel, PINNED_APPLICATION_WHEELS[wheel.name])
             found.add(package)
         if found != set(required):
             raise ValueError("missing Alpha application wheel")

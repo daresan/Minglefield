@@ -107,9 +107,13 @@ def package_macos_app(source, destination):
             raise ValueError("copied macOS bundle failed its original managed inventory")
         if not (managed / MANAGED_FILES_NAME).is_file():
             raise ValueError("macOS application bundle inventory unavailable")
-        # Destination rename has no implicit overwrite/repair. The
-        # TemporaryDirectory owns and cleans ONLY its private staging tree.
-        os.rename(staged, destination)
+        # Reserve the new user-visible name EXCLUSIVELY before publication,
+        # rather than relying on POSIX rename() (which may replace an existing
+        # empty directory). An interrupted, newly reserved destination is
+        # retained for explicit review and is NEVER silently removed/reused.
+        destination.mkdir(mode=0o700)
+        os.rename(contents, destination / "Contents")
+        # The TemporaryDirectory owns and cleans ONLY its private staging tree.
     return {
         "status": "native_macos_app_bundle_created",
         "bundle": str(destination),

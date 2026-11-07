@@ -1,11 +1,105 @@
-//! Read-only bootstrap CLI. Never writes application files or claims a Host.
+//! Headless installer CLI: plan preview and explicitly approved managed Alpha
+//! file installation. DB migration, Host setup and native app launch remain
+//! separate unimplemented CLI operations; never imply full installation.
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
-use minglefield_installer_core::Mode;
+use minglefield_installer_core::managed_alpha_install::install_from_verified_root;
+use minglefield_installer_core::{InstallPlan, Mode};
 use std::env;
+use std::path::Path;
 use std::process::ExitCode;
 
 mod output;
+
+const INSTALL_CONFIRMATION: &str = "INSTALL MINGLEFIELD ALPHA FILES";
+
+#[derive(Default)]
+struct FileInstallOptions {
+    enabled: bool,
+    source: Option<String>,
+    inventory_sha256: Option<String>,
+    confirmation: Option<String>,
+}
+
+fn require_option_value(
+    args: &mut impl Iterator<Item = String>,
+    name: &'static str,
+) -> Result<String, (u8, String)> {
+    args.next()
+        .filter(|value| !value.starts_with("--"))
+        .ok_or((2, format!("{name} requires a value")))
+}
+
+/// One real install operation: both the GUI and CLI invoke the shared Rust
+/// core's exact inventory validation and non-overwriting file writer.
+fn complete(
+    plan: &InstallPlan,
+    preview: String,
+    action: &FileInstallOptions,
+    json: bool,
+) -> Result<(), (u8, String)> {
+    if !action.enabled {
+        if action.source.is_some()
+            || action.inventory_sha256.is_some()
+            || action.confirmation.is_some()
+        {
+            return Err((
+                2,
+                "package arguments require --install-alpha-files".to_owned(),
+            ));
+        }
+        if json {
+            println!("{preview}");
+        } else {
+            println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+        }
+        return Ok(());
+    }
+    let source = action
+        .source
+        .as_deref()
+        .ok_or((2, "--package-dir is required for file installation".to_owned()))?;
+    let digest = action.inventory_sha256.as_deref().ok_or((
+        2,
+        "--inventory-sha256 is required for file installation".to_owned(),
+    ))?;
+    if action.confirmation.as_deref() != Some(INSTALL_CONFIRMATION) {
+        return Err((
+            2,
+            "explicit --confirm-install approval is required".to_owned(),
+        ));
+    }
+    if plan.install_optional_conda || plan.install_optional_comfyui {
+        return Err((
+            2,
+            "optional runtime installation is not implemented in the file-only CLI".to_owned(),
+        ));
+    }
+    let installed = install_from_verified_root(
+        Path::new(source),
+        Path::new(&plan.install_dir),
+        digest,
+    )
+    .map_err(|_| {
+        (
+            4,
+            "verified managed Alpha file installation rejected; source, digest, or target invalid"
+                .to_owned(),
+        )
+    })?;
+    if json {
+        println!(
+            "{}",
+            output::installed_alpha_files(&installed.install_dir, installed.installed_entries)
+        );
+    } else {
+        println!(
+            "ALPHA FILES INSTALLED (not a full app launch or Host claim): {} verified entries",
+            installed.installed_entries
+        );
+    }
+    Ok(())
+}
 
 fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let mut args = args.into_iter();
@@ -13,53 +107,84 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let mut silent = false;
     let mut defaults = false;
     let mut install_dir: Option<String> = None;
+    let mut data_dir: Option<String> = None;
     let mut config_file: Option<String> = None;
+    let mut action = FileInstallOptions::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--silent" if !silent => silent = true,
             "--json" if !json => json = true,
             "--defaults" if !defaults => defaults = true,
-            "--silent" | "--json" | "--defaults" => {
+            "--install-alpha-files" if !action.enabled => action.enabled = true,
+            "--silent" | "--json" | "--defaults" | "--install-alpha-files" => {
                 return Err((2, format!("duplicate argument: {arg}")));
             }
             "--install-dir" => {
                 if install_dir.is_some() {
                     return Err((2, "duplicate argument: --install-dir".to_string()));
                 }
-                let path = args
-                    .next()
-                    .filter(|value| !value.starts_with("--"))
-                    .ok_or((2, "--install-dir requires a value".to_string()))?;
-                install_dir = Some(path);
+                install_dir = Some(require_option_value(&mut args, "--install-dir")?);
+            }
+            "--data-dir" => {
+                if data_dir.is_some() {
+                    return Err((2, "duplicate argument: --data-dir".to_string()));
+                }
+                data_dir = Some(require_option_value(&mut args, "--data-dir")?);
+            }
+            "--package-dir" => {
+                if action.source.is_some() {
+                    return Err((2, "duplicate argument: --package-dir".to_owned()));
+                }
+                action.source = Some(require_option_value(&mut args, "--package-dir")?);
+            }
+            "--inventory-sha256" => {
+                if action.inventory_sha256.is_some() {
+                    return Err((2, "duplicate argument: --inventory-sha256".to_owned()));
+                }
+                action.inventory_sha256 =
+                    Some(require_option_value(&mut args, "--inventory-sha256")?);
+            }
+            "--confirm-install" => {
+                if action.confirmation.is_some() {
+                    return Err((2, "duplicate argument: --confirm-install".to_owned()));
+                }
+                action.confirmation = Some(require_option_value(&mut args, "--confirm-install")?);
             }
             "--config" => {
                 if config_file.is_some() {
-                    return Err((2, "duplicate argument: --config".to_string()));
+                    return Err((2, "duplicate argument: --config".to_owned()));
                 }
-                let file = args
-                    .next()
-                    .filter(|value| !value.starts_with("--"))
-                    .ok_or((2, "--config requires a file path".to_string()))?;
-                config_file = Some(file);
+                config_file = Some(require_option_value(&mut args, "--config")?);
             }
             "--help" | "-h" => {
-                println!("Usage: minglefield-installer-cli --silent (--defaults | --config FILE) [--install-dir ABSOLUTE_PATH] [--json]");
-                println!("Config: UTF-8 key=value, version=1 or 2, optional install_dir/data_dir.");
-                println!("This prototype validates and prints a plan; nothing is installed.");
+                println!(
+                    "Usage: minglefield-installer-cli --silent (--defaults | --config FILE) \\
+                     [--install-dir ABSOLUTE_PATH] [--data-dir ABSOLUTE_PATH] [--json]"
+                );
+                println!(
+                    "File-only install: add --install-alpha-files --package-dir PATH \\
+                     --inventory-sha256 HEX --confirm-install 'INSTALL MINGLEFIELD ALPHA FILES'"
+                );
+                println!(
+                    "Default operation is PLAN ONLY. File install is not database migration, \\
+                     Host provisioning, release provenance or an application launcher."
+                );
                 return Ok(());
             }
-            _ => return Err((2, format!("unsupported argument: {arg}"))),
+            _ => {
+                return Err((2, "unsupported argument; use --help".to_owned()));
+            }
         }
     }
     if !silent || (defaults == config_file.is_some()) {
         return Err((
             2,
-            "require --silent and exactly one of --defaults or --config FILE".to_string(),
+            "require --silent and exactly one of --defaults or --config FILE".to_owned(),
         ));
     }
     if let Some(file) = config_file {
         let text = std::fs::read_to_string(&file)
-            .map_err(|err| (3, format!("cannot read config: {err}")))?;
+            .map_err(|_| (3, "cannot read installer configuration".to_owned()))?;
         let version_lines: Vec<&str> = text
             .lines()
             .map(str::trim)
@@ -72,7 +197,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
         if version_lines.len() != 1 {
             return Err((
                 3,
-                "invalid config: missing or duplicate version".to_string(),
+                "invalid config: missing or duplicate version".to_owned(),
             ));
         }
         let version = version_lines[0]
@@ -81,47 +206,54 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             .unwrap_or("");
         if version == "2" {
             let mut config = InstallerConfigV2::parse(&text)
-                .map_err(|err| (3, format!("invalid config: {err}")))?;
+                .map_err(|_| (3, "invalid version 2 configuration".to_owned()))?;
             if let Some(path) = install_dir {
                 config.base.install_dir = path;
             }
+            if let Some(path) = data_dir {
+                config.base.data_dir = path;
+            }
             let plan = config
                 .preview(Mode::Silent)
-                .map_err(|err| (3, format!("invalid installation plan: {err}")))?;
-            if json {
-                println!("{}", output::success_v2(&config, &plan));
-            } else {
-                println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
+                .map_err(|_| (3, "invalid installation plan".to_owned()))?;
+            if action.enabled
+                && (config.git_tools.install_optional_git
+                    || config.git_tools.install_optional_gh
+                    || config.git_tools.offer_gh_login)
+            {
+                return Err((
+                    2,
+                    "Git/gh optional installation not implemented in file-only CLI".to_owned(),
+                ));
             }
+            complete(&plan, output::success_v2(&config, &plan), &action, json)?;
         } else {
             let mut config = InstallerConfig::parse(&text)
-                .map_err(|err| (3, format!("invalid config: {err}")))?;
+                .map_err(|_| (3, "invalid version 1 configuration".to_owned()))?;
             if let Some(path) = install_dir {
                 config.install_dir = path;
             }
+            if let Some(path) = data_dir {
+                config.data_dir = path;
+            }
             let plan = config
                 .preview(Mode::Silent)
-                .map_err(|err| (3, format!("invalid installation plan: {err:?}")))?;
-            if json {
-                println!("{}", output::success(&config, &plan));
-            } else {
-                println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
-            }
+                .map_err(|_| (3, "invalid installation plan".to_owned()))?;
+            complete(&plan, output::success(&config, &plan), &action, json)?;
         }
     } else {
         let mut config = InstallerConfig::defaults()
-            .map_err(|err| (3, format!("cannot determine defaults: {err:?}")))?;
+            .map_err(|_| (3, "cannot determine default paths".to_owned()))?;
         if let Some(path) = install_dir {
             config.install_dir = path;
         }
+        if let Some(path) = data_dir {
+            config.data_dir = path;
+        }
         let plan = config
             .preview(Mode::Silent)
-            .map_err(|err| (3, format!("invalid installation plan: {err:?}")))?;
-        if json {
-            println!("{}", output::success(&config, &plan));
-        } else {
-            println!("PLAN ONLY (no files changed, no Host claimed): {plan:?}");
-        }
+            .map_err(|_| (3, "invalid installation plan".to_owned()))?;
+        complete(&plan, output::success(&config, &plan), &action, json)?;
     }
     Ok(())
 }

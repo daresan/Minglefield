@@ -368,7 +368,7 @@ mod tests {
             db.execute_batch("CREATE TABLE fixture(v INTEGER); INSERT INTO fixture VALUES (1);")
                 .unwrap();
         }
-        assert_ne!(&fs::read(&db_path).unwrap()[..16], b"SQLite format 3\\0");
+        assert_ne!(&fs::read(&db_path).unwrap()[..16], b"SQLite format 3\0");
         let app_path = base.join("app");
         fs::create_dir(&app_path).unwrap();
         let state = FirstRunState::default();

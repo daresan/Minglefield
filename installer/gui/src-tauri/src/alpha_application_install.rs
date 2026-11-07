@@ -397,8 +397,7 @@ pub async fn install_alpha_application(
         .path()
         .resource_dir()
         .map_err(|_| "Cannot locate application resources")?;
-    let executable =
-        std::env::current_exe().map_err(|_| "Cannot locate portable Setup Manager")?;
+    let executable = std::env::current_exe().map_err(|_| "Cannot locate portable Setup Manager")?;
     let executable_dir = executable
         .parent()
         .ok_or("Cannot locate portable Setup Manager directory")?
@@ -517,7 +516,9 @@ mod tests {
             find_packaged_alpha_source(&root.join("resources"), &exe, &digest).unwrap(),
             exe.join("managed-alpha")
         );
-        assert!(find_packaged_alpha_source(&root.join("resources"), &exe, &"0".repeat(64)).is_err());
+        assert!(
+            find_packaged_alpha_source(&root.join("resources"), &exe, &"0".repeat(64)).is_err()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

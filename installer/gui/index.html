@@ -95,7 +95,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 </fieldset>
 <fieldset id="alpha-application-install-controls">
 <legend>Minglefield-Alpha-Anwendungsdateien installieren (separater Schritt)</legend>
-<p class="help">Der portable Setup Manager kann die mitgelieferte und im nativen Backend überprüfte Python-/SQLCipher-Laufzeit mit den Minglefield-Anwendungsdateien in einen <strong>neuen, unbenutzten Zielpfad</strong> kopieren. Vorhandene Installationen und Benutzerdaten werden niemals überschrieben. Ist in dieser Testversion kein gültiges Anwendungspaket enthalten, wird der Vorgang abgelehnt. Dies ist noch keine Host-Registrierung und kein Anwendungsstart.</p>
+<p class="help">Der portable Setup Manager installiert die mitgelieferte und überprüfte Python-/SQLCipher-Laufzeit samt Minglefield-Anwendung. Ein <strong>neuer, noch nicht angelegter Ordner</strong> wird automatisch erstellt. Enthält der gewählte Ordner bereits die neue verschlüsselte Datenbank, bleibt diese erhalten. Bestehende Installationen und Benutzerdaten werden niemals überschrieben. Ist in dieser Testversion kein gültiges Anwendungspaket enthalten, wird der Vorgang abgelehnt. Dies ist noch keine Host-Registrierung und kein Anwendungsstart.</p>
 <p class="help">Ziel ist das oben unter „Installation directory“ angezeigte Verzeichnis. Bestätige die gesonderte Schreiboperation ausdrücklich; eine Datenbankmigration oder ein Installationsplan alleine erteilt keine Freigabe.</p>
 <label for="alpha-application-install-confirmation">Bestätigung: INSTALL MINGLEFIELD ALPHA FILES</label>
 <input id="alpha-application-install-confirmation" spellcheck="false" autocomplete="off" aria-label="Bestätigung zum Kopieren der Minglefield-Anwendungsdateien" />

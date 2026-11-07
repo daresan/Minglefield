@@ -8,9 +8,7 @@ uses the same private startup frame without depending on this Python script.
 """
 import argparse
 import getpass
-import hashlib
 import json
-import os
 from pathlib import Path
 import queue
 import stat
@@ -136,8 +134,14 @@ def start_installed_alpha(interpreter, entrypoint, database, secret, *, timeout=
         raise
 
 
+class QuietArgumentParser(argparse.ArgumentParser):
+    def error(self, _message):
+        # argparse otherwise echoes unknown option values, possibly secrets.
+        self.exit(2, "minglefield_managed_alpha_shell_arguments_rejected\\n")
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = QuietArgumentParser(description=__doc__)
     parser.add_argument("--installation", type=Path, required=True)
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--verify-only", action="store_true")

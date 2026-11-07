@@ -17,6 +17,8 @@ on:
       - "installer/crates/installer-core/src/db_operations.rs"
       - "installer/crates/installer-core/src/local_first_run_worker.rs"
       - "installer/crates/installer-cli/src/local_setup.rs"
+      - "installer/crates/installer-cli/src/minglefield_app.rs"
+      - "installer/crates/installer-cli/Cargo.toml"
       - "installer/crates/installer-core/Cargo.toml"
       - ".github/workflows/installer-gui-native.yml"
   pull_request:

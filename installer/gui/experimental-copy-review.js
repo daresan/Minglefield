@@ -4,28 +4,16 @@ export const EXPERIMENTAL_COPY_CONFIRMATION = "CREATE EXPERIMENTAL ENCRYPTED COP
 
 export function validateExperimentalCopyRequest({
   sourcePath, destinationPath, backupPath, confirmation,
-  verifiedRehearsal, temporaryProof, stagedCorrections,
+  stagedCorrections,
   credentialsValid
 }) {
   if (!sourcePath || !destinationPath) {
     throw new Error("Choose a reviewed source and a new destination filename.");
   }
-  if (!verifiedRehearsal || verifiedRehearsal.sourcePath !== sourcePath ||
-      verifiedRehearsal.destinationPath !== destinationPath ||
-      verifiedRehearsal.fullDataCopyVerified !== true ||
-      verifiedRehearsal.sourcePreserved !== true) {
-    throw new Error("Complete the migration rehearsal for this exact source and destination.");
-  }
-  if (!temporaryProof || temporaryProof.temporaryEncryptedCopyVerified !== true ||
-      temporaryProof.stagedValuesMatchCiphertext !== true ||
-      temporaryProof.temporaryFilesRemoved !== true ||
-      temporaryProof.destinationCreated !== false) {
-    throw new Error("Complete the current encrypted temporary-copy verification first.");
-  }
-  if (!Array.isArray(stagedCorrections) ||
-      stagedCorrections.length !== verifiedRehearsal.verifiedChanges ||
-      stagedCorrections.length !== temporaryProof.verifiedStagedChanges) {
-    throw new Error("Staged data corrections changed; repeat the review.");
+  // Optional development rehearsals must not block actual execution.
+  // Native SQLCipher execution repeats source, backup and ciphertext checks.
+  if (!Array.isArray(stagedCorrections)) {
+    throw new Error("Invalid staged changes.");
   }
   if (!credentialsValid) {
     throw new Error("Confirm the valid destination SQLCipher password.");

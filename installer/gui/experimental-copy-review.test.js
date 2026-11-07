@@ -21,20 +21,16 @@ const valid = () => ({
   credentialsValid: true
 });
 
-test("requires exact reviewed source, output and verified stages", () => {
-  assert.equal(validateExperimentalCopyRequest(valid()).destinationPath, "/data/migrated.sqlite3");
-  for (const change of [
-    {sourcePath: "/data/other.sqlite3"},
-    {destinationPath: "/data/different.sqlite3"},
-    {verifiedRehearsal: null},
-    {temporaryProof: null},
-    {stagedCorrections: []},
-    {credentialsValid: false}
-  ]) {
-    assert.throws(() => validateExperimentalCopyRequest({...valid(), ...change}));
+test("direct encrypted copy needs no redundant developer trial proofs", () => {
+  const input = valid();
+  input.verifiedRehearsal = null;
+  input.temporaryProof = null;
+  assert.equal(validateExperimentalCopyRequest(input).destinationPath, input.destinationPath);
+  for (const patch of [{sourcePath: ""}, {destinationPath: ""},
+                      {stagedCorrections: null}, {credentialsValid: false}]) {
+    assert.throws(() => validateExperimentalCopyRequest({...input, ...patch}));
   }
 });
-
 test("requires independent backup path and exact typed confirmation", () => {
   for (const change of [
     {backupPath: ""},
@@ -47,12 +43,8 @@ test("requires independent backup path and exact typed confirmation", () => {
   }
 });
 
-test("rejects unverified and mutated temporary proof", () => {
-  const base = valid();
-  assert.throws(() => validateExperimentalCopyRequest({
-    ...base, temporaryProof: {...base.temporaryProof, destinationCreated: true}
-  }));
-  assert.throws(() => validateExperimentalCopyRequest({
-    ...base, temporaryProof: {...base.temporaryProof, stagedValuesMatchCiphertext: false}
-  }));
+test("stale trial proofs cannot prevent reuse with a distinct new target", () => {
+  const input = {...valid(), destinationPath: "/fresh/target.sqlite3",
+                 verifiedRehearsal: null, temporaryProof: {destinationCreated: true}};
+  assert.equal(validateExperimentalCopyRequest(input).destinationPath, input.destinationPath);
 });

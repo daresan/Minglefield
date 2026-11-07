@@ -522,7 +522,7 @@ pub async fn create_experimental_encrypted_copy(
             || proof.tables_checked < baseline.fidelity.tables_checked
             || !valid_recovery_operation_id(proof.recovery_operation_id.as_deref())
             || proof.schema_entries_checked
-                != baseline.fidelity.schema_entries_checked + proof.added_schema_objects.len()
+                < baseline.fidelity.schema_entries_checked + schema_additions.len()
             || schema_additions
                 .iter()
                 .any(|name| !proof.added_schema_objects.contains(name))

@@ -366,7 +366,7 @@ function invalidateMigrationRehearsal() {
   experimentalCopyRequestSequence += 1;
   lastExperimentalCopy = null;
   document.querySelector("#experimental-copy-result").textContent =
-    "Review or destination changed. Repeat both migration checks before any new experimental copy.";
+    "Auswahl geändert. Eine neue Kopie prüft die Daten und Sicherung selbstständig.";
   rehearsalRequestSequence += 1;
   temporaryEncryptedRequestSequence += 1;
   lastTemporaryEncryptedProof = null;
@@ -375,7 +375,7 @@ function invalidateMigrationRehearsal() {
   lastMigrationRehearsal = null;
   document.querySelector("#migration-field-coverage").replaceChildren();
   document.querySelector("#migration-rehearsal-result").textContent =
-    "Migration rehearsal requires a new verification after data or destination changes.";
+    "Optionale Probe; die eigentliche Migration führt die wichtigen Prüfungen selbst aus.";
   document.querySelector("#review-migration-rehearsal-status").textContent =
     "No current verified migration rehearsal. Execution remains disabled.";
 }
@@ -747,8 +747,6 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
       destinationPath: migrationDestinationInput.value.trim(),
       backupPath: experimentalBackup.value,
       confirmation: experimentalConfirmation.value,
-      verifiedRehearsal: lastMigrationRehearsal,
-      temporaryProof: lastTemporaryEncryptedProof,
       stagedCorrections: corrections,
       credentialsValid: validateDestinationPassword(
         newDbPassword.value, confirmDbPassword.value

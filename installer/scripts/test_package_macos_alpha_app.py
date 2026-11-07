@@ -28,7 +28,7 @@ def create_fixture(root):
     digest = hashlib.sha256(inventory.read_bytes()).hexdigest()
     manifest = {
         "schemaVersion": 1,
-        "platform": "macos-arm64",
+        "platform": "darwin-aarch64",
         "nativeApplicationIncluded": True,
         "nativeApplicationExecutable": "Minglefield",
         "applicationEntrypoint": "application/server/installed_alpha_launch.py",

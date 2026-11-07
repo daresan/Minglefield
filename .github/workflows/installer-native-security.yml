@@ -15,6 +15,9 @@ on:
       - "installer/crates/installer-core/src/local_first_run_worker.rs"
       - "installer/crates/installer-cli/src/local_setup.rs"
       - "installer/scripts/verify_cli_local_setup.py"
+      - "installer/scripts/build_native_alpha_application.py"
+      - "installer/crates/installer-cli/src/minglefield_app.rs"
+      - "installer/crates/installer-cli/Cargo.toml"
       - "installer/crates/installer-cli/src/database.rs"
       - "installer/crates/installer-cli/src/main.rs"
       - "installer/crates/installer-cli/src/output.rs"
@@ -85,7 +88,7 @@ jobs:
         run: cargo test -p minglefield-installer-core --locked cross_runtime_ -- --ignored
       - name: Verify installed encrypted Alpha login and Host scope over loopback
         run: python -B -m unittest discover -s ../tests/conformance -p "test_installed*alpha*.py" -v
-      - name: Assemble pinned managed Python SQLCipher and complete Alpha sources (build-only)
-        run: python -B scripts/build_managed_alpha_runtime.py --output ci-managed-alpha
+      - name: Build OS-native Minglefield executable and pinned managed Alpha payload
+        run: python -B scripts/build_native_alpha_application.py --output ci-managed-alpha
       - name: Verify real one-shot CLI fresh local Host setup against installed managed Alpha
-        run: python -B scripts/verify_cli_local_setup.py --package ci-managed-alpha
+        run: python -B scripts/verify_cli_local_setup.py --package ci-managed-alpha --require-native

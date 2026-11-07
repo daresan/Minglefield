@@ -222,7 +222,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 println!("  db_password_file, new_db_password, new_db_password_file.");
                 println!("Env: MINGLEFIELD_DB_PASSWORD, MINGLEFIELD_NEW_DB_PASSWORD.");
                 println!("Fresh database: --create-new-encrypted-db --database PATH");
-                println!("  --new-db-password VALUE --confirm-new-db 'CREATE NEW ENCRYPTED DATABASE'.");
+                println!(
+                    "  --new-db-password VALUE --confirm-new-db 'CREATE NEW ENCRYPTED DATABASE'."
+                );
                 println!("Database copy neither provisions Hosts nor launches the app.");
                 return Ok(());
             }

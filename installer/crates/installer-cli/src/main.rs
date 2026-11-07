@@ -76,10 +76,7 @@ fn complete(
         );
     }
     if host_action.verify_native_start || host_action.start_native_app {
-        return Err((
-            2,
-            "native launch options require --setup-local-host".into(),
-        ));
+        return Err((2, "native launch options require --setup-local-host".into()));
     }
     if host_action.input.has_any() {
         return Err((2, "local login inputs require --setup-local-host".into()));

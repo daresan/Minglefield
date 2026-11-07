@@ -6,9 +6,9 @@ use serde_json::{json, Value};
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::sync::mpsc;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -130,7 +130,6 @@ pub fn probe_installed_application(
     verify_response(&output.stdout)
 }
 
-
 /// A running app owns its native process and the embedded local Alpha worker.
 /// The Setup Manager is NOT a runtime dependency; this receipt has no secrets.
 #[derive(Debug, serde::Serialize)]
@@ -158,8 +157,14 @@ fn running_port(stdout: &[u8]) -> Result<u16, &'static str> {
         || fields.get("status").and_then(Value::as_str) != Some("native_minglefield_ready")
         || fields.get("bind").and_then(Value::as_str) != Some("127.0.0.1")
         || fields.get("encryptedDatabase").and_then(Value::as_bool) != Some(true)
-        || fields.get("hostProvisioningEnabled").and_then(Value::as_bool) != Some(false)
-        || fields.get("hostClaimBootstrapEnabled").and_then(Value::as_bool) != Some(false)
+        || fields
+            .get("hostProvisioningEnabled")
+            .and_then(Value::as_bool)
+            != Some(false)
+        || fields
+            .get("hostClaimBootstrapEnabled")
+            .and_then(Value::as_bool)
+            != Some(false)
     {
         return Err("native running readiness rejected");
     }
@@ -182,7 +187,9 @@ fn check_running_loopback(port: u16) -> Result<(), &'static str> {
     conn.write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
         .map_err(|_| "native local readiness request failed")?;
     let mut bytes = [0_u8; 64];
-    let n = conn.read(&mut bytes).map_err(|_| "native local readiness reply failed")?;
+    let n = conn
+        .read(&mut bytes)
+        .map_err(|_| "native local readiness reply failed")?;
     if n < 12 || !bytes[..n].starts_with(b"HTTP/1.") {
         return Err("native local application response invalid");
     }
@@ -226,7 +233,10 @@ pub fn start_installed_application(
         .map_err(|_| "cannot start verified native Minglefield application")?;
     let pid = child.id();
     let startup = (|| -> Result<u16, &'static str> {
-        let stdout = child.stdout.take().ok_or("native readiness pipe unavailable")?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or("native readiness pipe unavailable")?;
         let (sender, receiver) = mpsc::sync_channel(1);
         std::thread::spawn(move || {
             let mut reader = stdout;
@@ -249,10 +259,15 @@ pub fn start_installed_application(
             "login_password": null
         });
         {
-            let mut stdin = child.stdin.take().ok_or("native private stdin unavailable")?;
+            let mut stdin = child
+                .stdin
+                .take()
+                .ok_or("native private stdin unavailable")?;
             serde_json::to_writer(&mut stdin, &frame)
                 .map_err(|_| "cannot deliver native database secret")?;
-            stdin.flush().map_err(|_| "cannot flush native database secret")?;
+            stdin
+                .flush()
+                .map_err(|_| "cannot flush native database secret")?;
         }
         let reply = receiver
             .recv_timeout(TIMEOUT)

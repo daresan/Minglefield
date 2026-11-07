@@ -12,6 +12,7 @@ on:
       - "installer/gui/package.json"
       - "installer/gui/package-lock.json"
       - "installer/crates/installer-core/src/lib.rs"
+      - "installer/crates/installer-core/src/managed_alpha_install.rs"
       - "installer/crates/installer-core/Cargo.toml"
       - ".github/workflows/installer-gui-native.yml"
   pull_request:

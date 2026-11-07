@@ -66,8 +66,7 @@ pub fn success_v3(
     config: &minglefield_installer_core::config_v3::InstallerConfigV3,
     plan: &InstallPlan,
 ) -> String {
-    success_v2(&config.base, plan)
-        .replace("\"config_version\":2", "\"config_version\":3")
+    success_v2(&config.base, plan).replace("\"config_version\":2", "\"config_version\":3")
 }
 
 pub fn failure(code: u8, message: &str) -> String {
@@ -121,15 +120,13 @@ mod tests {
 
     #[test]
     fn v3_plan_preview_never_serializes_administrator_authored_secret() {
-        let config = minglefield_installer_core::config_v3::InstallerConfigV3::parse(
-            concat!(
-                "version=3\ninstall_optional_conda=false\n",
-                "install_optional_comfyui=false\nexplicit_optional_consent=false\n",
-                "install_optional_git=false\ninstall_optional_gh=false\n",
-                "offer_gh_login=false\nconsent_git=false\nconsent_gh=false\n",
-                "consent_login=false\ndb_password=SecretNotForPlan9!\n"
-            ),
-        )
+        let config = minglefield_installer_core::config_v3::InstallerConfigV3::parse(concat!(
+            "version=3\ninstall_optional_conda=false\n",
+            "install_optional_comfyui=false\nexplicit_optional_consent=false\n",
+            "install_optional_git=false\ninstall_optional_gh=false\n",
+            "offer_gh_login=false\nconsent_git=false\nconsent_gh=false\n",
+            "consent_login=false\ndb_password=SecretNotForPlan9!\n"
+        ))
         .unwrap();
         let plan = config
             .preview(minglefield_installer_core::Mode::Silent)

@@ -79,7 +79,12 @@ mod tests {
         {
             let connection = Connection::open(&ciphertext).unwrap();
             connection.pragma_update(None, "key", "StrongKey123!").unwrap();
-            connection.execute_batch("CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY, disabled INTEGER); INSERT INTO alpha_users VALUES('mingleadmin',0);").unwrap();
+            connection
+                .execute_batch(
+                    "CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY, disabled INTEGER);
+                     INSERT INTO alpha_users VALUES('mingleadmin',0);",
+                )
+                .unwrap();
         }
         {
             let connection = Connection::open(&plaintext).unwrap();
@@ -133,23 +138,35 @@ mod tests {
             "AnotherStrongKey19!",
             &[],
             EXPERIMENTAL_COPY_CONFIRMATION,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(result.destination_created && result.encrypted_destination_verified);
         assert_eq!(std::fs::read(&source).unwrap(), before);
         assert_eq!(std::fs::read(&backup).unwrap(), before);
-        let copied = Connection::open_with_flags(&destination, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let copied =
+            Connection::open_with_flags(&destination, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         copied.pragma_update(None, "key", "AnotherStrongKey19!").unwrap();
-        let host: String = copied.query_row(
-            "SELECT host_id FROM sec01_host_owners WHERE owner_id='mingleadmin'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let host: String = copied
+            .query_row(
+                "SELECT host_id FROM sec01_host_owners WHERE owner_id='mingleadmin'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(host, "local.stable");
         drop(copied);
-        assert!(create_reviewed_encrypted_database_copy(
-            &source, &destination, &backup, "ExistingKey9!", "AnotherStrongKey19!", &[],
-            EXPERIMENTAL_COPY_CONFIRMATION,
-        ).is_err());
+        assert!(
+            create_reviewed_encrypted_database_copy(
+                &source,
+                &destination,
+                &backup,
+                "ExistingKey9!",
+                "AnotherStrongKey19!",
+                &[],
+                EXPERIMENTAL_COPY_CONFIRMATION,
+            )
+            .is_err()
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

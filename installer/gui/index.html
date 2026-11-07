@@ -20,7 +20,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 </section><section class="wizard-page" data-wizard-page="optional" hidden><h2>Optional installations</h2><p class="help">Optional components are disabled by default. Selection only; no installation starts here.</p><fieldset><legend>Development tools</legend><label><input type="checkbox" id="optional-git" style="width:auto"> Git</label><label><input type="checkbox" id="consent-git" style="width:auto"> Approve Git installation</label><label><input type="checkbox" id="optional-gh" style="width:auto"> GitHub CLI</label><label><input type="checkbox" id="consent-gh" style="width:auto"> Approve GitHub CLI installation</label><label><input type="checkbox" id="optional-gh-login" style="width:auto"> Offer GitHub CLI login</label><label><input type="checkbox" id="consent-gh-login" style="width:auto"> Approve login offer</label></fieldset><fieldset><legend>Optional runtimes</legend><label><input type="checkbox" id="optional-conda" style="width:auto"> Conda</label><label><input type="checkbox" id="optional-comfyui" style="width:auto"> ComfyUI</label><label><input type="checkbox" id="consent-runtime" style="width:auto"> Approve selected runtime installations</label><p class="help">Runtime paths remain configurable per Host.</p></fieldset><p class="help" id="optional-status" role="status" aria-live="polite">No optional components selected.</p></section><section class="wizard-page" data-wizard-page="source" hidden><section id="source-discovery"><h2>Existing Minglefield source (read-only)</h2><p class="help">Inspect a directory you select. Recognition does not verify the publisher or enable installation.</p><label for="source-path">Source checkout directory</label><input id="source-path" aria-label="Existing Minglefield source directory" placeholder="Absolute directory path" /><button type="button" class="secondary" id="browse-source-path">Browse folder</button><button type="button" id="inspect-source">Inspect directory</button><pre id="source-result" role="status" aria-live="polite">No directory inspected.</pre></section><section id="data-discovery"><h2>Existing user data (read-only)</h2><p class="help">Inspect the selected directory for known configuration and database candidates, even when it is not a recognized source checkout. No files are changed or imported.</p><button type="button" id="inspect-data">Inspect selected directory</button><button type="button" id="inspect-default-data" class="secondary">Rescan Minglefield app data</button><p class="help">Minglefield application data is inspected automatically at startup, independently of the repository. If multiple databases are found, select one for the future migration preview.</p><div id="database-selection" role="group" aria-label="Detected SQLite databases"></div><button type="button" id="browse-database" class="secondary">Browse database file</button><button type="button" id="inspect-selected-database">Inspect selected database (read-only)</button><fieldset><legend>Database credentials (migration preparation)</legend><label for="existing-db-password">Existing database unlock password (optional for unencrypted SQLite)</label><input id="existing-db-password" type="password" autocomplete="off" spellcheck="false" /><p class="help">The inspector accepts plaintext SQLite without a key and uses this password to unlock SQLCipher databases. Wrong keys are rejected.</p><label for="new-db-password">New encrypted database password</label><input id="new-db-password" type="password" autocomplete="new-password" spellcheck="false" /><label for="confirm-db-password">Confirm new database password</label><input id="confirm-db-password" type="password" autocomplete="new-password" spellcheck="false" /><p class="help" id="new-db-password-status" role="status" aria-live="polite">Minimum 8 characters, one uppercase letter, one digit and one special character. Migration remains disabled.</p></fieldset><pre id="data-result" role="status" aria-live="polite">No user data inspected.</pre></section>
 </section><section class="wizard-page" data-wizard-page="data-review" hidden>
 <h2>Data Review — application database records</h2>
-<p class="help">Loaded application values can be corrected here before migration. The source database remains unchanged. Record transfer is not yet enabled.</p>
+<p class="help">Anwendungswerte können vor dem Anlegen der verschlüsselten Kopie korrigiert werden. Die Quelle bleibt unverändert; die Freigabe der tatsächlichen Kopie erfolgt getrennt.</p>
 <p class="help">Die Daten der geprüften SQLite-Tabellen sind den fünf Fachbereichen zugeordnet und vollständig typisiert bearbeitbar. Änderungen werden nur vorgemerkt. Bitte vertrauliche Werte nicht in Screenshots oder Logs aufnehmen; die isolierten Migrationsprüfungen erzwingen Datenbankkonsistenz.</p>
 <div class="mode" role="group" aria-label="Application data categories">
 <button type="button" class="secondary" id="data-tab-login">Anmeldung</button>
@@ -38,7 +38,7 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <section id="data-editor-all" hidden><h3>Sonstige DB-Tabellen</h3>
 <p class="help">Nur Tabellen, die keinem der fünf Fachbereiche zugeordnet werden können, erscheinen hier. Auch Erweiterungstabellen verwenden denselben geprüften Bearbeitungs- und Migrationspfad.</p>
 <div id="data-fields-all"></div></section>
-<p id="data-editor-status" class="help" role="status">No verified records loaded. Migration remains disabled.</p>
+<p id="data-editor-status" class="help" role="status">Keine Datensätze geladen. Vor dem Kopieren Quelle und unabhängige Sicherung prüfen.</p>
 <fieldset id="missing-schema-section" hidden><legend>Fehlende Schemaobjekte – mögliche ältere Datenbankversion</legend>
 <p class="help" id="missing-schema-description" role="status">Fehlende registrierte Schemaobjekte können auf eine ältere Datenbankversion hinweisen. Die Auswahl ist optional. Ergänzungen werden nur auf der neuen isolierten SQLCipher-Kopie ausgeführt, niemals in der Quelldatenbank. SQLite prüft dabei Abhängigkeiten und vorhandene Daten; bei Konflikten wird die gesamte Auswahl zurückgerollt.</p>
 <div id="missing-schema-choices" role="group" aria-label="Fehlende Schemaobjekte auswählen"></div>
@@ -46,33 +46,39 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <button id="select-no-missing-schema" type="button" class="secondary">Keine Ergänzungen</button>
 <p class="help" id="missing-schema-status" role="status" aria-live="polite">Keine Ergänzungen ausgewählt.</p>
 </fieldset>
-<fieldset><legend>Migration rehearsal (no installation or data writes)</legend>
-<p class="help">Recheck the complete existing Alpha schema and all table row counts. Simulate staged changes on an in-memory snapshot, then roll them back. An existing destination directory is required; it may be the same directory as the source when the new filename differs. Existing files and SQLite sidecar names are rejected; no destination file is created.</p>
-<label for="migration-destination-path">Proposed new encrypted database file (absolute path)</label>
-<input id="migration-destination-path" spellcheck="false" placeholder="Choose a new filename in this or another existing directory" />
-<button id="browse-migration-destination" type="button" class="secondary">Choose destination folder</button>
-<button id="preview-migration-rehearsal" type="button">Verify migration rehearsal (no writes)</button>
-<div id="migration-field-coverage" aria-label="Verified database column coverage" role="region"><p class="help">Column-level coverage appears here after a successful rehearsal. Only schema names, never row contents, are shown.</p></div>
-<pre id="migration-rehearsal-result" role="status" aria-live="polite">No migration rehearsal completed.</pre>
-<fieldset><legend>Temporary encrypted SQLCipher disk test — explicit action</legend>
-<p class="help">Uses the new encrypted database password already entered and confirmed on Step 3 — no second password entry. The copy is created in a private OS-temporary directory, reopened, compared with the vetted staged changes and deleted. The source and proposed final destination remain untouched.</p>
-<button type="button" id="verify-temporary-sqlcipher">Test encrypted temporary disk copy (create, verify, delete)</button>
-<pre id="temporary-sqlcipher-result" role="status" aria-live="polite">No temporary encrypted disk-copy test performed.</pre>
+<fieldset id="migration-target-controls"><legend>Verschlüsseltes Datenbankziel festlegen</legend>
+<p class="help">Wähle eine neue, noch nicht vorhandene SQLCipher-Datei. Das übergeordnete Verzeichnis darf bei einer Neuinstallation noch fehlen und wird erst beim autorisierten Kopiervorgang angelegt. Die ursprüngliche Datenbank und die separate Sicherung bleiben unverändert. Du darfst denselben Dateinamen wie in einem anderen Quellverzeichnis verwenden.</p>
+<label for="migration-destination-path">Neue verschlüsselte SQLCipher-Datenbankdatei (absoluter Pfad)</label>
+<input id="migration-destination-path" spellcheck="false" placeholder="Neuer freier Dateipfad – auch in einem noch nicht existierenden Verzeichnis" />
+<button id="browse-migration-destination" type="button" class="secondary">Vorhandenen übergeordneten Ordner auswählen</button>
+</fieldset>
+<details id="optional-migration-diagnostics">
+<summary>Optionale Diagnose für Entwickler: Migrationsprobe und temporäre Testkopie</summary>
+<fieldset><legend>Nur für Fehleranalyse – nicht zum Installieren erforderlich</legend>
+<p class="help">Die echte SQLCipher-Kopie verifiziert Quelle, unabhängiges Backup, Daten und Verschlüsselung eigenständig. Die folgenden optionalen Tests legen keine endgültige Datenbank an und können übersprungen werden.</p>
+<button id="preview-migration-rehearsal" type="button" class="secondary">Optionale Migrationsprobe (keine Zieldatei)</button>
+<div id="migration-field-coverage" aria-label="Verified database column coverage" role="region"><p class="help">Zusätzliche Feldübersicht nach der optionalen Migrationsprobe.</p></div>
+<pre id="migration-rehearsal-result" role="status" aria-live="polite">Keine zusätzliche Migrationsprobe erforderlich.</pre>
+<fieldset><legend>Optionaler temporärer SQLCipher-Test</legend>
+<p class="help">Erstellt eine temporäre verschlüsselte Testkopie, verifiziert und löscht sie. Verwendet das auf Seite 3 eingegebene neue Datenbankpasswort, ohne es erneut abzufragen. Nur für die Diagnose erforderlich.</p>
+<button type="button" id="verify-temporary-sqlcipher" class="secondary">Optionale temporäre SQLCipher-Testkopie</button>
+<pre id="temporary-sqlcipher-result" role="status" aria-live="polite">Keine zusätzliche temporäre Testkopie erforderlich.</pre>
 </fieldset>
 </fieldset>
-</section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">Review the effective paths, database and security settings, then validate the combined installation and migration plan. Execution remains unavailable until the migration core is verified.</p><div class="mode" role="group" aria-label="Review categories">
+</details>
+</section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">Pfade und Passwörter prüfen. Eine echte verschlüsselte Kopie, Anwendungsinstallation und lokale Host-Einrichtung können anschließend jeweils ausdrücklich bestätigt werden. Optionale Entwicklerdiagnosen sind dafür nicht erforderlich.</p><div class="mode" role="group" aria-label="Review categories">
 <button type="button" class="secondary" id="review-tab-paths">Paths</button>
 <button type="button" class="secondary" id="review-tab-database">Database</button>
 <button type="button" class="secondary" id="review-tab-security">Security</button>
 </div>
 <section id="review-paths"><label for="review-install-dir">Installation directory</label><input id="review-install-dir" />
 <label for="review-data-dir">Persistent data directory</label><input id="review-data-dir" />
-<label for="review-source-dir">Source checkout directory</label><input id="review-source-dir" />
+<label for="review-source-dir">Optionales Quellcode-Verzeichnis (für die Installation nicht erforderlich)</label><input id="review-source-dir" />
 <p class="help" id="review-paths-status" role="status" aria-live="polite">Review the effective paths for the chosen setup mode.</p></section>
 <section id="review-database" hidden><label for="review-database-path">Selected existing database</label><input id="review-database-path" readonly />
 <pre id="review-database-summary">No database inspected yet.</pre><h3>Staged application data corrections</h3><div id="review-data-corrections" role="status" aria-live="polite">No verified application records loaded for review.</div>
-<p class="help" id="review-migration-rehearsal-status">No verified migration rehearsal yet. Execution remains disabled.</p><p class="help">The source database remains read-only. Corrections on the Data Review page are staged for future migration.</p></section>
-<section id="review-security" hidden><p id="review-security-summary" class="help">Database encryption and migration are not yet enabled.</p></section>
+<p class="help" id="review-migration-rehearsal-status">Optionale Migrationsprobe noch nicht ausgeführt. Für die echte Kopie nicht erforderlich.</p><p class="help">Die Originaldatenbank bleibt unverändert. Ausgewählte Änderungen werden erst beim freigegebenen Erstellen der neuen SQLCipher-Datenbank übernommen.</p></section>
+<section id="review-security" hidden><p id="review-security-summary" class="help">Neue SQLCipher-Datenbank und lokale Host-Einrichtung müssen ausdrücklich bestätigt werden.</p></section>
 <fieldset id="experimental-copy-controls"><legend>Experimental encrypted database copy — explicit permission required</legend>
 <p class="help">Diese Aktion erstellt direkt die verschlüsselte Datenbank. Vorherige Testdatenbanken und Probeprüfungen sind dafür nicht erforderlich. This action creates a REAL new encrypted SQLCipher file at the selected migration destination. It does not install Minglefield, replace the source database, authorize a Host, or activate the application. Use only controlled tests or data with a separate verified backup. Back up the original database while it is stopped; a separate filename is not automatically a valid backup. The Rust core checks the backup's contents and physical file identity before any destination publication.</p>
 <label for="experimental-backup-path">Existing separate source database backup (absolute file path)</label>
@@ -117,5 +123,5 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 </fieldset>
 <h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
-<small>Optional runtimes and Host provisioning are disabled by default. This is a non-installing preview; publisher trust and execution are not implemented.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>
+<small>Optionale Fremd-Runtimes bleiben deaktiviert. Datenbankkopie, Anwendungsdateien und lokale Host-Einrichtung benötigen jeweils eine eigene Bestätigung. Allgemeine Updates und der automatische Anwendungsstart folgen später.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>
 </main><script type="module" src="/main.js"></script></body></html>

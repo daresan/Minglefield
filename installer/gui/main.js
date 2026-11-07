@@ -377,7 +377,7 @@ function invalidateMigrationRehearsal() {
   document.querySelector("#migration-rehearsal-result").textContent =
     "Optionale Probe; die eigentliche Migration führt die wichtigen Prüfungen selbst aus.";
   document.querySelector("#review-migration-rehearsal-status").textContent =
-    "No current verified migration rehearsal. Execution remains disabled.";
+    "Optionale Migrationsprobe noch nicht ausgeführt. Die eigentliche Datenbankkopie führt die notwendigen Prüfungen selbst aus.";
 }
 function resetDatabaseReview() {
   reviewRequestSequence += 1;
@@ -511,7 +511,7 @@ async function inspectSelectedSqlite() {
       (objectAudit.missingObjects?.length
         ? " Fehlende Schemaobjekte können auf eine ältere Version hinweisen; optionale Ergänzung auswählen."
         : "") +
-      " Unrecognized extensions are listed separately. Full application installation remains disabled.";
+      " Erweiterungsobjekte werden erhalten; die Anwendungsinstallation erfordert eine eigene Freigabe.";
   } catch (error) {
     if (requestSequence !== reviewRequestSequence || selectedDatabase !== path) return;
     retainedSourceUnlockPassword = "";
@@ -610,13 +610,13 @@ document.querySelector("#preview-migration-rehearsal").addEventListener("click",
       preview.fieldCoverage.reduce((sum, entry) => sum + entry.protectedColumns.length, 0) +
       " protected). Full in-memory copy verified for " + preview.verifiedRowCount +
       " rows across " + preview.verifiedTableCount + " tables. No encrypted destination created. " +
-      "Migration execution disabled.";
+      "Dies ist nur die zusätzliche optionale Probe; die echte SQLCipher-Kopie kann unabhängig bestätigt werden.";
   } catch (error) {
     if (requestSequence !== rehearsalRequestSequence) return;
     document.querySelector("#migration-field-coverage").replaceChildren();
     migrationResult.textContent = "Migration rehearsal rejected: " + String(error);
     document.querySelector("#review-migration-rehearsal-status").textContent =
-      "Migration rehearsal rejected. Migration execution remains disabled.";
+      "Optionale Migrationsprobe fehlgeschlagen. Die echte SQLCipher-Kopie verfügt über unabhängige Sicherheitsprüfungen.";
   }
 });
 
@@ -994,13 +994,13 @@ function refreshReview() {
         : " Encrypted temporary copy has not been verified.") +
       (lastExperimentalCopy && lastExperimentalCopy.destinationPath ===
         lastMigrationRehearsal.destinationPath
-        ? " Experimental encrypted copy created at the approved destination; full Minglefield installation and Host provisioning remain disabled."
-        : " No final destination file created by the rehearsal. Full Minglefield installation remains disabled.");
+        ? " Verschlüsselte Datenbank angelegt. Danach Anwendungsdateien installieren und lokalen Host separat bestätigen."
+        : " Bei der Probe wurde keine Zieldatei angelegt. Die echte Kopie benötigt eine separate Freigabe.");
   }
   document.querySelector("#review-security-summary").textContent =
     "SQLCipher is mandatory for fresh installs and legacy imports. Destination password: " +
     validateDestinationPassword(newDbPassword.value, confirmDbPassword.value).message +
-    " Full application installation and Host provisioning remain disabled. " +
+    " Die App-Installation und lokale Host-Einrichtung müssen jeweils separat freigegeben werden. " +
     "An experimental encrypted database copy requires separate approval and verified backup. No passwords are displayed.";
 }
 for (const [reviewId, sourceId, configKey, overrideKey] of [
@@ -1065,7 +1065,7 @@ function showWizardPage(index) {
   if (wizardPages[index].dataset.wizardPage === "data-review") {
     document.querySelector("#data-editor-status").textContent = editedFullDb
       ? "Loaded " + editedFullDb.tables.length +
-        " complete SQLite table(s) for domain-based editing. Migration execution remains disabled."
+        " vollständige SQLite-Tabellen zur Bearbeitung geladen. Die Quelldaten bleiben bis zur Freigabe unverändert."
       : selectedDatabase
         ? "Inspect the selected database to load all application values. Migration remains blocked."
         : "Fresh installation: application defaults and encrypted database creation are not yet implemented.";

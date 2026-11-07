@@ -57,10 +57,18 @@ impl LocalSetupAction {
                 flag_value(args, "--local-host-id", &mut self.input.local_host_id)?;
             }
             "--login-password" => {
-                flag_value(args, "--login-password", &mut self.input.login_password.literal)?;
+                flag_value(
+                    args,
+                    "--login-password",
+                    &mut self.input.login_password.literal,
+                )?;
             }
             "--login-password-file" => {
-                flag_value(args, "--login-password-file", &mut self.input.login_password.file)?;
+                flag_value(
+                    args,
+                    "--login-password-file",
+                    &mut self.input.login_password.file,
+                )?;
             }
             "--confirm-local-admin" => {
                 flag_value(args, "--confirm-local-admin", &mut self.input.confirmation)?;
@@ -107,17 +115,23 @@ impl LocalSetupAction {
             || db.copy_confirmation.is_some()
             || !db.schema_additions.is_empty()
         {
-            return Err((2, "local setup cannot import an existing database or Host".into()));
+            return Err((
+                2,
+                "local setup cannot import an existing database or Host".into(),
+            ));
         }
         if db.new_db_confirmation.as_deref() != Some(NEW_ENCRYPTED_DATABASE_CONFIRMATION)
             || host.confirmation.as_deref() != Some(LOCAL_ADMIN_CONFIRMATION)
         {
-            return Err((2, "explicit new database and local Host consent required".into()));
+            return Err((
+                2,
+                "explicit new database and local Host consent required".into(),
+            ));
         }
-        let database = db.database_path.as_deref().ok_or((
-            2,
-            "fresh local setup requires --database".to_owned(),
-        ))?;
+        let database = db
+            .database_path
+            .as_deref()
+            .ok_or((2, "fresh local setup requires --database".to_owned()))?;
         let database = Path::new(database);
         let login_user = host.login_user_id.as_deref().unwrap_or("mingleadmin");
         if !valid_login_name(login_user) {
@@ -139,7 +153,10 @@ impl LocalSetupAction {
             }
         };
         if frame.db_password.is_some() {
-            return Err((2, "fresh local Host setup does not accept an old DB key".into()));
+            return Err((
+                2,
+                "fresh local Host setup does not accept an old DB key".into(),
+            ));
         }
         let cipher_key = db
             .new_password
@@ -155,7 +172,12 @@ impl LocalSetupAction {
                 env::var("MINGLEFIELD_LOGIN_PASSWORD").ok(),
                 frame.login_password.as_deref(),
             )
-            .map_err(|_| (3, "invalid or conflicting local login secret sources".into()))?
+            .map_err(|_| {
+                (
+                    3,
+                    "invalid or conflicting local login secret sources".into(),
+                )
+            })?
             .ok_or((3, "local login password required".to_owned()))?;
         validate_new_database_password(&cipher_key)
             .map_err(|_| (3, "new SQLCipher key does not meet policy".to_owned()))?;
@@ -165,32 +187,41 @@ impl LocalSetupAction {
             &cipher_key,
             LOCAL_ADMIN_CONFIRMATION,
         )
-        .map_err(|_| (3, "independent approved local login credentials required".to_owned()))?;
+        .map_err(|_| {
+            (
+                3,
+                "independent approved local login credentials required".to_owned(),
+            )
+        })?;
 
         // Preflight the *whole package* before creating an encrypted DB or
         // installing bytes. This digest must be operator trusted; the digest
         // is not a publisher-signature verification.
         verified_inventory(package, expected_inventory_sha256).map_err(|_| {
-            (4, "managed Alpha source inventory verification rejected".to_owned())
+            (
+                4,
+                "managed Alpha source inventory verification rejected".to_owned(),
+            )
         })?;
-        let installed = install_from_verified_root(
-            package,
-            install_dir,
-            expected_inventory_sha256,
-        )
-        .map_err(|_| (4, "verified local Alpha application install rejected".to_owned()))?;
+        let installed = install_from_verified_root(package, install_dir, expected_inventory_sha256)
+            .map_err(|_| {
+                (
+                    4,
+                    "verified local Alpha application install rejected".to_owned(),
+                )
+            })?;
         let installed_root = Path::new(&installed.install_dir);
-        verify_installed_application(installed_root, expected_inventory_sha256)
-            .map_err(|_| (4, "installed Alpha application verification rejected".to_owned()))?;
+        verify_installed_application(installed_root, expected_inventory_sha256).map_err(|_| {
+            (
+                4,
+                "installed Alpha application verification rejected".to_owned(),
+            )
+        })?;
 
         // The DB is created EXCLUSIVELY in this invocation. Existing user
         // identities and already-owned Host databases can never enter here.
-        create_new_encrypted_database(
-            database,
-            &cipher_key,
-            NEW_ENCRYPTED_DATABASE_CONFIRMATION,
-        )
-        .map_err(|_| (4, "fresh local SQLCipher creation rejected".to_owned()))?;
+        create_new_encrypted_database(database, &cipher_key, NEW_ENCRYPTED_DATABASE_CONFIRMATION)
+            .map_err(|_| (4, "fresh local SQLCipher creation rejected".to_owned()))?;
 
         // The first SQLCipher header bytes are a unique, non-secret random
         // salt on a genuinely new database. The derived Host ID is an
@@ -239,7 +270,12 @@ impl LocalSetupAction {
             &login_password,
             &local_host_id,
         )
-        .map_err(|_| (4, "installed local Host first-run authorization rejected".to_owned()))?;
+        .map_err(|_| {
+            (
+                4,
+                "installed local Host first-run authorization rejected".to_owned(),
+            )
+        })?;
         if json {
             println!(
                 "{{\"schema_version\":1,\"status\":\"local_host_admin_created\",\"login_user_id\":\"{}\",\"local_host_id\":\"{}\",\"remote_host_authority_granted\":false,\"application_files_installed\":true,\"encrypted_database_created\":true,\"native_application_launch_enabled\":false,\"full_installation_completed\":false}}",
@@ -267,18 +303,19 @@ mod tests {
         };
         let db = DatabaseAction::default();
         assert_eq!(
-            setup.execute(
-                Path::new("/missing/package"),
-                Path::new("/missing/application"),
-                &"0".repeat(64),
-                None,
-                &db,
-                None,
-                None,
-                true
-            )
-            .unwrap_err()
-            .0,
+            setup
+                .execute(
+                    Path::new("/missing/package"),
+                    Path::new("/missing/application"),
+                    &"0".repeat(64),
+                    None,
+                    &db,
+                    None,
+                    None,
+                    true
+                )
+                .unwrap_err()
+                .0,
             2
         );
     }
@@ -287,7 +324,10 @@ mod tests {
     fn canonical_local_password_parameter_supports_leading_dashes() {
         let mut setup = LocalSetupAction::default();
         assert!(setup
-            .parse("--login-password=--SensitiveLogin9!", &mut std::iter::empty())
+            .parse(
+                "--login-password=--SensitiveLogin9!",
+                &mut std::iter::empty(),
+            )
             .unwrap());
         assert_eq!(
             setup.input.login_password.literal.as_deref(),

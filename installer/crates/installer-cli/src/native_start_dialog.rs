@@ -3,6 +3,13 @@
 //! a database, Host, account or launch server, and never stores a password.
 //! Commands/scripts are compile-time fixed and never contain owner input.
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static STARTUP_DIALOG_OPENED: AtomicBool = AtomicBool::new(false);
+
+pub fn was_opened() -> bool {
+    STARTUP_DIALOG_OPENED.load(Ordering::Relaxed)
+}
 
 const MAX_DIALOG_REPLY: usize = 8192;
 
@@ -178,6 +185,7 @@ fn interpret_reply(kind: DialogKind, status_ok: bool, data: &[u8]) -> Result<Str
 
 pub fn ask(kind: DialogKind) -> Result<String, &'static str> {
     let mut command = dialog_command(kind)?;
+    STARTUP_DIALOG_OPENED.store(true, Ordering::Relaxed);
     command
         .stdin(Stdio::null())
         .stderr(Stdio::null())
@@ -186,6 +194,70 @@ pub fn ask(kind: DialogKind) -> Result<String, &'static str> {
         .output()
         .map_err(|_| "native Minglefield startup dialog could not open")?;
     interpret_reply(kind, result.status.success(), &result.stdout)
+}
+
+/// Show a generic, non-sensitive message only after a *real* GUI unlock
+/// attempt failed. Neither SQLCipher keys, paths, argv nor worker diagnostics
+/// enter GUI command arguments. Scripts and headless operation never call it.
+pub fn show_unlock_error() {
+    const MESSAGE: &str =
+        "Could not open the encrypted database. Check the selected file and SQLCipher password.";
+    #[cfg(windows)]
+    {
+        let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+[void][System.Windows.Forms.MessageBox]::Show(
+    'Could not open the encrypted database. Check the file and SQLCipher password.',
+    'Minglefield', [System.Windows.Forms.MessageBoxButtons]::OK,
+    [System.Windows.Forms.MessageBoxIcon]::Warning)
+"#;
+        let _ = Command::new("powershell.exe")
+            .args(["-NoProfile", "-STA", "-NonInteractive", "-Command", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("/usr/bin/osascript")
+            .args([
+                "-e",
+                r#"display alert "Minglefield" message "Could not open the encrypted database. Check the selected file and SQLCipher password.""#,
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let dialog_path = |name: &str| {
+            ["/usr/bin", "/bin", "/usr/local/bin"]
+                .iter()
+                .map(|dir| std::path::Path::new(dir).join(name))
+                .find(|path| path.is_file())
+        };
+        let mut command = if let Some(path) = dialog_path("zenity") {
+            let mut dialog = Command::new(path);
+            dialog.args(["--error", "--title=Minglefield"]);
+            dialog.arg(format!("--text={MESSAGE}"));
+            Some(dialog)
+        } else if let Some(path) = dialog_path("kdialog") {
+            let mut dialog = Command::new(path);
+            dialog.args(["--error", MESSAGE, "--title", "Minglefield"]);
+            Some(dialog)
+        } else {
+            None
+        };
+        if let Some(dialog) = command.as_mut() {
+            let _ = dialog
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+    }
 }
 
 #[cfg(test)]

@@ -176,8 +176,12 @@ impl DatabaseAction {
             StdinSecrets {
                 db_password: None,
                 new_db_password: None,
+                login_password: None,
             }
         };
+        if input.login_password.is_some() {
+            return Err((2, "login password requires a local Host setup action".to_owned()));
+        }
         let destination = db.database_path.as_deref().ok_or((
             2,
             "--database is required for database operations".to_owned(),

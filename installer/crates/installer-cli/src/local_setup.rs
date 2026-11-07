@@ -209,10 +209,17 @@ impl LocalSetupAction {
             } else {
                 package.join("Minglefield")
             };
-            let metadata = std::fs::symlink_metadata(&native)
-                .map_err(|_| (4, "native Minglefield application not in package".to_owned()))?;
+            let metadata = std::fs::symlink_metadata(&native).map_err(|_| {
+                (
+                    4,
+                    "native Minglefield application not in package".to_owned(),
+                )
+            })?;
             if !metadata.is_file() || metadata.file_type().is_symlink() {
-                return Err((4, "native Minglefield executable is not a regular file".into()));
+                return Err((
+                    4,
+                    "native Minglefield executable is not a regular file".into(),
+                ));
             }
         }
 
@@ -358,7 +365,9 @@ fn probe_native_application(
         let mut stdin = child.stdin.take().ok_or("native stdin unavailable")?;
         serde_json::to_writer(&mut stdin, &frame)
             .map_err(|_| "cannot deliver native private key frame")?;
-        stdin.flush().map_err(|_| "cannot flush private key frame")?;
+        stdin
+            .flush()
+            .map_err(|_| "cannot flush private key frame")?;
     }
     let output = child
         .wait_with_output()
@@ -370,9 +379,17 @@ fn probe_native_application(
         serde_json::from_slice(&output.stdout).map_err(|_| "invalid native readiness response")?;
     if report.get("status").and_then(serde_json::Value::as_str)
         != Some("native_minglefield_startup_verified")
-        || report.get("encryptedDatabase").and_then(serde_json::Value::as_bool) != Some(true)
-        || report.get("hostProvisioningEnabled").and_then(serde_json::Value::as_bool) != Some(false)
-        || report.get("hostClaimBootstrapEnabled").and_then(serde_json::Value::as_bool)
+        || report
+            .get("encryptedDatabase")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        || report
+            .get("hostProvisioningEnabled")
+            .and_then(serde_json::Value::as_bool)
+            != Some(false)
+        || report
+            .get("hostClaimBootstrapEnabled")
+            .and_then(serde_json::Value::as_bool)
             != Some(false)
         || report.get("bind").and_then(serde_json::Value::as_str) != Some("127.0.0.1")
     {

@@ -277,7 +277,10 @@ const INSTALL_ALPHA_CONSENT: &str = "INSTALL MINGLEFIELD ALPHA FILES";
 
 fn check_native_install_consent(confirmation: &str) -> Result<(), String> {
     if confirmation != INSTALL_ALPHA_CONSENT {
-        return Err("Explicit native approval for Alpha application file installation is required".to_owned());
+        return Err(
+            "Explicit native approval for Alpha application file installation is required"
+                .to_owned(),
+        );
     }
     Ok(())
 }

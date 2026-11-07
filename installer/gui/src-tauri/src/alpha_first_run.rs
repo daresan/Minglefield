@@ -102,7 +102,10 @@ impl FirstRunState {
         }
         state.spent = true;
         Ok(ActivationPermit {
-            database: state.database.take().ok_or("Missing current-session database")?,
+            database: state
+                .database
+                .take()
+                .ok_or("Missing current-session database")?,
             application: state
                 .application
                 .take()
@@ -160,8 +163,7 @@ fn activate_with_permit(
         return Err("New encrypted database changed before activation".to_owned());
     }
     let (current_digest, size) = sha256_reader_hex(
-        File::open(&permit.database.path)
-            .map_err(|_| "Cannot reopen new encrypted database")?,
+        File::open(&permit.database.path).map_err(|_| "Cannot reopen new encrypted database")?,
     )
     .map_err(|_| "Cannot verify new encrypted database")?;
     if size < 16 || current_digest != permit.database.digest {
@@ -172,8 +174,8 @@ fn activate_with_permit(
     crate::alpha_application_install::verify_installed_application(&permit.application, expected)?;
     let (python, worker) = runtime_paths(&permit.application);
     for path in [&python, &worker] {
-        let meta = fs::symlink_metadata(path)
-            .map_err(|_| "Managed Alpha first-run executable missing")?;
+        let meta =
+            fs::symlink_metadata(path).map_err(|_| "Managed Alpha first-run executable missing")?;
         if !meta.is_file() || meta.file_type().is_symlink() {
             return Err("Managed Alpha first-run executable is not a regular file".to_owned());
         }
@@ -196,8 +198,8 @@ fn activate_with_permit(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| "Could not start trusted local first-run worker")?;
-    let payload = serde_json::to_vec(&request)
-        .map_err(|_| "Could not prepare first-run request")?;
+    let payload =
+        serde_json::to_vec(&request).map_err(|_| "Could not prepare first-run request")?;
     let write_ok = child
         .stdin
         .take()
@@ -273,7 +275,9 @@ pub async fn activate_first_run_local_admin(
         || database_password.is_empty()
         || database_password.len() > 4096
     {
-        return Err("Valid separate local first-run credentials and consent are required".to_owned());
+        return Err(
+            "Valid separate local first-run credentials and consent are required".to_owned(),
+        );
     }
     let permit = app.state::<FirstRunState>().consume()?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -291,7 +295,9 @@ mod tests {
     fn no_password_or_unverified_path_can_grant_activation() {
         let state = FirstRunState::default();
         assert!(state.consume().is_err());
-        assert!(state.record_installed_application(Path::new("missing-dir")).is_err());
+        assert!(state
+            .record_installed_application(Path::new("missing-dir"))
+            .is_err());
         assert!(!valid_login_name("../admin"));
         assert!(!valid_login_name(""));
         assert!(valid_login_name("mingleadmin"));
@@ -301,10 +307,7 @@ mod tests {
 
     #[test]
     fn first_run_session_proof_is_consumed_only_once() {
-        let base = std::env::temp_dir().join(format!(
-            "mf-first-run-{}",
-            std::process::id()
-        ));
+        let base = std::env::temp_dir().join(format!("mf-first-run-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         fs::create_dir(&base).unwrap();
         let database = base.join("new-cipher.sqlite3");
@@ -317,15 +320,17 @@ mod tests {
             .is_ok());
         assert!(state.record_installed_application(&installed).is_ok());
         let permit = state.consume().unwrap();
-        assert_eq!(permit.database.operation_id, "0123456789abcdef0123456789abcdef");
+        assert_eq!(
+            permit.database.operation_id,
+            "0123456789abcdef0123456789abcdef"
+        );
         assert_eq!(permit.database.path, fs::canonicalize(&database).unwrap());
         assert_eq!(permit.application, fs::canonicalize(&installed).unwrap());
         assert!(state.consume().is_err());
         assert!(state.record_installed_application(&installed).is_err());
-        assert!(state.record_encrypted_copy(
-            &database,
-            "fedcba9876543210fedcba9876543210"
-        ).is_err());
+        assert!(state
+            .record_encrypted_copy(&database, "fedcba9876543210fedcba9876543210")
+            .is_err());
         fs::remove_dir_all(base).unwrap();
     }
 }

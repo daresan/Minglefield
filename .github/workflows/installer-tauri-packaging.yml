@@ -44,12 +44,35 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - name: Build pinned Python SQLCipher and Alpha application beside portable manager
+      - name: Build pinned OS-native Minglefield starter and managed Alpha runtime
         shell: bash
         run: |
           mkdir -p src-tauri/resources
           rm -rf src-tauri/resources/managed-alpha
-          python -B ../scripts/build_managed_alpha_runtime.py --output src-tauri/resources/managed-alpha
+          # M2.10/M2.11 requires the independent native Minglefield(.exe)
+          # beside the managed Python/SQLCipher runtime. A runtime-only
+          # package would pass the old copy check but could never start.
+          python -B ../scripts/build_native_alpha_application.py --output src-tauri/resources/managed-alpha
+      - name: Verify packaged native application before compiling Setup Manager
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import platform
+          from pathlib import Path
+
+          root = Path("src-tauri/resources/managed-alpha")
+          manifest = json.loads((root / "runtime-manifest.json").read_text(encoding="utf-8"))
+          native = "Minglefield.exe" if platform.system() == "Windows" else "Minglefield"
+          assert manifest["nativeApplicationIncluded"] is True, "missing native application"
+          assert manifest["nativeApplicationExecutable"] == native, "unexpected native starter name"
+          executable = root / native
+          assert executable.is_file() and not executable.is_symlink(), "native starter absent"
+          assert executable.stat().st_size > 1024, "native starter incomplete"
+          inventory = json.loads((root / "managed-file-inventory.json").read_text(encoding="utf-8"))
+          assert inventory["files"][native]["type"] == "file", "native starter not inventoried"
+          print("OS-native Minglefield starter inventoried:", native)
+          PY
       - name: Pin bundled managed Alpha inventory digest in Tauri binary
         shell: bash
         run: |
@@ -181,6 +204,12 @@ jobs:
           root = delivered / "managed-alpha"
           if not (root / "runtime-manifest.json").is_file():
               raise SystemExit("downloaded runtime manifest missing")
+          import json
+          manifest = json.loads((root / "runtime-manifest.json").read_text(encoding="utf-8"))
+          if (manifest.get("nativeApplicationIncluded") is not True
+                  or manifest.get("nativeApplicationExecutable") != "Minglefield.exe"
+                  or not (root / "Minglefield.exe").is_file()):
+              raise SystemExit("downloaded native Minglefield.exe is missing")
           count = verify_managed_file_inventory(
               root, os.environ["MINGLEFIELD_ALPHA_INVENTORY_SHA256"])
           if count <= 0:

@@ -17,7 +17,6 @@ import sys
 import threading
 import webbrowser
 
-from build_managed_alpha_runtime import verify_managed_file_inventory
 
 HEADER = b"SQLite format 3\x00"
 MAX_MANIFEST = 64 * 1024
@@ -75,6 +74,9 @@ def inspect_installed_alpha(install_dir, database_path):
         return file
     interpreter = member("pythonExecutable")
     entrypoint = member("applicationEntrypoint")
+    # Import lazily: the build-time runtime smoke test also reuses this
+    # launcher without introducing a cyclic build/launch import.
+    from build_managed_alpha_runtime import verify_managed_file_inventory
     count = verify_managed_file_inventory(install, digest)
     return interpreter, entrypoint, database, count
 

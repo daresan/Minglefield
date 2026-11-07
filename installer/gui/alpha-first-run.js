@@ -84,6 +84,9 @@ export function classifyImportedAlphaAuthorization(review) {
       executors?.rows.length > 0) {
     return "existing_identity_or_host";
   }
-  if (!users || !owners || !executors) return "unverified";
+  // A verified legacy source may predate all three standard auth tables.
+  // If its full table inventory is valid and no auth/Host rows exist, the
+  // original first-run worker may initialize the missing schema normally.
+  if (review.tables.length === 0) return "unverified";
   return "empty_first_run";
 }

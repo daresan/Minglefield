@@ -122,7 +122,13 @@ body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;pa
 <button type="button" id="activate-alpha-first-run">Lokalen Host und Administrator einrichten</button>
 <pre id="alpha-first-run-result" role="status" aria-live="polite">Erst nach verifizierter Datenbankkopie und Anwendungsdatei-Installation möglich. Keine automatische Host-Übernahme.</pre>
 </fieldset>
+<fieldset id="alpha-native-launch-controls">
+<legend>Installierte Minglefield-Anwendung starten</legend>
+<p class="help">Dieser Start ist unabhängig vom Setup Manager. Er erfordert eine verifizierte SQLCipher-Datenbank und die installierten nativen Anwendungsdateien. Vorhandene Benutzer und Hostberechtigungen werden nicht verändert; eine normale Anmeldung in Minglefield bleibt erforderlich. Der Browser öffnet sich erst nach bestätigtem lokalem Anwendungsstart.</p>
+<button type="button" id="start-native-minglefield" disabled>Installierte Minglefield-Anwendung starten</button>
+<pre id="native-minglefield-start-result" role="status" aria-live="polite">Anwendung noch nicht gestartet. Zuerst verifizierte Datenbank und Anwendungsdateien installieren.</pre>
+</fieldset>
 <h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
 <pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
-<small>Optionale Fremd-Runtimes bleiben deaktiviert. Datenbankkopie, Anwendungsdateien und lokale Host-Einrichtung benötigen jeweils eine eigene Bestätigung. Allgemeine Updates und der automatische Anwendungsstart folgen später.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>
+<small>Optionale Fremd-Runtimes bleiben deaktiviert. Datenbankkopie, Anwendungsdateien und lokale Host-Einrichtung benötigen jeweils eine eigene Bestätigung. Allgemeine Updates und die vollständige Endanwender-Abnahme folgen später.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>
 </main><script type="module" src="/main.js"></script></body></html>

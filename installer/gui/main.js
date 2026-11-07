@@ -14,7 +14,7 @@ import { validateSchemaAdditionSelection } from "./schema-addition-selection.js"
 import { assessReadOnlyRecoveryStatus } from "./read-only-recovery-status.js";
 import { prepareReadOnlyRecoveryRequest } from "./read-only-recovery-request.js";
 import { prepareAlphaApplicationInstall, verifyAlphaApplicationInstallResult } from "./alpha-application-install.js";
-import { prepareLocalFirstRun, verifyLocalFirstRunResult, classifyImportedAlphaAuthorization } from "./alpha-first-run.js";
+import { prepareLocalFirstRun, verifyLocalFirstRunResult, classifyImportedAlphaAuthorization, prepareInstalledNativeStart, verifyRunningNativeResult } from "./alpha-first-run.js";
 const destination = document.querySelector("#destination");
 const dataDirectory = document.querySelector("#data-directory");
 const configText = document.querySelector("#config");
@@ -778,6 +778,7 @@ document.querySelector("#create-experimental-copy").addEventListener("click", as
       throw new Error("Unexpected experimental migration response; inspect destination manually.");
     }
     lastExperimentalCopy = { ...proof, destinationPath: request.destinationPath };
+    updateNativeLaunchAvailability();
     experimentalResult.textContent = "EXPERIMENTAL COPY CREATED. Minglefield application not installed. " +
       "Source and verified backup remain unchanged.\n" +
       JSON.stringify({ ...proof, destinationPath: request.destinationPath }, null, 2);
@@ -876,11 +877,13 @@ alphaFilesButton.addEventListener("click", async () => {
     const checked = verifyAlphaApplicationInstallResult(response);
     installedAlphaFiles = { ...checked };
     updateFirstRunGuidance();
+    updateNativeLaunchAvailability();
     alphaFilesResult.textContent = "Minglefield-Alpha-Anwendungsdateien kopiert: " +
       checked.installedEntries + " geprüfte Einträge in " + checked.installDir +
       ". Die Benutzer- und Host-Einrichtung sowie der Anwendungsstart sind weiterhin getrennt.";
   } catch (error) {
     installedAlphaFiles = null;
+    updateNativeLaunchAvailability();
     alphaFilesResult.textContent = "Keine bestätigte vollständige Dateiinstallation: " +
       String(error) + ". Ein eventuell angelegter neuer Zielordner darf " +
       "nicht automatisch überschrieben oder entfernt werden. Für einen neuen Versuch " +
@@ -901,6 +904,29 @@ const firstRunConsent = document.querySelector("#alpha-first-run-consent");
 const firstRunNativeProbe = document.querySelector("#alpha-first-run-native-probe");
 const firstRunResult = document.querySelector("#alpha-first-run-result");
 const firstRunButton = document.querySelector("#activate-alpha-first-run");
+const nativeLaunchButton = document.querySelector("#start-native-minglefield");
+const nativeLaunchResult = document.querySelector("#native-minglefield-start-result");
+let activatedHostDatabase = null;
+let nativeLaunchBusy = false;
+let nativeLaunchStarted = false;
+
+function nativeHostReady() {
+  const state = classifyImportedAlphaAuthorization(editedFullDb);
+  return state === "existing_host_authorization" ||
+    state === "existing_identity_or_host" ||
+    activatedHostDatabase === migrationDestinationInput.value.trim();
+}
+function updateNativeLaunchAvailability() {
+  const current = migrationDestinationInput.value.trim();
+  nativeLaunchButton.disabled = nativeLaunchBusy || nativeLaunchStarted ||
+    lastExperimentalCopy?.status !== "experimental_encrypted_copy_created" ||
+    lastExperimentalCopy.destinationPath !== current ||
+    installedAlphaFiles?.status !== "alpha_application_files_installed" ||
+    !nativeHostReady() || !newDbPassword.value;
+}
+newDbPassword.addEventListener("input", updateNativeLaunchAvailability);
+migrationDestinationInput.addEventListener("input", updateNativeLaunchAvailability);
+
 function updateFirstRunGuidance() {
   const state = classifyImportedAlphaAuthorization(editedFullDb);
   const existing = state === "existing_host_authorization" ||
@@ -970,6 +996,8 @@ firstRunButton.addEventListener("click", async () => {
     const result = verifyLocalFirstRunResult(
       response, request.loginUserId, request.verifyNativeStart
     );
+    activatedHostDatabase = migrationDestinationInput.value.trim();
+    updateNativeLaunchAvailability();
     firstRunResult.textContent =
       "LOKALER HOST EINGERICHTET: " + result.localHostId +
       "\nAnmeldung: " + result.loginUserId +
@@ -990,6 +1018,46 @@ firstRunButton.addEventListener("click", async () => {
     firstRunNativeProbe.checked = false;
     firstRunBusy = false;
     firstRunButton.disabled = false;
+  }
+});
+
+
+nativeLaunchButton.addEventListener("click", async () => {
+  if (nativeLaunchBusy || nativeLaunchStarted || nativeLaunchButton.disabled) return;
+  let request;
+  try {
+    request = prepareInstalledNativeStart({
+      reviewedCopy: lastExperimentalCopy,
+      installedFiles: installedAlphaFiles,
+      currentDestination: migrationDestinationInput.value.trim(),
+      databasePassword: newDbPassword.value,
+      hostReady: nativeHostReady()
+    });
+  } catch (error) {
+    nativeLaunchResult.textContent = String(error);
+    return;
+  }
+  nativeLaunchBusy = true;
+  updateNativeLaunchAvailability();
+  nativeLaunchResult.textContent = "Prüfe die native Installation und starte Minglefield…";
+  try {
+    // Only the Tauri backend chooses the current-session verified paths.
+    // No account login password or requested Host authority is sent.
+    const answer = await invoke("start_installed_minglefield", request);
+    const running = verifyRunningNativeResult(answer);
+    nativeLaunchStarted = true;
+    nativeLaunchResult.textContent =
+      "MINGLEFIELD LÄUFT unabhängig vom Setup Manager.\n" +
+      "Lokale Adresse: " + running.url + "\n" +
+      "Prozess-ID: " + running.processId + "\n" +
+      "Der Setup Manager kann geschlossen werden. Die Anmeldung erfolgt in Minglefield.";
+  } catch (error) {
+    nativeLaunchResult.textContent =
+      "Unabhängiger Minglefield-Start nicht bestätigt: " + String(error) +
+      ". Bestehende Daten und Hostberechtigungen bleiben erhalten.";
+  } finally {
+    nativeLaunchBusy = false;
+    updateNativeLaunchAvailability();
   }
 });
 

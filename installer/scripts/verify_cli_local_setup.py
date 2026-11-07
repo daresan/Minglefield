@@ -28,6 +28,27 @@ def fingerprint(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def run_cli_without_inherited_output_pipes(command, input_frame, timeout):
+    """Keep a lasting child from retaining Windows stdout/stderr capture pipes.
+
+    Temporary regular files permit bounded installer process completion even if
+    a detached native application holds inherited handles. Returned diagnostics
+    are still inspected for forbidden credentials and never printed verbatim.
+    """
+    with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as out, (
+            tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as err):
+        result = subprocess.run(
+            command, input=input_frame, stdout=out, stderr=err,
+            encoding="utf-8", errors="replace", timeout=timeout,
+            check=False,
+        )
+        out.seek(0)
+        err.seek(0)
+        return subprocess.CompletedProcess(
+            command, result.returncode, stdout=out.read(), stderr=err.read()
+        )
+
+
 def run_smoke(package, *, require_native=False):
     package = package.resolve(strict=True)
     manifest = json.loads((package / "runtime-manifest.json").read_text(encoding="utf-8"))
@@ -64,10 +85,8 @@ def run_smoke(package, *, require_native=False):
             "login_password": TEST_LOGIN,
         })
         assert TEST_DB_KEY not in command and TEST_LOGIN not in command
-        completed = subprocess.run(
-            command, input=secrets_frame, encoding="utf-8", errors="replace",
-            capture_output=True, timeout=300,
-            check=False,
+        completed = run_cli_without_inherited_output_pipes(
+            command, secrets_frame, timeout=300
         )
         assert TEST_DB_KEY not in completed.stdout + completed.stderr
         assert TEST_LOGIN not in completed.stdout + completed.stderr
@@ -321,9 +340,8 @@ assert store.principal("Bearer " + authorization) is not None
 
         prior_db = fingerprint(database)
         prior_inventory = fingerprint(installed / "managed-file-inventory.json")
-        again = subprocess.run(
-            command, input=secrets_frame, encoding="utf-8", errors="replace",
-            capture_output=True, timeout=120, check=False,
+        again = run_cli_without_inherited_output_pipes(
+            command, secrets_frame, timeout=120
         )
         assert again.returncode != 0, "repeated local first-run setup was accepted"
         assert fingerprint(database) == prior_db

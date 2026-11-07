@@ -636,6 +636,7 @@ fn main() {
             migration_review::inspect_interrupted_encrypted_copy_status,
             alpha_application_install::install_alpha_application,
             alpha_first_run::activate_first_run_local_admin,
+            alpha_first_run::start_installed_minglefield,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

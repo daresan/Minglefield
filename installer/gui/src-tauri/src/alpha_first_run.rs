@@ -2,6 +2,7 @@
 //! The HTTP gateway must never expose this capability. Only verified outcomes
 //! from this process's native encrypted-copy and application-file writers can
 //! arm an activation; neither an IPC-supplied path nor a DB password alone can.
+use minglefield_installer_core::db_operations::verify_encrypted_database;
 use minglefield_installer_core::integrity::sha256_reader_hex;
 #[cfg(test)]
 use minglefield_installer_core::local_first_run_worker::valid_login_name;
@@ -10,7 +11,8 @@ use minglefield_installer_core::local_first_run_worker::{
 };
 use minglefield_installer_core::managed_alpha_install::verify_installed_application;
 use minglefield_installer_core::native_application_probe::{
-    ensure_native_starter, probe_installed_application,
+    ensure_native_starter, probe_installed_application, start_installed_application,
+    NativeRunningReceipt,
 };
 use serde::Serialize;
 use std::fs::{self, File};
@@ -27,6 +29,10 @@ pub struct FirstRunState {
 struct FirstRunPending {
     database: Option<VerifiedDatabase>,
     application: Option<PathBuf>,
+    // Retain verified launch context after one-time first-run consumption.
+    launch_database: Option<PathBuf>,
+    launch_in_progress: bool,
+    launched: bool,
     active: bool,
     consumed_operations: std::collections::BTreeSet<String>,
 }
@@ -79,6 +85,8 @@ impl FirstRunState {
         {
             return Err("First-run copy already recorded".to_owned());
         }
+        state.launch_database = Some(canonical.clone());
+        state.launched = false;
         state.database = Some(VerifiedDatabase {
             path: canonical,
             digest,
@@ -99,14 +107,43 @@ impl FirstRunState {
             .inner
             .lock()
             .map_err(|_| "First-run authorization state unavailable".to_owned())?;
-        if state.active {
-            return Err("First-run worker is currently active".to_owned());
+        if state.active || state.launch_in_progress {
+            return Err("First-run or native launch currently active".to_owned());
         }
         if state.application.as_ref() == Some(&canonical) {
             return Err("Application installation already recorded".to_owned());
         }
         state.application = Some(canonical);
         Ok(())
+    }
+
+    fn begin_launch(&self) -> Result<(PathBuf, PathBuf), String> {
+        let mut state = self
+            .inner
+            .lock()
+            .map_err(|_| "Native launch state unavailable".to_owned())?;
+        if state.active || state.launch_in_progress || state.launched {
+            return Err("First-run or native launch already active or completed".to_owned());
+        }
+        let database = state
+            .launch_database
+            .clone()
+            .ok_or("Verified current-session encrypted copy required")?;
+        let application = state
+            .application
+            .clone()
+            .ok_or("Verified current-session application installation required")?;
+        state.launch_in_progress = true;
+        Ok((application, database))
+    }
+
+    fn finish_launch(&self, success: bool) {
+        if let Ok(mut state) = self.inner.lock() {
+            state.launch_in_progress = false;
+            if success {
+                state.launched = true;
+            }
+        }
     }
 
     fn validate_native_starter(&self) -> Result<(), String> {
@@ -134,7 +171,7 @@ impl FirstRunState {
                 .inner
                 .lock()
                 .map_err(|_| "First-run authorization state unavailable")?;
-            if state.active || state.database.is_none() || state.application.is_none() {
+            if state.active || state.launch_in_progress || state.database.is_none() || state.application.is_none() {
                 return Err("Verified local database and application required".into());
             }
             state.database.as_ref().unwrap().path.clone()
@@ -159,7 +196,7 @@ impl FirstRunState {
             .inner
             .lock()
             .map_err(|_| "First-run authorization state unavailable")?;
-        if state.active || state.database.is_none() || state.application.is_none() {
+        if state.active || state.launch_in_progress || state.database.is_none() || state.application.is_none() {
             return Err("Verified current-session copy and installation required".to_owned());
         }
         let database = state.database.take().unwrap();
@@ -287,9 +324,83 @@ pub async fn activate_first_run_local_admin(
     result?
 }
 
+/// Start only the paths recorded by the current verified installation session.
+/// No frontend-selected executable, Host ID, or database path is accepted.
+#[tauri::command]
+pub async fn start_installed_minglefield(
+    app: tauri::AppHandle,
+    database_password: String,
+    confirmation: String,
+) -> Result<NativeRunningReceipt, String> {
+    if confirmation != "START INSTALLED MINGLEFIELD" {
+        return Err("Explicit native Minglefield launch approval required".to_owned());
+    }
+    if database_password.is_empty() {
+        return Err("SQLCipher unlock key required to start native Minglefield".to_owned());
+    }
+    let state = app.state::<FirstRunState>();
+    let (application, database) = state.begin_launch()?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let meta = fs::symlink_metadata(&database)
+            .map_err(|_| "Current-session encrypted database unavailable".to_owned())?;
+        if !meta.is_file() || meta.file_type().is_symlink() {
+            return Err("Current-session encrypted database is not a regular file".to_owned());
+        }
+        let checked = verify_encrypted_database(&database, &database_password)
+            .map_err(|_| "SQLCipher unlock or integrity check rejected".to_owned())?;
+        if !checked.alpha_users_table_present {
+            return Err("Normal application account login not initialized".to_owned());
+        }
+        let expected = option_env!("MINGLEFIELD_ALPHA_INVENTORY_SHA256")
+            .ok_or("Native Setup Manager has no approved application package")?;
+        start_installed_application(&application, &database, &database_password, expected, true)
+            .map_err(str::to_owned)
+    })
+    .await
+    .map_err(|_| "Native Minglefield launch worker failed".to_owned())
+    .and_then(|result| result);
+    state.finish_launch(result.is_ok());
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_launch_requires_verified_current_session_and_rejects_replay() {
+        let root = std::env::temp_dir().join(format!(
+            "mf-launch-state-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).unwrap();
+        let state = FirstRunState::default();
+        assert!(state.begin_launch().is_err());
+        let db = root.join("encrypted.sqlite3");
+        let app = root.join("application");
+        fs::write(&db, b"test-only-fake-sqlcipher-state").unwrap();
+        fs::create_dir(&app).unwrap();
+        state.record_encrypted_copy(&db, "fedcba9876543210fedcba9876543210").unwrap();
+        assert!(state.begin_launch().is_err());
+        state.record_installed_application(&app).unwrap();
+        let (selected_app, selected_db) = state.begin_launch().unwrap();
+        assert_eq!(selected_app, fs::canonicalize(&app).unwrap());
+        assert_eq!(selected_db, fs::canonicalize(&db).unwrap());
+        assert!(state.begin_launch().is_err());
+        assert!(state.consume().is_err());
+        state.finish_launch(false);
+        assert!(state.begin_launch().is_ok());
+        state.finish_launch(true);
+        assert!(state.begin_launch().is_err());
+        let newer = root.join("another.sqlite3");
+        fs::write(&newer, b"test-only-next-sqlcipher-state").unwrap();
+        state.record_encrypted_copy(&newer, "0123456789abcdef0123456789abcdef").unwrap();
+        assert_eq!(state.begin_launch().unwrap().1, fs::canonicalize(&newer).unwrap());
+        state.finish_launch(false);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn no_password_or_unverified_path_can_grant_activation() {

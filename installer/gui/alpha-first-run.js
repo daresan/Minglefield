@@ -95,3 +95,44 @@ export function classifyImportedAlphaAuthorization(review) {
   if (review.tables.length === 0) return "unverified";
   return "empty_first_run";
 }
+
+const RUNNING_FIELDS = [
+  "status", "bind", "port", "processId", "encryptedDatabase",
+  "hostProvisioningEnabled", "hostClaimBootstrapEnabled"
+];
+
+/** Frontend readiness is advisory; Rust session state pins both paths. */
+export function prepareInstalledNativeStart({
+  reviewedCopy, installedFiles, currentDestination,
+  databasePassword, hostReady
+}) {
+  if (reviewedCopy?.status !== "experimental_encrypted_copy_created" ||
+      reviewedCopy.destinationPath !== currentDestination ||
+      installedFiles?.status !== "alpha_application_files_installed" ||
+      hostReady !== true) {
+    throw new Error("Zuerst aktuelle Datenbank, Anwendung und Benutzerzugang prüfen.");
+  }
+  if (typeof databasePassword !== "string" || databasePassword.length === 0) {
+    throw new Error("Das SQLCipher-Datenbankpasswort wird zum Starten benötigt.");
+  }
+  return { databasePassword, confirmation: "START INSTALLED MINGLEFIELD" };
+}
+
+export function verifyRunningNativeResult(response) {
+  if (!response || typeof response !== "object" || Array.isArray(response) ||
+      Object.keys(response).length !== RUNNING_FIELDS.length ||
+      Object.keys(response).some(k => !RUNNING_FIELDS.includes(k)) ||
+      response.status !== "native_minglefield_running" ||
+      response.bind !== "127.0.0.1" ||
+      !Number.isInteger(response.port) || response.port < 1 || response.port > 65535 ||
+      !Number.isInteger(response.processId) || response.processId < 1 ||
+      response.encryptedDatabase !== true ||
+      response.hostProvisioningEnabled !== false ||
+      response.hostClaimBootstrapEnabled !== false) {
+    throw new Error("Keine bestätigte unabhängige lokale Minglefield-Anwendung.");
+  }
+  return {
+    port: response.port, processId: response.processId,
+    url: "http://127.0.0.1:" + response.port + "/"
+  };
+}

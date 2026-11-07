@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   prepareLocalFirstRun, verifyLocalFirstRunResult,
-  classifyImportedAlphaAuthorization
+  classifyImportedAlphaAuthorization, prepareInstalledNativeStart,
+  verifyRunningNativeResult
 } from "./alpha-first-run.js";
 const fixture = {
   reviewedCopy: {
@@ -126,4 +127,44 @@ test("only a verified empty authentication schema permits initial setup", () => 
   assert.equal(classifyImportedAlphaAuthorization({tables: [
     authTable("alpha_users", ["unexpected_field"], [])
   ]}), "unverified");
+});
+
+test("native running start requires session proof and a verified Host", () => {
+  const selected = {
+    reviewedCopy: fixture.reviewedCopy,
+    installedFiles: fixture.installedFiles,
+    currentDestination: fixture.currentDestination,
+    databasePassword: fixture.databasePassword,
+    hostReady: true
+  };
+  assert.deepEqual(prepareInstalledNativeStart(selected), {
+    databasePassword: fixture.databasePassword,
+    confirmation: "START INSTALLED MINGLEFIELD"
+  });
+  for (const change of [
+    { reviewedCopy: null }, { installedFiles: null },
+    { currentDestination: "/forged.sqlite3" }, { hostReady: false },
+    { hostReady: "true" }, { databasePassword: "" }
+  ]) {
+    assert.throws(() => prepareInstalledNativeStart({ ...selected, ...change }));
+  }
+});
+
+test("native launch response must be live loopback and deny Host claim", () => {
+  const receipt = {
+    status: "native_minglefield_running", bind: "127.0.0.1",
+    port: 45123, processId: 2345, encryptedDatabase: true,
+    hostProvisioningEnabled: false, hostClaimBootstrapEnabled: false
+  };
+  assert.deepEqual(verifyRunningNativeResult(receipt), {
+    port: 45123, processId: 2345, url: "http://127.0.0.1:45123/"
+  });
+  for (const change of [
+    { status: "native_minglefield_startup_verified" }, { bind: "0.0.0.0" },
+    { port: 0 }, { port: 65536 }, { processId: 0 },
+    { encryptedDatabase: false }, { hostProvisioningEnabled: true },
+    { hostClaimBootstrapEnabled: true }, { forged: true }
+  ]) {
+    assert.throws(() => verifyRunningNativeResult({ ...receipt, ...change }));
+  }
 });

@@ -187,13 +187,8 @@ impl InstallerConfigV3 {
                         .filter(|item| !item.is_empty())
                         .map(str::to_owned)
                         .collect();
-                    if db.schema_additions.len()
-                        != db
-                            .schema_additions
-                            .iter()
-                            .collect::<HashSet<_>>()
-                            .len()
-                    {
+                    let unique = db.schema_additions.iter().collect::<HashSet<_>>().len();
+                    if db.schema_additions.len() != unique {
                         return Err("duplicate schema addition");
                     }
                 }

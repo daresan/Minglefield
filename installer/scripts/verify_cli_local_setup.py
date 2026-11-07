@@ -124,6 +124,13 @@ assert store.principal("Bearer " + authorization) is not None
         has_native = manifest.get("nativeApplicationIncluded") is True
         if require_native:
             assert has_native, "build did not include OS-native Minglefield executable"
+        if has_native and platform.system().lower() == "darwin":
+            # The runtime builder deliberately uses Python's canonical OS
+            # identifier "darwin", not the marketing name "macos". Keep the
+            # .app verification bound to the actual build manifest.
+            assert str(manifest["platform"]).startswith("darwin-"), (
+                "macOS native runtime manifest has unexpected platform identity"
+            )
         if has_native:
             entry = manifest["nativeApplicationExecutable"]
             assert entry in ("Minglefield", "Minglefield.exe")

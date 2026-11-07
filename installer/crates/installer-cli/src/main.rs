@@ -493,4 +493,72 @@ mod tests {
         assert!(!target.exists());
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn refuses_database_password_without_explicit_operation() {
+        let args = vec![
+            "--silent".to_owned(),
+            "--defaults".to_owned(),
+            "--db-password".to_owned(),
+            "NotPrintedSecret111!".to_owned(),
+        ];
+        let error = run(args).unwrap_err();
+        assert_eq!(error.0, 2);
+        assert!(!error.1.contains("NotPrintedSecret111!"));
+    }
+
+    #[test]
+    fn database_verification_uses_real_sqlcipher_and_rejects_fake_header() {
+        let root = std::env::temp_dir().join(format!(
+            "mf-cli-db-verification-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let candidate = root.join("fake-encrypted.db");
+        std::fs::write(&candidate, b"fake-not-sqlcipher").unwrap();
+        let before = std::fs::read(&candidate).unwrap();
+        let result = run(vec![
+            "--silent".to_owned(),
+            "--defaults".to_owned(),
+            "--verify-encrypted-db".to_owned(),
+            "--database".to_owned(),
+            candidate.to_string_lossy().into_owned(),
+            "--db-password".to_owned(),
+            "NotPrintedSecret111!".to_owned(),
+        ]);
+        let error = result.unwrap_err();
+        assert_eq!(error.0, 4);
+        assert!(!error.1.contains("NotPrintedSecret111!"));
+        assert_eq!(std::fs::read(&candidate).unwrap(), before);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v3_admin_authored_config_accepts_plaintext_password_field() {
+        let root = std::env::temp_dir().join(format!(
+            "mf-cli-v3-conf-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let configuration = root.join("config.conf");
+        let text = concat!(
+            "version=3\ninstall_optional_conda=false\ninstall_optional_comfyui=false\n",
+            "explicit_optional_consent=false\ninstall_optional_git=false\n",
+            "install_optional_gh=false\noffer_gh_login=false\n",
+            "consent_git=false\nconsent_gh=false\nconsent_login=false\n",
+            "database_path=/missing/private.db\n",
+            "db_password=NotPrintedSecret111!\n"
+        );
+        std::fs::write(&configuration, text).unwrap();
+        let result = run(vec![
+            "--silent".to_owned(),
+            "--config".to_owned(),
+            configuration.to_string_lossy().into_owned(),
+            "--verify-encrypted-db".to_owned(),
+        ]);
+        let error = result.unwrap_err();
+        assert_eq!(error.0, 4);
+        assert!(!error.1.contains("NotPrintedSecret111!"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

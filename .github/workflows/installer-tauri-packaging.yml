@@ -44,14 +44,21 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - name: Compile independent native Minglefield starter with visible diagnostics
+        shell: bash
+        run: |
+          # A separate visible compile makes Windows-specific toolchain or
+          # linker failures actionable. The pinned native builder otherwise
+          # captures Cargo stderr and reports only a generic error code.
+          cargo build --release --locked --manifest-path ../Cargo.toml \
+            -p minglefield-installer-cli --bin Minglefield
       - name: Build pinned OS-native Minglefield starter and managed Alpha runtime
         shell: bash
         run: |
           mkdir -p src-tauri/resources
           rm -rf src-tauri/resources/managed-alpha
-          # M2.10/M2.11 requires the independent native Minglefield(.exe)
-          # beside the managed Python/SQLCipher runtime. A runtime-only
-          # package would pass the old copy check but could never start.
+          # Reuse the reviewed builder. Cargo is already compiled above;
+          # its incremental second invocation must not alter the target.
           python -B ../scripts/build_native_alpha_application.py --output src-tauri/resources/managed-alpha
       - name: Verify packaged native application before compiling Setup Manager
         shell: bash

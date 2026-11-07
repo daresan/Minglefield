@@ -1,13 +1,13 @@
 # Minglefield Platform Installer & First-Run Onboarding — active next phase
 
-Status: **approved priority and requirements; design/implementation not yet verified** (2026-11-03).
+Status: **approved priority; Tauri 2 and experimental M2.06–M2.08 slices implemented, M2.08 manual acceptance FAILED/pending, M2.09–M2.11 unaccepted** (updated 2026-11-07). Historical requirements below retain their original approval dates.
 Scope: installing, configuring, launching, updating and recovering **Minglefield itself**, not installing third-party games. This phase takes precedence over unfinished roadmap features; previous work remains planned and is sequenced after this phase, except blocking security fixes and prerequisites.
 
 ## Product outcome and acceptance target
 
 A first-time, non-technical user can download an OS-appropriate graphical installer, choose a destination, install Minglefield and its necessary runtime, provision the **computer running the installer** as their local Host, configure optional runtimes, and launch Minglefield without knowing Python, Conda, Git, shell commands, or environment variables. Aim for **at least 80%** of representative first-time target users completing defined core onboarding tasks unaided. This is a **target**, not a measured achievement; establish task definitions, test participants, observations and completion criteria.
 
-Support Windows, macOS and Linux with self-starting installers that require no preinstalled Python/Conda. Use **one shared cross-platform installer GUI** with platform-specific distributable builds. Select the actual GUI toolkit and package formats after comparing feasibility, OS packaging, licensing and dependency inventory; do not prematurely commit to a framework.
+Support Windows, macOS and Linux with self-starting installers that require no preinstalled Python/Conda. Use **one shared cross-platform installer GUI** with platform-specific distributable builds. **Tauri 2 and directly runnable Windows EXE, Linux AppImage and macOS app are the adopted portable approach**; historic exploration requirements below are not still-open toolkit decisions.
 
 ## Installer journeys
 
@@ -18,7 +18,7 @@ Support Windows, macOS and Linux with self-starting installers that require no p
 
 ## Shared GUI and unattended CLI installation (binding decision, 2026-11-03)
 
-- One cross-platform installer GUI codebase for Windows, macOS and Linux; **build and distribute separate signed/verified OS/architecture-specific installer artifacts**. The GUI toolkit and precise native package formats remain to be selected through Gate 2 evidence.
+- One Tauri 2 cross-platform installer GUI codebase for Windows, macOS and Linux, with verified OS/architecture-specific portable artifacts (Windows executable, Linux AppImage, macOS application). Apple signing/notarization is **out of current scope**, per the portable-manager decision; never treat it as an acceptance blocker.
 - The same installer application must also start from a terminal with documented parameters, including `--silent`, `--config <path>`, and `--defaults` (proposed CLI spelling), with a versioned default configuration and explicit overrides. GUI and CLI call the **same installation engine**, validation, trust checks, lifecycle and Host APIs; no duplicate or weaker headless installation path.
 - Unattended mode has no interactive prompts, uses deterministic exit codes, machine-readable result/log output, supports idempotent re-runs, and fails safely when required consent, ownership proof, credentials, network access or conflict resolution is missing. Never infer consent for optional Conda/ComfyUI or destructive data actions from `--silent` or `--defaults` alone.
 - Default configuration contains no credentials, tokens, or machine-specific paths. Resolve OS-specific install/data defaults at runtime. Distinguish unattended **application installation** from account-authenticated local Host provisioning: missing authenticated authorization may defer provisioning to first-run GUI, but must never silently claim a Host.
@@ -131,6 +131,20 @@ database with no source to migrate, native launch of the separately installed
 application, repair/update, and end-user acceptance of a portable M2.08
 build. Green engineering CI does not stand in for those product checks.
 
+## Binding clarification — local Host preservation, application shell and M2 sequence (2026-11-07)
+
+The portable **Setup Manager GUI**, the **headless installer CLI**, and the independently launched **Minglefield application** are three distinct interfaces. GUI and installer CLI must share the same native installation core; application shell startup is not an installer mode. M2.09 first validates the SQLCipher-backed **application process** independently of setup GUI; M2.10 packages/install-tests its runtime and adds fresh encrypted DB creation; M2.11 wires the existing GUI and actual installer CLI to the common engine. Do not reinterpret M2.09 as a second encryption pass on every launch. The first Alpha uses the verified official application package; building/installing a chosen checkout or fork is postponed. A checkout selected for data migration is **not** an executable payload.
+
+**Fresh local Host setup:** The OS-authorized local installation creates the first local Host and editable default `mingleadmin` identity in a new encrypted database, without invite code or remote Host claim. Preserve the native, scoped, once-per-operation setup boundary; do not equate a database-copy operation ID with durable physical Host identity.
+
+**Imported database:** Preserve all existing users, salts/password verifiers, operator and Host owner/admin assignments, local and remote Host references/grants, agents, sessions, settings and recognized data. An existing, *positively matched* `mingleadmin` plus local Host owner is already configured: no duplicate account, password change, unnecessary second Host or error. A different/unverifiable assignment needs authenticated resolution before any **change of ownership**; OS filesystem permission alone does not authenticate an imported application account. The present `HostCommitPolicy.provision_first_run_local_host_admin_trusted` only supports new identities and returns `first_run_identity_conflict` / `first_run_host_conflict` on pre-existing references; native setup currently chooses `local.<operation-id>`. Non-destructive re-recognition and persistent local Host identity remain explicitly unimplemented, without relaxing present collision protection.
+
+**Remote Host boundary:** Preserve imported remote Host records/rights as data. Real remote discovery, remote claim/management, client-only installations and active remote-host connection acceptance belong to future **application** work and are **not** installer admission criteria. This does not authorize altering imported remote ownership.
+
+**Current M2.08 blocker:** The latest Windows artifact [42329947124](https://github.com/daresan/Minglefield/actions/runs/42329947124) was reported to omit two hidden, zero-byte runtime inventory entries (`setuptools/_vendor/.lock`, `Scripts/.empty`) after artifact upload; all delivered members otherwise matched the pinned inventory in the previous review. The exact delivered artifact must be reverified after packaging repair. Green three-OS package jobs are not Shadow operator acceptance. Retain M2.07 Alpha fresh-target retry, source/backup protection and one-time Host consent; do not expand crash-recovery development as a prerequisite.
+
+**Testing separation:** Native installer core/security, post-upload package inventory, independently shell-started application runtime, GUI/headless installer parity and actual OS/user acceptance are separate evidence classes. MDCI v1.0.0 controls triggers; `PORTABLE-TEST-REQUEST.md` is not changed for documentation-only commits.
+
 ## Existing repository boundaries and evidence to inspect
 
 - `server/private_alpha_gateway.py`: current local gateway and web UI, local Host claim flow, Host settings/runtimes, and placeholder platform-update dialog; its current local bootstrap is not an installer provisioning API.
@@ -226,18 +240,18 @@ hardening grow into an unrelated permanent workstream.
 
 ## Ordered implementation gates
 
-1. **Product architecture inventory (not operator environment replication):** trace the supported application launch contract, Host claim/auth/persistence interfaces, update UI/API, dependency declarations, OS-specific data paths, licensing and existing tests. Produce a gap/compatibility matrix before choosing installer tooling. Do **not** derive installer defaults from the developer's personal launch commands, local Conda environment or machine paths; use that machine only as a preexisting-installation detection test case.
-2. **Installer architecture decision:** implement one shared GUI and CLI over a common installation engine, with OS/architecture-specific distributable builds. Evaluate toolkit/package candidates, OS signing/notarization/distribution, permissions, bundled/managed Python, optional Conda/ComfyUI acquisition, and lifecycle/rollback. Record alternatives and rationale.
+1. **Historical original gate — Product architecture inventory (not operator environment replication):** trace the supported application launch contract, Host claim/auth/persistence interfaces, update UI/API, dependency declarations, OS-specific data paths, licensing and existing tests. Produce a gap/compatibility matrix before choosing installer tooling. Do **not** derive installer defaults from the developer's personal launch commands, local Conda environment or machine paths; use that machine only as a preexisting-installation detection test case.
+2. **Historical original gate — Installer architecture decision (Tauri 2 now selected):** implement one shared GUI and CLI over a common installation engine, with OS/architecture-specific distributable builds. Evaluate toolkit/package candidates, OS signing/notarization/distribution, permissions, bundled/managed Python, optional Conda/ComfyUI acquisition, and lifecycle/rollback. Record alternatives and rationale.
 3. **First runnable GUI slice:** on supported OS builds, select destination, detect existing install, install/reuse verified Python and Minglefield, show progress/errors, launch local application. No hidden developer prerequisites.
 4. **Local Host onboarding:** implement reviewed, authenticated, single-use local provisioning and complete Host settings through existing persistence/API; preserve remote claim workflow.
 5. **Optional components:** detect, verify, select manually or explicitly install Conda and ComfyUI; configure chosen runtime(s) per Host; exercise existing local ComfyUI connection test.
 6. **Lifecycle:** idempotent update/repair/uninstall, explicit data-retention choice, verified artifacts, backups/migration/rollback, offline/failure handling, platform-update UI integration.
 7. **Per-release dependency gate:** on **every installer build** for a Minglefield release, determine/validate required Python runtime dependencies against the packaged application, separate optional integrations, resolve compatible versions and generate/verify reproducible OS-specific manifests or locks. Build must fail on missing or inconsistent dependency declarations. Exercise clean-install and launch in isolated CI environments; `requirements-ci.txt` alone is not a complete runtime dependency source.
-8. **Acceptance:** clean-machine, preexisting-environment, non-PATH Conda, manual-location, missing-dependency, optional-install, remote-claim, reinstall, tamper, failure/recovery and upgrade scenarios on Windows/macOS/Linux. Measure the 80% usability target with representative nontechnical participants.
+8. **Acceptance:** clean-machine, preexisting-environment, non-PATH Conda, manual-location, missing-dependency, optional-install, **preservation of imported remote-Host data (not implementation of remote claims)**, reinstall, tamper, failure/recovery and upgrade scenarios on Windows/macOS/Linux. Measure the 80% usability target with representative nontechnical participants.
 
 ## Explicit non-goals and open decisions
 
-Not part of this phase: third-party game installer expansion, federated marketplaces, any additional ComfyUI models, custom nodes, extensions or workflows, remote-host ownership bypass, or mandatory central trust service. Exact shared GUI toolkit, OS distribution formats, Python packaging strategy, optional Conda distribution/license, ComfyUI acquisition policy and security design for local provisioning remain **open** until inventory and review. No production-ready installer, complete runtime dependency list, security review, or usability measurement is claimed yet.
+Not part of this phase: third-party game installer expansion, federated marketplaces, any additional ComfyUI models, custom nodes, extensions or workflows, **active remote-Host acquisition/management**, remote-host ownership bypass, source-checkout installation in the first Alpha, or mandatory central trust service. **Decided:** Tauri 2 and the portable Windows/Linux/macOS manager formats, independent local first-Host setup with separate login and database secrets. **Still open/unaccepted:** full application launch, fresh-db creation, source-provenance release contract, optional Conda distribution/license, ComfyUI acquisition and comprehensive release security/usability acceptance. No production-ready installer or measured usability result is claimed.
 
 ## Updated product decision: alpha release and reusable repackaging (2026-11-03)
 

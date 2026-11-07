@@ -3,10 +3,11 @@
 The headless CLI and the Tauri GUI now use the **same**
 `installer-core::managed_alpha_install` Rust implementation to validate a
 managed Alpha file inventory and copy exactly its declared files. The headless
-CLI operation is **currently file installation only**. A successful result
-does **not** mean database migration, database creation, local Host setup,
-application launch or a finished Minglefield OS-native product. Those are
-separate, pending M2.09–M2.11 integration steps.
+CLI now exposes **three separate, executable actions**: verified file
+installation, encrypted database verification, and reviewed encrypted
+database copy. They are not yet composed into a complete installation.
+A successful individual action does **not** mean fresh database creation,
+local Host setup, independent native application launch or M2.11 acceptance.
 
 ## Actual file-install invocation (explicit local package)
 
@@ -127,8 +128,7 @@ database_path=/absolute/path/user.db
 db_password_file=/absolute/private/sqlcipher-password.txt
 ```
 
-Use this with `--silent --config /absolute/path/config.conf
---verify-encrypted-db`. The text config is authored and protected by the
+Use this with `--silent --config /absolute/path/config.conf --verify-encrypted-db`. The text config is authored and protected by the
 Host administrator; generated defaults never silently persist a password.
 
 ## Unfinished required CLI parity
@@ -141,7 +141,8 @@ are now implemented for the focused SQLCipher verification/encrypted-copy
 actions**, not for every future application/installer operation. Interactive
 prompt, complete database/new-Host creation, a separately launched native
 app and end-to-end silent installation **remain unfinished**. Do not infer
-the complete acceptance from a successful file-copy or encrypted-copy action. The eventual CLI, Tauri UI and native
+the complete acceptance from a successful file-copy or encrypted-copy
+action. The eventual CLI, Tauri UI and native
 Minglefield application must use the same versioned installation/config
 contract and respect existing Host ownership.
 

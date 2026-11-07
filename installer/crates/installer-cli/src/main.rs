@@ -64,9 +64,14 @@ fn complete(
         }
         return db_action.execute(db_config, json);
     }
-    if db_action.has_unbound_inputs() || db_config.is_some_and(DatabaseOptions::has_any) {
-        return Err((2, "database input options require an explicit database action".to_owned()));
+    if db_action.has_unbound_inputs() {
+        return Err((
+            2,
+            "database command-line arguments require an explicit database action".to_owned(),
+        ));
     }
+    // Version 3 config can safely be previewed without executing DB actions.
+    // This must never echo embedded administrator-authored secret fields.
     if !action.enabled {
         if action.source.is_some()
             || action.inventory_sha256.is_some()

@@ -274,6 +274,28 @@ mod tests {
     }
 
     #[test]
+    fn v3_copy_consent_and_registry_additions_are_canonical_config_fields() {
+        let text = format!(
+            "{BASE}schema_additions=alpha_users_extension,registered_policy\nconfirm_db_copy=CREATE EXPERIMENTAL ENCRYPTED COPY\n"
+        );
+        let config = InstallerConfigV3::parse(&text).unwrap();
+        assert_eq!(
+            config.database.schema_additions,
+            vec!["alpha_users_extension", "registered_policy"]
+        );
+        assert_eq!(
+            config.database.copy_confirmation.as_deref(),
+            Some("CREATE EXPERIMENTAL ENCRYPTED COPY")
+        );
+        assert!(
+            InstallerConfigV3::parse(&format!(
+                "{BASE}schema_additions=duplicate,duplicate\n"
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn file_secret_preserves_literal_spaces_and_removes_only_terminal_line_end() {
         let path = std::env::temp_dir().join(format!(
             "mf-password-file-{}-{:?}",

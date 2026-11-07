@@ -232,6 +232,28 @@ def build_runtime(output):
                 capture_output=True, timeout=60, check=False)
             if probe.returncode != 0:
                 raise ValueError("embedded Python/SQLCipher runtime self-test failed")
+
+            # Bring the actual application with its managed runtime, not just
+            # an interpreter. Reuse the reviewed module-closure ZIP/manifest.
+            from build_alpha_application_payload import build_payload, inspect_payload
+            application_archive = staged / "alpha-application.zip"
+            build_payload(ROOT / "server", application_archive)
+            application_manifest = inspect_payload(application_archive)
+            with ZipFile(application_archive, "r") as source_zip:
+                for filename in sorted(application_manifest["modules"]):
+                    target_file = staged / "application" / filename
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    with source_zip.open(filename) as src, target_file.open("xb") as dst:
+                        shutil.copyfileobj(src, dst)
+            application_entrypoint = (
+                staged / "application" / application_manifest["entrypoint"])
+            application_probe = subprocess.run(
+                [str(executable), "-I", "-B", str(application_entrypoint)],
+                input=b'{"invalid":true}', capture_output=True,
+                timeout=90, check=False)
+            if (application_probe.returncode != 2 or application_probe.stdout
+                    or b"installed_alpha_start_rejected" not in application_probe.stderr):
+                raise ValueError("managed Alpha application import/startup self-test failed")
             manifest = {
                 "schemaVersion": 1,
                 "platform": variant[0] + "-" + variant[1],
@@ -243,7 +265,12 @@ def build_runtime(output):
                 "sqlcipherWheelSha256": wheel_sha,
                 "pythonExecutable": executable.relative_to(staged).as_posix(),
                 "runtimeSmokeVerified": True,
-                "applicationSourceIncluded": False,
+                "applicationSourceIncluded": True,
+                "applicationEntrypoint": application_entrypoint.relative_to(staged).as_posix(),
+                "applicationArchiveSha256": sha256_file(application_archive),
+                "applicationModuleCount": len(application_manifest["modules"]),
+                "managedApplicationStartupVerified": True,
+                "fullRuntimeDependencyClosureVerified": False,
                 "publisherSignatureVerified": False,
                 "completeProductInstallation": False,
             }

@@ -1,8 +1,6 @@
 //! Headless adapter for shared SQLCipher DB verification/copy operations.
 //! Never changes Host permissions or silently creates users or sessions.
-use minglefield_installer_core::config_v3::{
-    parse_stdin_secrets, DatabaseOptions, StdinSecrets,
-};
+use minglefield_installer_core::config_v3::{parse_stdin_secrets, DatabaseOptions, StdinSecrets};
 use minglefield_installer_core::db_operations::{
     create_reviewed_encrypted_database_copy, verify_encrypted_database,
 };
@@ -84,11 +82,7 @@ impl DatabaseAction {
 
     /// DB paths/config version are common with the GUI-facing core contract.
     /// The CLI only resolves secrets immediately before an actual DB action.
-    pub fn execute(
-        &self,
-        base: Option<&DatabaseOptions>,
-        json: bool,
-    ) -> Result<(), (u8, String)> {
+    pub fn execute(&self, base: Option<&DatabaseOptions>, json: bool) -> Result<(), (u8, String)> {
         if !self.active() || (self.verify && self.copy) {
             return Err((2, "select exactly one database operation".to_owned()));
         }
@@ -102,7 +96,10 @@ impl DatabaseAction {
                 || self.consent.is_some()
                 || !self.schema_additions.is_empty())
         {
-            return Err((2, "unexpected database-copy options for read-only verification".into()));
+            return Err((
+                2,
+                "unexpected database-copy options for read-only verification".into(),
+            ));
         }
         if self.copy && self.consent.as_deref() != Some(EXPERIMENTAL_COPY_CONFIRMATION) {
             return Err((2, "explicit --confirm-db-copy approval is required".into()));
@@ -128,8 +125,13 @@ impl DatabaseAction {
             .as_deref()
             .ok_or((2, "--database is required for database operations".to_owned()))?;
         if self.verify {
-            if input.new_db_password.is_some() || env::var_os("MINGLEFIELD_NEW_DB_PASSWORD").is_some() {
-                return Err((3, "new database password must not be supplied for verification".into()));
+            if input.new_db_password.is_some()
+                || env::var_os("MINGLEFIELD_NEW_DB_PASSWORD").is_some()
+            {
+                return Err((
+                    3,
+                    "new database password must not be supplied for verification".into(),
+                ));
             }
             let key = key.ok_or((3, "SQLCipher database password is required".to_owned()))?;
             let report = verify_encrypted_database(Path::new(destination), &key)
@@ -188,14 +190,19 @@ impl DatabaseAction {
             "published ciphertext is missing its recovery operation receipt".to_owned(),
         ))?;
         if operation_id.len() != 32
-            || !operation_id.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            || !operation_id
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
         {
             return Err((4, "published ciphertext operation receipt invalid".to_owned()));
         }
         if json {
             println!(
                 "{{\"schema_version\":1,\"status\":\"experimental_encrypted_copy_created\",\"exit_code\":0,\"destination_created\":true,\"ciphertext_verified\":true,\"checked_rows\":{},\"checked_tables\":{},\"checked_schema_entries\":{},\"recovery_operation_id\":\"{}\",\"host_provisioning_enabled\":false,\"application_launch_enabled\":false,\"full_installation_completed\":false}}",
-                report.rows_checked, report.tables_checked, report.schema_entries_checked, operation_id
+                report.rows_checked,
+                report.tables_checked,
+                report.schema_entries_checked,
+                operation_id
             );
         } else {
             println!(
@@ -221,8 +228,12 @@ mod tests {
     #[test]
     fn parses_bee_style_values_and_rejects_duplicates() {
         let mut db = DatabaseAction::default();
-        assert!(db.parse("--verify-encrypted-db", &mut std::iter::empty()).unwrap());
-        assert!(db.parse("--db-password", &mut ["private".to_owned()].into_iter()).unwrap());
+        assert!(db
+            .parse("--verify-encrypted-db", &mut std::iter::empty())
+            .unwrap());
+        assert!(db
+            .parse("--db-password", &mut ["private".to_owned()].into_iter())
+            .unwrap());
         assert_eq!(db.input.password.literal.as_deref(), Some("private"));
         assert_eq!(
             db.parse("--db-password", &mut ["ignored".to_owned()].into_iter())
@@ -234,7 +245,10 @@ mod tests {
 
     #[test]
     fn copy_without_explicit_approval_does_not_touch_a_database() {
-        let mut db = DatabaseAction { copy: true, ..DatabaseAction::default() };
+        let mut db = DatabaseAction {
+            copy: true,
+            ..DatabaseAction::default()
+        };
         db.input.database_path = Some("/does/not/exist".to_owned());
         assert_eq!(db.execute(None, true).unwrap_err().0, 2);
     }

@@ -19,7 +19,7 @@ use minglefield_installer_core::managed_alpha_install::{
     install_from_verified_root, verified_inventory, verify_installed_application,
 };
 use minglefield_installer_core::native_application_probe::{
-    ensure_native_starter, probe_installed_application,
+    ensure_native_starter, probe_installed_application, start_installed_application,
 };
 use std::env;
 use std::io::Read;
@@ -29,6 +29,7 @@ use std::path::Path;
 pub struct LocalSetupAction {
     pub enabled: bool,
     pub verify_native_start: bool,
+    pub start_native_app: bool,
     pub input: LocalHostOptions,
 }
 
@@ -54,6 +55,12 @@ impl LocalSetupAction {
             return Ok(true);
         }
         match argument {
+            "--start-native-app" if !self.start_native_app => {
+                self.start_native_app = true;
+            }
+            "--start-native-app" => {
+                return Err((2, "duplicate --start-native-app".into()));
+            }
             "--verify-native-start" if !self.verify_native_start => {
                 self.verify_native_start = true;
             }
@@ -103,7 +110,8 @@ impl LocalSetupAction {
         host_config: Option<&LocalHostOptions>,
         json: bool,
     ) -> Result<(), (u8, String)> {
-        if !self.enabled
+        if (self.start_native_app && self.verify_native_start)
+            || !self.enabled
             || !db_action.fresh
             || db_action.verify
             || db_action.copy
@@ -206,7 +214,7 @@ impl LocalSetupAction {
 
         // A requested probe must have an inventory-verified native binary
         // BEFORE this operation creates a new database or user identity.
-        if self.verify_native_start {
+        if self.verify_native_start || self.start_native_app {
             ensure_native_starter(package, expected_inventory_sha256)
                 .map_err(|_| (4, "verified native application package required".to_owned()))?;
         }
@@ -307,11 +315,35 @@ impl LocalSetupAction {
                 )
             })?;
         }
+        let running = if self.start_native_app {
+            Some(start_installed_application(
+                installed_root,
+                database,
+                &cipher_key,
+                expected_inventory_sha256,
+                false,
+            ).map_err(|_| {
+                (4, "local Host was created, but independent native start failed; preserve installed data for review".to_owned())
+            })?)
+        } else {
+            None
+        };
         if json {
-            println!(
-                "{{\"schema_version\":1,\"status\":\"local_host_admin_created\",\"login_user_id\":\"{}\",\"local_host_id\":\"{}\",\"remote_host_authority_granted\":false,\"application_files_installed\":true,\"encrypted_database_created\":true,\"native_application_launch_enabled\":{},\"full_installation_completed\":false}}",
-                receipt.login_user_id, receipt.local_host_id, self.verify_native_start
-            );
+            let output = serde_json::json!({
+                "schema_version": 1,
+                "status": "local_host_admin_created",
+                "login_user_id": receipt.login_user_id,
+                "local_host_id": receipt.local_host_id,
+                "remote_host_authority_granted": false,
+                "application_files_installed": true,
+                "encrypted_database_created": true,
+                "native_application_launch_enabled": self.verify_native_start || running.is_some(),
+                "native_application_running": running.is_some(),
+                "native_application_process_id": running.as_ref().map(|r| r.process_id),
+                "native_application_port": running.as_ref().map(|r| r.port),
+                "full_installation_completed": false
+            });
+            println!("{output}");
         } else {
             println!(
                 "Verified local Alpha files and new SQLCipher database installed; local Host {} initialized",

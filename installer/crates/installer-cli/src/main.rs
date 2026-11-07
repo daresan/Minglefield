@@ -75,10 +75,10 @@ fn complete(
             json,
         );
     }
-    if host_action.verify_native_start {
+    if host_action.verify_native_start || host_action.start_native_app {
         return Err((
             2,
-            "--verify-native-start requires --setup-local-host".into(),
+            "native launch options require --setup-local-host".into(),
         ));
     }
     if host_action.input.has_any() {
@@ -276,6 +276,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 println!("  --confirm-local-admin 'ACTIVATE LOCAL HOST ADMIN'");
                 println!("  plus the distinct file and new DB flags and consents above.");
                 println!("Optional fresh-setup native readiness probe: --verify-native-start.");
+                println!("Optional independent native app start: --start-native-app.");
                 println!("This single-process path cannot adopt an existing DB or remote Host.");
                 println!("Native application launch remains a separate incomplete milestone.");
                 return Ok(());

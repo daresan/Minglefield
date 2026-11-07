@@ -52,7 +52,7 @@ def run_smoke(package, *, require_native=False):
             "--setup-local-host",
             "--login-user-id", "mingleadmin",
             "--confirm-local-admin", HOST_CONFIRM,
-            "--verify-native-start",
+            "--start-native-app",
             "--secrets-stdin",
         ]
         # Exercise the shared version-3 private credential channel in a REAL
@@ -78,6 +78,29 @@ def run_smoke(package, *, require_native=False):
         assert receipt["application_files_installed"] is True
         assert receipt["remote_host_authority_granted"] is False
         assert receipt["native_application_launch_enabled"] is True
+        assert receipt["native_application_running"] is True
+        pid = receipt["native_application_process_id"]
+        port = receipt["native_application_port"]
+        assert isinstance(pid, int) and pid > 0
+        assert isinstance(port, int) and 1 <= port <= 65535
+        # The installer has returned; the independently running native binary
+        # must still answer over loopback without a Setup Manager process.
+        import signal
+        import socket
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=8) as conn:
+                conn.settimeout(8)
+                conn.sendall(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+                assert conn.recv(128).startswith(b"HTTP/1."), "native app did not survive CLI exit"
+        finally:
+            if platform.system().lower() == "windows":
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True, check=False, timeout=20)
+            else:
+                try:
+                    os.killpg(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
         assert receipt["full_installation_completed"] is False
         assert receipt["login_user_id"] == "mingleadmin"
         host_id = receipt["local_host_id"]

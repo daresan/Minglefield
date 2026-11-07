@@ -55,10 +55,10 @@ fn complete(
         }
         return Ok(());
     }
-    let source = action
-        .source
-        .as_deref()
-        .ok_or((2, "--package-dir is required for file installation".to_owned()))?;
+    let source = action.source.as_deref().ok_or((
+        2,
+        "--package-dir is required for file installation".to_owned(),
+    ))?;
     let digest = action.inventory_sha256.as_deref().ok_or((
         2,
         "--inventory-sha256 is required for file installation".to_owned(),
@@ -75,18 +75,15 @@ fn complete(
             "optional runtime installation is not implemented in the file-only CLI".to_owned(),
         ));
     }
-    let installed = install_from_verified_root(
-        Path::new(source),
-        Path::new(&plan.install_dir),
-        digest,
-    )
-    .map_err(|_| {
-        (
-            4,
-            "verified managed Alpha file installation rejected; source, digest, or target invalid"
-                .to_owned(),
-        )
-    })?;
+    let installed =
+        install_from_verified_root(Path::new(source), Path::new(&plan.install_dir), digest)
+            .map_err(|_| {
+                (
+                    4,
+                    "verified managed Alpha file installation rejected; source, digest, or target invalid"
+                        .to_owned(),
+                )
+            })?;
     if json {
         println!(
             "{}",
@@ -195,10 +192,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             })
             .collect();
         if version_lines.len() != 1 {
-            return Err((
-                3,
-                "invalid config: missing or duplicate version".to_owned(),
-            ));
+            return Err((3, "invalid config: missing or duplicate version".to_owned()));
         }
         let version = version_lines[0]
             .split_once('=')

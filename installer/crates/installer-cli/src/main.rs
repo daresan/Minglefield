@@ -75,15 +75,18 @@ fn complete(
             "optional runtime installation is not implemented in the file-only CLI".to_owned(),
         ));
     }
-    let installed =
-        install_from_verified_root(Path::new(source), Path::new(&plan.install_dir), digest)
-            .map_err(|_| {
-                (
-                    4,
-                    "verified managed Alpha file installation rejected; source, digest, or target invalid"
-                        .to_owned(),
-                )
-            })?;
+    let installed = install_from_verified_root(
+        Path::new(source),
+        Path::new(&plan.install_dir),
+        digest,
+    )
+    .map_err(|_| {
+        (
+            4,
+            "verified managed Alpha file installation rejected; source, digest, or target invalid"
+                .to_owned(),
+        )
+    })?;
     if json {
         println!(
             "{}",

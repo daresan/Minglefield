@@ -102,6 +102,9 @@ test("only a verified empty authentication schema permits initial setup", () => 
     authTable("sec01_host_owners", ["host_id", "owner_id"], [])
   ]};
   assert.equal(classifyImportedAlphaAuthorization(fresh), "empty_first_run");
+  assert.equal(classifyImportedAlphaAuthorization({tables: [
+    authTable("imported_data", ["value"], [["preserved"]])
+  ]}), "empty_first_run");
   assert.equal(classifyImportedAlphaAuthorization(null), "unverified");
   assert.equal(classifyImportedAlphaAuthorization({tables: []}), "unverified");
   assert.equal(classifyImportedAlphaAuthorization({tables: [

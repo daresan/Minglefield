@@ -124,11 +124,48 @@ impl DatabaseOptions {
     }
 }
 
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct LocalHostOptions {
+    pub login_user_id: Option<String>,
+    pub local_host_id: Option<String>,
+    pub login_password: SecretInput,
+    pub confirmation: Option<String>,
+}
+
+impl LocalHostOptions {
+    pub fn override_with(&mut self, flags: LocalHostOptions) {
+        if flags.login_user_id.is_some() {
+            self.login_user_id = flags.login_user_id;
+        }
+        if flags.local_host_id.is_some() {
+            self.local_host_id = flags.local_host_id;
+        }
+        if flags.login_password.literal.is_some() {
+            self.login_password.literal = flags.login_password.literal;
+        }
+        if flags.login_password.file.is_some() {
+            self.login_password.file = flags.login_password.file;
+        }
+        if flags.confirmation.is_some() {
+            self.confirmation = flags.confirmation;
+        }
+    }
+
+    pub fn has_any(&self) -> bool {
+        self.login_user_id.is_some()
+            || self.local_host_id.is_some()
+            || self.login_password.literal.is_some()
+            || self.login_password.file.is_some()
+            || self.confirmation.is_some()
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StdinSecrets {
     pub db_password: Option<String>,
     pub new_db_password: Option<String>,
+    pub login_password: Option<String>,
 }
 
 /// One bounded JSON frame; never use stdin unless --secrets-stdin was selected.
@@ -150,12 +187,14 @@ pub fn parse_stdin_secrets(mut reader: impl Read) -> Result<StdinSecrets, &'stat
 pub struct InstallerConfigV3 {
     pub base: InstallerConfigV2,
     pub database: DatabaseOptions,
+    pub local_host: LocalHostOptions,
 }
 
 impl InstallerConfigV3 {
     pub fn parse(text: &str) -> Result<Self, &'static str> {
         let mut base = Vec::new();
         let mut db = DatabaseOptions::default();
+        let mut local_host = LocalHostOptions::default();
         let mut seen = HashSet::new();
         let mut has_version = false;
         for line in text.lines() {
@@ -200,6 +239,11 @@ impl InstallerConfigV3 {
                 "db_password_file" => db.password.file = Some(value.to_owned()),
                 "new_db_password" => db.new_password.literal = Some(value.to_owned()),
                 "new_db_password_file" => db.new_password.file = Some(value.to_owned()),
+                "login_user_id" => local_host.login_user_id = Some(value.to_owned()),
+                "local_host_id" => local_host.local_host_id = Some(value.to_owned()),
+                "login_password" => local_host.login_password.literal = Some(value.to_owned()),
+                "login_password_file" => local_host.login_password.file = Some(value.to_owned()),
+                "confirm_local_admin" => local_host.confirmation = Some(value.to_owned()),
                 _ => base.push(trimmed.to_owned()),
             }
         }
@@ -209,6 +253,7 @@ impl InstallerConfigV3 {
         Ok(Self {
             base: InstallerConfigV2::parse(&base.join("\n"))?,
             database: db,
+            local_host,
         })
     }
 
@@ -284,6 +329,23 @@ mod tests {
             config.database.new_db_confirmation.as_deref(),
             Some("CREATE NEW ENCRYPTED DATABASE")
         );
+    }
+
+    #[test]
+    fn version_3_local_host_credentials_share_the_gui_cli_schema() {
+        let config = InstallerConfigV3::parse(&format!(
+            "{BASE}login_user_id=mingleadmin\nlocal_host_id=local.example\nlogin_password=SeparateLogin123!\nconfirm_local_admin=ACTIVATE LOCAL HOST ADMIN\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            config.local_host.login_user_id.as_deref(),
+            Some("mingleadmin")
+        );
+        assert_eq!(
+            config.local_host.login_password.literal.as_deref(),
+            Some("SeparateLogin123!")
+        );
+        assert!(config.local_host.has_any());
     }
 
     #[test]

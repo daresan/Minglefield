@@ -56,10 +56,7 @@ The installer/first-run flow may register the local Host and configure only the 
 
 ### Binding decision: first local Host administrator (approved 2026-11-06)
 
-A new Minglefield installation must **automatically prepare the first local Host
-administrator during the explicitly authorized first-run setup**, without
-requiring a manual invitation or the current console-bootstrap-token entry.
-This is not automatic ownership merely because a process runs on a computer:
+A newly created encrypted database **without an existing local user/Host binding** must automatically prepare its first local Host administrator during first-run setup, without a manual invitation or console-bootstrap token. **Migrating an already initialized database is not first-user provisioning**: retain and use its existing identities, Host permissions and authentication instead. OS installation rights allow local file installation, not reassignment of an existing application account:
 
 - **Identity:** propose the editable login name `mingleadmin`. Create an
   ordinary local Minglefield user in the **operational encrypted database**,
@@ -81,18 +78,24 @@ This is not automatic ownership merely because a process runs on a computer:
   host-admin rights under current policy; avoid redundant global grants.
   Neither Minglefield-wide administration nor OS-level administrator
   privileges follow from the user name.
-- **Existing database import:** preserve *all* existing users, password
-  verifiers, sessions, delegated agents, Hosts and Host ownership.
-  Do not reset a password, seize an existing Host, silently reuse an
-  existing `mingleadmin` identity, or modify existing credentials.
-  Identity/Host conflicts require explicit authenticated resolution,
-  rather than an automatic INSERT/UPDATE/overwrite.
-- **Remote Hosts:** `mingleadmin` can administer a remote Host **only**
-  after an authenticated, owner-authorized, host-scoped remote claim or
-  delegated Host-admin grant. Proof must bind the intended Host and
-  identity, enforce expiry/single-use/revocation as applicable, and
-  prevent cross-Host replay. No possession of a local database key or
-  an arbitrary remote token implies global or remote ownership.
+- **Existing database import:** preserve all existing users, salted password
+  verifiers, session hashes and expiry/revocation state, delegated agents, local
+  and remote Host IDs, owners/admins and stored grants. **Reuse** an existing
+  `mingleadmin` and recorded local Host ownership normally, without another
+  account, token, Host entry, password reset or first-run activation. `alpha_sessions`
+  contains only the hash of an issued bearer token, not the recoverable token:
+  an existing presented token remains valid only until expiry/revocation,
+  and users with existing password verifiers log in to obtain a fresh session.
+  A new installation must not invent credentials for a token-only legacy account.
+  If a *new ownership change* would contradict existing records, preserve those
+  records and report the specific blocked change; **do not turn it into a failure
+  of otherwise valid database adoption or ordinary application startup**.
+- **Remote Hosts:** Existing database records of remote Host ownership/admin
+  grants, if present, are preserved unchanged; their future operational use is
+  an application concern and **not part of installer acceptance**. New remote
+  Host acquisition would require the application's later authorized remote-claim
+  mechanism. Neither SQLCipher unlock nor a local installation invents remote
+  rights.
 - **Provisioning trust:** installer and first-run application must use
   one authenticated **local-only, single-use** provisioning handshake
   with verified process/installation identity and explicit owner consent.
@@ -135,9 +138,9 @@ build. Green engineering CI does not stand in for those product checks.
 
 The portable **Setup Manager GUI**, the **headless installer CLI**, and the independently launched **Minglefield application** are three distinct interfaces. GUI and installer CLI must share the same native installation core; application shell startup is not an installer mode. M2.09 first validates the SQLCipher-backed **application process** independently of setup GUI; M2.10 packages/install-tests its runtime and adds fresh encrypted DB creation; M2.11 wires the existing GUI and actual installer CLI to the common engine. Do not reinterpret M2.09 as a second encryption pass on every launch. The first Alpha uses the verified official application package; building/installing a chosen checkout or fork is postponed. A checkout selected for data migration is **not** an executable payload.
 
-**Fresh local Host setup:** The OS-authorized local installation creates the first local Host and editable default `mingleadmin` identity in a new encrypted database, without invite code or remote Host claim. Preserve the native, scoped, once-per-operation setup boundary; do not equate a database-copy operation ID with durable physical Host identity.
+**Fresh local Host setup only:** After creating a genuinely new encrypted database, create its first local Host and editable default `mingleadmin` once, without invite code or remote claim. The native one-time authorization applies to **new identity/Host creation**, not to reading or launching an imported, already provisioned database. An installation-operation ID must not be substituted for its existing persisted Host ID.
 
-**Imported database:** Preserve all existing users, salts/password verifiers, operator and Host owner/admin assignments, local and remote Host references/grants, agents, sessions, settings and recognized data. An existing, *positively matched* `mingleadmin` plus local Host owner is already configured: no duplicate account, password change, unnecessary second Host or error. A different/unverifiable assignment needs authenticated resolution before any **change of ownership**; OS filesystem permission alone does not authenticate an imported application account. The present `HostCommitPolicy.provision_first_run_local_host_admin_trusted` only supports new identities and returns `first_run_identity_conflict` / `first_run_host_conflict` on pre-existing references; native setup currently chooses `local.<operation-id>`. Non-destructive re-recognition and persistent local Host identity remain explicitly unimplemented, without relaxing present collision protection.
+**Imported database: continue, do not re-provision.** After successful SQLCipher unlock and verified data migration, Minglefield must use the database's existing login identities, password verifiers, live session hashes/expiry, agents, Host IDs, owners/admins and grants. A previously issued bearer session remains usable **when the client still has the token and it is neither expired nor revoked**; the database stores its hash only. Users with existing passwords can log in and obtain new sessions through the normal application path. The installer must neither rotate session hashes nor create replacement tokens/accounts/Host permissions as a prerequisite. The current `provision_first_run_local_host_admin_trusted` rejects existing identity/host references, because it is a *creation* method: invoking it for an imported, already provisioned database is the **wrong branch**, not evidence of a real ownership conflict. The native implementation's `local.<operation-id>` must not replace an imported `host_id`; keep its recorded ID and configured rights. If a genuinely new assignment contradicts an existing owner, refuse **that mutation** without blocking normal login/startup or erasing data. This is a correction to existing M2.08 flow, not an extra subgoal.
 
 **Remote Host boundary:** Preserve imported remote Host records/rights as data. Real remote discovery, remote claim/management, client-only installations and active remote-host connection acceptance belong to future **application** work and are **not** installer admission criteria. This does not authorize altering imported remote ownership.
 

@@ -21,7 +21,8 @@ pub struct FirstRunState {
 struct FirstRunPending {
     database: Option<VerifiedDatabase>,
     application: Option<PathBuf>,
-    spent: bool,
+    active: bool,
+    consumed_operations: std::collections::BTreeSet<String>,
 }
 
 struct VerifiedDatabase {
@@ -62,8 +63,11 @@ impl FirstRunState {
             .inner
             .lock()
             .map_err(|_| "First-run authorization state unavailable".to_owned())?;
-        if state.spent || state.database.is_some() {
-            return Err("First-run copy authorization already used or reserved".to_owned());
+        if state.active || state.consumed_operations.contains(operation_id) {
+            return Err("First-run copy operation active or already consumed".to_owned());
+        }
+        if state.database.as_ref().is_some_and(|v| v.operation_id == operation_id) {
+            return Err("First-run copy already recorded".to_owned());
         }
         state.database = Some(VerifiedDatabase {
             path: canonical,
@@ -85,32 +89,57 @@ impl FirstRunState {
             .inner
             .lock()
             .map_err(|_| "First-run authorization state unavailable".to_owned())?;
-        if state.spent || state.application.is_some() {
-            return Err("First-run application authorization already reserved".to_owned());
+        if state.active {
+            return Err("First-run worker is currently active".to_owned());
+        }
+        if state.application.as_ref() == Some(&canonical) {
+            return Err("Application installation already recorded".to_owned());
         }
         state.application = Some(canonical);
         Ok(())
     }
 
+    fn validate_database_unlock(&self, password: &str) -> Result<(), String> {
+        let path = {
+            let state = self.inner.lock()
+                .map_err(|_| "First-run authorization state unavailable")?;
+            if state.active || state.database.is_none() || state.application.is_none() {
+                return Err("Verified local database and application required".into());
+            }
+            state.database.as_ref().unwrap().path.clone()
+        };
+        use rusqlite::{Connection, OpenFlags};
+        let conn = Connection::open_with_flags(
+            &path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX
+        ).map_err(|_| "Cannot open the new encrypted database")?;
+        conn.pragma_update(None, "key", password)
+            .map_err(|_| "Cannot unlock the encrypted database")?;
+        conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get::<_, i64>(0))
+            .map_err(|_| "Incorrect SQLCipher database password")?;
+        Ok(())
+    }
+
     fn consume(&self) -> Result<ActivationPermit, String> {
-        let mut state = self
-            .inner
-            .lock()
-            .map_err(|_| "First-run authorization state unavailable".to_owned())?;
-        if state.spent || state.database.is_none() || state.application.is_none() {
+        let mut state = self.inner.lock()
+            .map_err(|_| "First-run authorization state unavailable")?;
+        if state.active || state.database.is_none() || state.application.is_none() {
             return Err("Verified current-session copy and installation required".to_owned());
         }
-        state.spent = true;
+        let database = state.database.take().unwrap();
+        if !state.consumed_operations.insert(database.operation_id.clone()) {
+            return Err("Already used first-run operation".to_owned());
+        }
+        state.active = true;
         Ok(ActivationPermit {
-            database: state
-                .database
-                .take()
-                .ok_or("Missing current-session database")?,
-            application: state
-                .application
-                .take()
-                .ok_or("Missing current-session application")?,
+            database,
+            application: state.application.as_ref().unwrap().clone(),
         })
+    }
+
+    fn finish(&self) {
+        if let Ok(mut state) = self.inner.lock() {
+            state.active = false;
+        }
     }
 }
 
@@ -279,12 +308,17 @@ pub async fn activate_first_run_local_admin(
             "Valid separate local first-run credentials and consent are required".to_owned(),
         );
     }
-    let permit = app.state::<FirstRunState>().consume()?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let state = app.state::<FirstRunState>();
+    // A typo in the SQLCipher password must not consume the operation permit.
+    state.validate_database_unlock(&database_password)?;
+    let permit = state.consume()?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
         activate_with_permit(permit, login_user_id, login_password, database_password)
     })
     .await
-    .map_err(|_| "Local first-run activation worker failed".to_owned())?
+    .map_err(|_| "Local first-run activation worker failed".to_owned());
+    state.finish();
+    result?
 }
 
 #[cfg(test)]
@@ -328,9 +362,18 @@ mod tests {
         assert_eq!(permit.application, fs::canonicalize(&installed).unwrap());
         assert!(state.consume().is_err());
         assert!(state.record_installed_application(&installed).is_err());
-        assert!(state
-            .record_encrypted_copy(&database, "fedcba9876543210fedcba9876543210")
-            .is_err());
+        assert!(state.record_encrypted_copy(
+            &database, "0123456789abcdef0123456789abcdef").is_err());
+        // A subsequent independent migration must be possible without
+        // closing the installer or deleting the previous output.
+        state.finish();
+        let next_db = base.join("another.sqlite3");
+        fs::write(&next_db, b"next-disposable-encrypted-fixture").unwrap();
+        assert!(state.record_encrypted_copy(
+            &next_db, "fedcba9876543210fedcba9876543210").is_ok());
+        assert_eq!(state.consume().unwrap().database.operation_id,
+            "fedcba9876543210fedcba9876543210");
+        state.finish();
         fs::remove_dir_all(base).unwrap();
     }
 }

@@ -336,11 +336,11 @@ fn start_worker(app: &InstalledApp, frame: &[u8]) -> Result<(Child, u16), &'stat
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW, embedded worker only
-    }
+    // Match the previously CI-verified Python start adapter on Windows.
+    // CREATE_NO_WINDOW is deliberately not applied here: it changes the
+    // subprocess launch environment without being needed for a console
+    // binary, and Windows failed to return the private readiness frame
+    // with that flag. A later native GUI subsystem owns window suppression.
     let mut child = command
         .spawn()
         .map_err(|_| "cannot start bundled Alpha runtime")?;
@@ -373,8 +373,14 @@ fn start_worker(app: &InstalledApp, frame: &[u8]) -> Result<(Child, u16), &'stat
         let response = receiver
             .recv_timeout(STARTUP_TIMEOUT)
             .map_err(|_| "native Alpha startup timed out")?;
-        if response.is_empty() || response.len() > MAX_FRAME || !response.ends_with(b"\n") {
-            return Err("incomplete or excessive native Alpha readiness frame");
+        if response.is_empty() {
+            return Err("native Alpha worker closed stdout before readiness");
+        }
+        if response.len() > MAX_FRAME {
+            return Err("native Alpha readiness exceeds bounded length");
+        }
+        if !response.ends_with(b"\n") {
+            return Err("native Alpha readiness missing line terminator");
         }
         parse_readiness(&response)
     })();

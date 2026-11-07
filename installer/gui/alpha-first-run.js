@@ -70,19 +70,20 @@ export function classifyImportedAlphaAuthorization(review) {
     [owners, ["host_id", "owner_id"]],
     [executors, ["host_id", "operator_id"]]
   ]) {
-    if (!table || !Array.isArray(table.columns) || !Array.isArray(table.rows) ||
-        !required.every(name => table.columns.includes(name))) {
+    if (table && (!Array.isArray(table.columns) || !Array.isArray(table.rows) ||
+        !required.every(name => table.columns.includes(name)))) {
       return "unverified";
     }
   }
-  // There may be non-mingleadmin owners, token-only legacy users and remote
-  // Hosts. Their existing rights are *not* a request to recreate local rights.
-  if (owners.rows.length > 0 && executors.rows.length > 0) {
+  // Preserve even partial legacy accounts/Host tables rather than creating
+  // a competing mingleadmin or a second copy-operation-derived Host ID.
+  if (owners?.rows.length > 0 && executors?.rows.length > 0) {
     return "existing_host_authorization";
   }
-  if (users.rows.length > 0 || owners.rows.length > 0 ||
-      executors.rows.length > 0) {
+  if (users?.rows.length > 0 || owners?.rows.length > 0 ||
+      executors?.rows.length > 0) {
     return "existing_identity_or_host";
   }
+  if (!users || !owners || !executors) return "unverified";
   return "empty_first_run";
 }

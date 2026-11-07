@@ -1,9 +1,9 @@
 //! Headless installer CLI: plan preview and explicitly approved managed Alpha
-//! file installation plus reviewed SQLCipher inspection/copy. Host setup
-//! and native app launch remain unimplemented; never imply full installation.
+//! file installation, reviewed SQLCipher operations, and new local Host setup.
+//! Native application launch remains a separate incomplete milestone.
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
-use minglefield_installer_core::config_v3::{DatabaseOptions, InstallerConfigV3};
+use minglefield_installer_core::config_v3::{DatabaseOptions, InstallerConfigV3, LocalHostOptions};
 use minglefield_installer_core::managed_alpha_install::install_from_verified_root;
 use minglefield_installer_core::{InstallPlan, Mode};
 use std::env;
@@ -11,9 +11,11 @@ use std::path::Path;
 use std::process::ExitCode;
 
 mod database;
+mod local_setup;
 mod output;
 
 use database::DatabaseAction;
+use local_setup::LocalSetupAction;
 
 const INSTALL_CONFIRMATION: &str = "INSTALL MINGLEFIELD ALPHA FILES";
 
@@ -42,8 +44,39 @@ fn complete(
     action: &FileInstallOptions,
     db_action: &DatabaseAction,
     db_config: Option<&DatabaseOptions>,
+    host_action: &LocalSetupAction,
+    host_config: Option<&LocalHostOptions>,
     json: bool,
 ) -> Result<(), (u8, String)> {
+    if host_action.enabled {
+        if !action.enabled || plan.install_optional_conda || plan.install_optional_comfyui {
+            return Err((
+                2,
+                "local Host setup requires approved app files and no optional runtimes".into(),
+            ));
+        }
+        let source = action.source.as_deref().ok_or((
+            2,
+            "--package-dir is required for local Host setup".to_owned(),
+        ))?;
+        let inventory = action.inventory_sha256.as_deref().ok_or((
+            2,
+            "--inventory-sha256 is required for local Host setup".to_owned(),
+        ))?;
+        return host_action.execute(
+            Path::new(source),
+            Path::new(&plan.install_dir),
+            inventory,
+            action.confirmation.as_deref(),
+            db_action,
+            db_config,
+            host_config,
+            json,
+        );
+    }
+    if host_action.input.has_any() {
+        return Err((2, "local login inputs require --setup-local-host".into()));
+    }
     if db_action.active() {
         if action.enabled
             || action.source.is_some()
@@ -147,13 +180,16 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let mut config_file: Option<String> = None;
     let mut action = FileInstallOptions::default();
     let mut db_action = DatabaseAction::default();
+    let mut host_action = LocalSetupAction::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--silent" if !silent => silent = true,
             "--json" if !json => json = true,
             "--defaults" if !defaults => defaults = true,
             "--install-alpha-files" if !action.enabled => action.enabled = true,
-            "--silent" | "--json" | "--defaults" | "--install-alpha-files" => {
+            "--setup-local-host" if !host_action.enabled => host_action.enabled = true,
+            "--silent" | "--json" | "--defaults" | "--install-alpha-files"
+            | "--setup-local-host" => {
                 return Err((2, format!("duplicate argument: {arg}")));
             }
             "--install-dir" => {
@@ -225,11 +261,18 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 println!(
                     "  --new-db-password VALUE --confirm-new-db 'CREATE NEW ENCRYPTED DATABASE'."
                 );
-                println!("Database copy neither provisions Hosts nor launches the app.");
+                println!("New local Host setup: --install-alpha-files --create-new-encrypted-db");
+                println!("  --setup-local-host --login-user-id mingleadmin --login-password VALUE");
+                println!("  --confirm-local-admin 'ACTIVATE LOCAL HOST ADMIN'");
+                println!("  plus the distinct file and new DB flags and consents above.");
+                println!("This single-process path cannot adopt an existing DB or remote Host.");
+                println!("Native application launch remains a separate incomplete milestone.");
                 return Ok(());
             }
             _ => {
-                if !db_action.parse(&arg, &mut args)? {
+                if !db_action.parse(&arg, &mut args)?
+                    && !host_action.parse(&arg, &mut args)?
+                {
                     return Err((2, "unsupported argument; use --help".to_owned()));
                 }
             }
@@ -272,7 +315,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             let plan = config
                 .preview(Mode::Silent)
                 .map_err(|_| (3, "invalid installation plan".to_owned()))?;
-            if (action.enabled || db_action.active())
+            if (action.enabled || db_action.active() || host_action.enabled)
                 && (config.base.git_tools.install_optional_git
                     || config.base.git_tools.install_optional_gh
                     || config.base.git_tools.offer_gh_login)
@@ -288,6 +331,8 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 &action,
                 &db_action,
                 Some(&config.database),
+                &host_action,
+                Some(&config.local_host),
                 json,
             )?;
         } else if version == "2" {
@@ -302,7 +347,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             let plan = config
                 .preview(Mode::Silent)
                 .map_err(|_| (3, "invalid installation plan".to_owned()))?;
-            if (action.enabled || db_action.active())
+            if (action.enabled || db_action.active() || host_action.enabled)
                 && (config.git_tools.install_optional_git
                     || config.git_tools.install_optional_gh
                     || config.git_tools.offer_gh_login)
@@ -317,6 +362,8 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 output::success_v2(&config, &plan),
                 &action,
                 &db_action,
+                None,
+                &host_action,
                 None,
                 json,
             )?;
@@ -338,6 +385,8 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                 &action,
                 &db_action,
                 None,
+                &host_action,
+                None,
                 json,
             )?;
         }
@@ -358,6 +407,8 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             output::success(&config, &plan),
             &action,
             &db_action,
+            None,
+            &host_action,
             None,
             json,
         )?;

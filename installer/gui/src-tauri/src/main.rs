@@ -9,6 +9,7 @@ mod migration_review;
 
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
+use minglefield_installer_core::config_v3::InstallerConfigV3;
 use minglefield_installer_core::Mode;
 use serde::Serialize;
 
@@ -465,7 +466,15 @@ fn preview_install_plan(
             .split_once('=')
             .map(|(_, value)| value.trim())
             .unwrap_or("");
-        if version == "2" {
+        if version == "3" {
+            let config = InstallerConfigV3::parse(&text).map_err(str::to_string)?;
+            config
+                .base
+                .git_tools
+                .validate()
+                .map_err(str::to_string)?;
+            (config.base.base, config.base.git_tools, 3)
+        } else if version == "2" {
             let config = InstallerConfigV2::parse(&text).map_err(str::to_string)?;
             config.git_tools.validate().map_err(str::to_string)?;
             (config.base, config.git_tools, 2)

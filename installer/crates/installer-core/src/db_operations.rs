@@ -21,10 +21,7 @@ pub fn verify_encrypted_database(
 ) -> Result<VerifiedEncryptedDatabase, &'static str> {
     let result = inspect_sqlite_with_password(path, key)
         .map_err(|_| "SQLCipher database inspect/unlock rejected")?;
-    if !result.source_encrypted
-        || !result.integrity_ok
-        || result.foreign_key_violations != 0
-    {
+    if !result.source_encrypted || !result.integrity_ok || result.foreign_key_violations != 0 {
         return Err("database must be encrypted and integrity-valid");
     }
     Ok(VerifiedEncryptedDatabase {
@@ -78,7 +75,9 @@ mod tests {
         let plaintext = dir.join("plaintext.db");
         {
             let connection = Connection::open(&ciphertext).unwrap();
-            connection.pragma_update(None, "key", "StrongKey123!").unwrap();
+            connection
+                .pragma_update(None, "key", "StrongKey123!")
+                .unwrap();
             connection
                 .execute_batch(
                     "CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY, disabled INTEGER);
@@ -88,7 +87,9 @@ mod tests {
         }
         {
             let connection = Connection::open(&plaintext).unwrap();
-            connection.execute_batch("CREATE TABLE demo(id INTEGER);").unwrap();
+            connection
+                .execute_batch("CREATE TABLE demo(id INTEGER);")
+                .unwrap();
         }
         let result = verify_encrypted_database(&ciphertext, "StrongKey123!").unwrap();
         assert!(result.encrypted && result.integrity_verified);
@@ -145,7 +146,9 @@ mod tests {
         assert_eq!(std::fs::read(&backup).unwrap(), before);
         let copied =
             Connection::open_with_flags(&destination, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-        copied.pragma_update(None, "key", "AnotherStrongKey19!").unwrap();
+        copied
+            .pragma_update(None, "key", "AnotherStrongKey19!")
+            .unwrap();
         let host: String = copied
             .query_row(
                 "SELECT host_id FROM sec01_host_owners WHERE owner_id='mingleadmin'",
@@ -155,18 +158,16 @@ mod tests {
             .unwrap();
         assert_eq!(host, "local.stable");
         drop(copied);
-        assert!(
-            create_reviewed_encrypted_database_copy(
-                &source,
-                &destination,
-                &backup,
-                "ExistingKey9!",
-                "AnotherStrongKey19!",
-                &[],
-                EXPERIMENTAL_COPY_CONFIRMATION,
-            )
-            .is_err()
-        );
+        assert!(create_reviewed_encrypted_database_copy(
+            &source,
+            &destination,
+            &backup,
+            "ExistingKey9!",
+            "AnotherStrongKey19!",
+            &[],
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        )
+        .is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

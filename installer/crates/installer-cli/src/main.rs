@@ -308,7 +308,14 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                     "Git/gh optional installation not implemented in file-only CLI".to_owned(),
                 ));
             }
-            complete(&plan, output::success_v2(&config, &plan), &action, &db_action, None, json)?;
+            complete(
+                &plan,
+                output::success_v2(&config, &plan),
+                &action,
+                &db_action,
+                None,
+                json,
+            )?;
         } else {
             let mut config = InstallerConfig::parse(&text)
                 .map_err(|_| (3, "invalid version 1 configuration".to_owned()))?;
@@ -321,7 +328,14 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             let plan = config
                 .preview(Mode::Silent)
                 .map_err(|_| (3, "invalid installation plan".to_owned()))?;
-            complete(&plan, output::success(&config, &plan), &action, &db_action, None, json)?;
+            complete(
+                &plan,
+                output::success(&config, &plan),
+                &action,
+                &db_action,
+                None,
+                json,
+            )?;
         }
     } else {
         let mut config = InstallerConfig::defaults()
@@ -335,7 +349,14 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
         let plan = config
             .preview(Mode::Silent)
             .map_err(|_| (3, "invalid installation plan".to_owned()))?;
-        complete(&plan, output::success(&config, &plan), &action, &db_action, None, json)?;
+        complete(
+            &plan,
+            output::success(&config, &plan),
+            &action,
+            &db_action,
+            None,
+            json,
+        )?;
     }
     Ok(())
 }
@@ -529,10 +550,8 @@ mod tests {
 
     #[test]
     fn database_verification_uses_real_sqlcipher_and_rejects_fake_header() {
-        let root = std::env::temp_dir().join(format!(
-            "mf-cli-db-verification-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("mf-cli-db-verification-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let candidate = root.join("fake-encrypted.db");
         std::fs::write(&candidate, b"fake-not-sqlcipher").unwrap();
@@ -555,10 +574,7 @@ mod tests {
 
     #[test]
     fn v3_admin_authored_config_accepts_plaintext_password_field() {
-        let root = std::env::temp_dir().join(format!(
-            "mf-cli-v3-conf-{}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir().join(format!("mf-cli-v3-conf-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let configuration = root.join("config.conf");
         let text = concat!(

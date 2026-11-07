@@ -180,7 +180,10 @@ impl DatabaseAction {
             }
         };
         if input.login_password.is_some() {
-            return Err((2, "login password requires a local Host setup action".to_owned()));
+            return Err((
+                2,
+                "login password requires a local Host setup action".to_owned(),
+            ));
         }
         let destination = db.database_path.as_deref().ok_or((
             2,

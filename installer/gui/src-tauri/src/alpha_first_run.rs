@@ -66,7 +66,11 @@ impl FirstRunState {
         if state.active || state.consumed_operations.contains(operation_id) {
             return Err("First-run copy operation active or already consumed".to_owned());
         }
-        if state.database.as_ref().is_some_and(|v| v.operation_id == operation_id) {
+        if state
+            .database
+            .as_ref()
+            .is_some_and(|v| v.operation_id == operation_id)
+        {
             return Err("First-run copy already recorded".to_owned());
         }
         state.database = Some(VerifiedDatabase {
@@ -101,7 +105,9 @@ impl FirstRunState {
 
     fn validate_database_unlock(&self, password: &str) -> Result<(), String> {
         let path = {
-            let state = self.inner.lock()
+            let state = self
+                .inner
+                .lock()
                 .map_err(|_| "First-run authorization state unavailable")?;
             if state.active || state.database.is_none() || state.application.is_none() {
                 return Err("Verified local database and application required".into());
@@ -110,17 +116,23 @@ impl FirstRunState {
         };
         use rusqlite::{Connection, OpenFlags};
         let conn = Connection::open_with_flags(
-            &path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX
-        ).map_err(|_| "Cannot open the new encrypted database")?;
+            &path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|_| "Cannot open the new encrypted database")?;
         conn.pragma_update(None, "key", password)
             .map_err(|_| "Cannot unlock the encrypted database")?;
-        conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get::<_, i64>(0))
-            .map_err(|_| "Incorrect SQLCipher database password")?;
+        conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .map_err(|_| "Incorrect SQLCipher database password")?;
         Ok(())
     }
 
     fn consume(&self) -> Result<ActivationPermit, String> {
-        let mut state = self.inner.lock()
+        let mut state = self
+            .inner
+            .lock()
             .map_err(|_| "First-run authorization state unavailable")?;
         if state.active || state.database.is_none() || state.application.is_none() {
             return Err("Verified current-session copy and installation required".to_owned());
@@ -362,17 +374,21 @@ mod tests {
         assert_eq!(permit.application, fs::canonicalize(&installed).unwrap());
         assert!(state.consume().is_err());
         assert!(state.record_installed_application(&installed).is_err());
-        assert!(state.record_encrypted_copy(
-            &database, "0123456789abcdef0123456789abcdef").is_err());
+        assert!(state
+            .record_encrypted_copy(&database, "0123456789abcdef0123456789abcdef")
+            .is_err());
         // A subsequent independent migration must be possible without
         // closing the installer or deleting the previous output.
         state.finish();
         let next_db = base.join("another.sqlite3");
         fs::write(&next_db, b"next-disposable-encrypted-fixture").unwrap();
-        assert!(state.record_encrypted_copy(
-            &next_db, "fedcba9876543210fedcba9876543210").is_ok());
-        assert_eq!(state.consume().unwrap().database.operation_id,
-            "fedcba9876543210fedcba9876543210");
+        assert!(state
+            .record_encrypted_copy(&next_db, "fedcba9876543210fedcba9876543210")
+            .is_ok());
+        assert_eq!(
+            state.consume().unwrap().database.operation_id,
+            "fedcba9876543210fedcba9876543210"
+        );
         state.finish();
         fs::remove_dir_all(base).unwrap();
     }

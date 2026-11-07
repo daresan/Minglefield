@@ -374,8 +374,11 @@ pub fn add_selected_registered_schema_objects(
         );
     }
     for name in &choices {
-        let row = expected.get(name).ok_or("Selected schema name is not registered")?;
-        if row.kind == "index" && !choices.contains(&row.table)
+        let row = expected
+            .get(name)
+            .ok_or("Selected schema name is not registered")?;
+        if row.kind == "index"
+            && !choices.contains(&row.table)
             && current.get(&row.table) != expected.get(&row.table)
         {
             return Err("Selected index requires its registered parent table".into());
@@ -556,6 +559,26 @@ mod tests {
         assert!(report
             .incompatible_objects
             .contains(&"uq_game_install_one_active_project".to_owned()));
+    }
+
+    #[test]
+    fn missing_registered_index_is_added_without_rejecting_existing_extensions() {
+        let mut db = known_reference().unwrap();
+        db.execute_batch(
+            "DROP INDEX uq_game_install_one_active_project;
+             CREATE TABLE extension_data(note TEXT);
+             INSERT INTO extension_data VALUES('preserved');"
+        ).unwrap();
+        let selected = vec!["uq_game_install_one_active_project".to_owned()];
+        let result = add_selected_registered_schema_objects(&mut db, &selected).unwrap();
+        assert_eq!(result.added_objects, selected);
+        assert_eq!(db.query_row(
+            "SELECT note FROM extension_data", [], |row| row.get::<_, String>(0)
+        ).unwrap(), "preserved");
+        assert!(db.query_row(
+            "SELECT name FROM sqlite_schema WHERE name='uq_game_install_one_active_project'",
+            [], |row| row.get::<_, String>(0)
+        ).is_ok());
     }
 
     #[test]

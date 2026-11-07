@@ -74,7 +74,8 @@ pub(crate) fn create_missing_destination_parent(destination: &Path) -> Result<()
             Ok(_) => return Err("Unsafe destination directory component".into()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 absent.push(cursor.clone());
-                cursor = cursor.parent()
+                cursor = cursor
+                    .parent()
                     .ok_or("Cannot find real ancestor of destination")?
                     .to_path_buf();
             }

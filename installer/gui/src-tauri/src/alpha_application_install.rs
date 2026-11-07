@@ -4,7 +4,8 @@
 use minglefield_installer_core::integrity::{sha256_hex, sha256_reader_hex};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
+use std::io;
 use std::path::{Component, Path, PathBuf};
 use tauri::Manager;
 
@@ -156,6 +157,28 @@ pub(crate) fn verify_installed_application(
     verified_inventory(source, expected_digest).map(|_| ())
 }
 
+fn ensure_real_directories(directory: &Path) -> Result<(), String> {
+    let mut absent = Vec::new();
+    let mut path = directory.to_path_buf();
+    loop {
+        match fs::symlink_metadata(&path) {
+            Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => break,
+            Ok(_) => return Err("Install path includes a file or symlink".to_owned()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                absent.push(path.clone());
+                path = path.parent()
+                    .ok_or("Cannot find existing installation ancestor")?
+                    .to_path_buf();
+            }
+            Err(_) => return Err("Cannot inspect installation parent directory".to_owned()),
+        }
+    }
+    for dir in absent.iter().rev() {
+        fs::create_dir(dir).map_err(|_| "Cannot create new installation directory")?;
+    }
+    Ok(())
+}
+
 /// Copy only manifest-declared files into a never-before-existing directory.
 /// Failure leaves an incomplete NEW directory for manual inspection; the
 /// original application data, database and independent backup are not touched.
@@ -178,34 +201,60 @@ fn install_from_verified_root(
     {
         return Err("Installation destination must be a new absolute directory".to_owned());
     }
-    let parent = destination
-        .parent()
-        .ok_or("Installation destination has no parent")?;
-    let parent_meta = fs::symlink_metadata(parent)
-        .map_err(|_| "Installation parent directory must already exist")?;
-    if parent_meta.file_type().is_symlink() || !parent_meta.is_dir() {
-        return Err("Installation parent must be a real directory".to_owned());
-    }
-    let final_parent =
-        fs::canonicalize(parent).map_err(|_| "Cannot identify installation parent")?;
-    if final_parent.starts_with(&source) || source.starts_with(destination) {
-        return Err("Installation must not overlap its source".to_owned());
-    }
-    let target = final_parent.join(
-        destination
-            .file_name()
-            .ok_or("Installation target filename missing")?,
-    );
-    // A new file, symlink or directory occupies the name: never overwrite it.
-    match fs::symlink_metadata(&target) {
-        Ok(_) => return Err("Installation destination is already occupied".to_owned()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => return Err("Cannot check installation destination".to_owned()),
-    }
     let inventory = verified_inventory(&source, expected_digest)?;
-    // This is deliberately an exclusive creation rather than a rename that
-    // might replace an existing empty directory on Unix.
-    fs::create_dir(&target).map_err(|_| "Cannot exclusively create application directory")?;
+    let parent = destination.parent().ok_or("Installation destination has no parent")?;
+
+    // Do not create anything during preview or while inventory verification
+    // is still pending. A new parent is a perfectly normal first-install path.
+    let mut cursor = parent;
+    while let Err(error) = fs::symlink_metadata(cursor) {
+        if error.kind() != io::ErrorKind::NotFound {
+            return Err("Cannot inspect installation ancestor".into());
+        }
+        cursor = cursor.parent().ok_or("Installation ancestor is missing")?;
+    }
+    let ancestor = fs::symlink_metadata(cursor)
+        .map_err(|_| "Cannot validate installation ancestor")?;
+    if ancestor.file_type().is_symlink() || !ancestor.is_dir() {
+        return Err("Installation ancestor must be a real directory".into());
+    }
+    if source.starts_with(destination) || destination.starts_with(&source) {
+        return Err("Installation must not overlap its source".into());
+    }
+    // Existing data folders are acceptable. The encrypted DB may already be
+    // present at the user's chosen root. Never replace existing managed
+    // application paths, symlinks, runtime files, or foreign user contents.
+    let mut existing = false;
+    match fs::symlink_metadata(destination) {
+        Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => existing = true,
+        Ok(_) => return Err("Installation path is occupied by a file or symlink".into()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(_) => return Err("Cannot inspect installation destination".into()),
+    }
+    if existing {
+        for name in inventory.files.keys() {
+            let top = Path::new(name).components().next()
+                .ok_or("Managed application inventory has no root component")?;
+            let item = destination.join(top.as_os_str());
+            match fs::symlink_metadata(item) {
+                Ok(_) => return Err("Existing application files would conflict with installation".into()),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(_) => return Err("Cannot inspect existing application entries".into()),
+            }
+        }
+        for name in [INVENTORY_NAME, "runtime-manifest.json"] {
+            if fs::symlink_metadata(destination.join(name)).is_ok() {
+                return Err("Existing managed application metadata must not be overwritten".into());
+            }
+        }
+    }
+    ensure_real_directories(parent)?;
+    if !existing {
+        fs::create_dir(destination)
+            .map_err(|_| "Cannot exclusively create application directory")?;
+    }
+    let target = fs::canonicalize(destination)
+        .map_err(|_| "Cannot resolve created installation destination")?;
     let mut links = Vec::new();
     for (name, entry) in &inventory.files {
         let relative = relative_install_path(name)?;
@@ -219,7 +268,17 @@ fn install_from_verified_root(
             InventoryEntry::File { size, sha256 } => {
                 let src = source.join(&relative);
                 check_regular_file(&src, *size, sha256)?;
-                fs::copy(&src, &dest).map_err(|_| "Cannot copy managed Alpha application file")?;
+                let mut input = File::open(&src)
+                    .map_err(|_| "Cannot reopen verified managed Alpha file")?;
+                let mut output = OpenOptions::new().write(true).create_new(true).open(&dest)
+                    .map_err(|_| "Cannot exclusively create managed application file")?;
+                io::copy(&mut input, &mut output)
+                    .map_err(|_| "Cannot copy managed Alpha application bytes")?;
+                output.sync_all()
+                    .map_err(|_| "Cannot flush managed Alpha application file")?;
+                fs::set_permissions(&dest, fs::metadata(&src)
+                    .map_err(|_| "Cannot inspect managed Alpha permissions")?.permissions())
+                    .map_err(|_| "Cannot preserve managed Alpha file permissions")?;
                 check_regular_file(&dest, *size, sha256)?;
             }
             InventoryEntry::Symlink { target: link } => links.push((dest, link.clone(), relative)),
@@ -259,7 +318,12 @@ fn install_from_verified_root(
         {
             return Err("Managed Alpha installation metadata is invalid".to_owned());
         }
-        fs::copy(&src, target.join(name))
+        let mut input = File::open(&src)
+            .map_err(|_| "Cannot open managed Alpha installation metadata")?;
+        let mut output = OpenOptions::new().write(true).create_new(true)
+            .open(target.join(name))
+            .map_err(|_| "Managed Alpha installation metadata is already occupied")?;
+        io::copy(&mut input, &mut output)
             .map_err(|_| "Cannot copy managed Alpha installation metadata")?;
     }
     Ok(ApplicationFilesInstalled {
@@ -385,6 +449,25 @@ mod tests {
             first
         );
         assert!(install_from_verified_root(&src, &dst, &digest).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn permits_fresh_nested_parent_and_existing_database_directory() {
+        let root = fixture_root();
+        let (src, digest) = fixture(&root);
+        let nested = root.join("never-created").join("application-install");
+        assert!(!nested.parent().unwrap().exists());
+        assert!(install_from_verified_root(&src, &nested, &digest).is_ok());
+        assert!(nested.join("application/server/installed_alpha_launch.py").is_file());
+        let with_db = root.join("existing-data");
+        fs::create_dir(&with_db).unwrap();
+        let database = with_db.join("user-alpha.sqlite3");
+        fs::write(&database, b"private data to preserve").unwrap();
+        assert!(install_from_verified_root(&src, &with_db, &digest).is_ok());
+        assert_eq!(fs::read(&database).unwrap(), b"private data to preserve");
+        assert!(install_from_verified_root(&src, &with_db, &digest).is_err());
+        assert_eq!(fs::read(&database).unwrap(), b"private data to preserve");
         fs::remove_dir_all(root).unwrap();
     }
 

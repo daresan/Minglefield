@@ -1,15 +1,19 @@
 //! Headless installer CLI: plan preview and explicitly approved managed Alpha
-//! file installation. DB migration, Host setup and native app launch remain
-//! separate unimplemented CLI operations; never imply full installation.
+//! file installation plus reviewed SQLCipher inspection/copy. Host setup
+//! and native app launch remain unimplemented; never imply full installation.
 use minglefield_installer_core::config::InstallerConfig;
 use minglefield_installer_core::config_v2::InstallerConfigV2;
+use minglefield_installer_core::config_v3::{DatabaseOptions, InstallerConfigV3};
 use minglefield_installer_core::managed_alpha_install::install_from_verified_root;
 use minglefield_installer_core::{InstallPlan, Mode};
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
 
+mod database;
 mod output;
+
+use database::DatabaseAction;
 
 const INSTALL_CONFIRMATION: &str = "INSTALL MINGLEFIELD ALPHA FILES";
 
@@ -36,8 +40,26 @@ fn complete(
     plan: &InstallPlan,
     preview: String,
     action: &FileInstallOptions,
+    db_action: &DatabaseAction,
+    db_config: Option<&DatabaseOptions>,
     json: bool,
 ) -> Result<(), (u8, String)> {
+    if db_action.active() {
+        if action.enabled
+            || action.source.is_some()
+            || action.inventory_sha256.is_some()
+            || action.confirmation.is_some()
+        {
+            return Err((2, "file and database operations require separate explicit actions".to_owned()));
+        }
+        if plan.install_optional_conda || plan.install_optional_comfyui {
+            return Err((2, "optional runtime installation is not implemented for database operations".to_owned()));
+        }
+        return db_action.execute(db_config, json);
+    }
+    if db_action.has_unbound_inputs() || db_config.is_some_and(DatabaseOptions::has_any) {
+        return Err((2, "database input options require an explicit database action".to_owned()));
+    }
     if !action.enabled {
         if action.source.is_some()
             || action.inventory_sha256.is_some()
@@ -112,6 +134,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
     let mut data_dir: Option<String> = None;
     let mut config_file: Option<String> = None;
     let mut action = FileInstallOptions::default();
+    let mut db_action = DatabaseAction::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--silent" if !silent => silent = true,
@@ -171,10 +194,20 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                     "Default operation is PLAN ONLY. File install is not database migration, \\
                      Host provisioning, release provenance or an application launcher."
                 );
+                println!("Database: --verify-encrypted-db or --create-encrypted-copy, with --database PATH,");
+                println!("  --source-db PATH --backup-db PATH --db-password VALUE --new-db-password VALUE");
+                println!("  --db-password-file PATH --new-db-password-file PATH --secrets-stdin");
+                println!("  --schema-add ID --confirm-db-copy 'CREATE EXPERIMENTAL ENCRYPTED COPY'.");
+                println!("V3 config supports database_path, source_db_path, backup_db_path, db_password,");
+                println!("  db_password_file, new_db_password, new_db_password_file.");
+                println!("Env: MINGLEFIELD_DB_PASSWORD, MINGLEFIELD_NEW_DB_PASSWORD.");
+                println!("Database copy neither provisions Hosts nor launches the app.");
                 return Ok(());
             }
             _ => {
-                return Err((2, "unsupported argument; use --help".to_owned()));
+                if !db_action.parse(&arg, &mut args)? {
+                    return Err((2, "unsupported argument; use --help".to_owned()));
+                }
             }
         }
     }
@@ -203,7 +236,37 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             .split_once('=')
             .map(|(_, value)| value.trim())
             .unwrap_or("");
-        if version == "2" {
+        if version == "3" {
+            let mut config = InstallerConfigV3::parse(&text)
+                .map_err(|_| (3, "invalid version 3 configuration".to_owned()))?;
+            if let Some(path) = install_dir {
+                config.base.base.install_dir = path;
+            }
+            if let Some(path) = data_dir {
+                config.base.base.data_dir = path;
+            }
+            let plan = config
+                .preview(Mode::Silent)
+                .map_err(|_| (3, "invalid installation plan".to_owned()))?;
+            if (action.enabled || db_action.active())
+                && (config.base.git_tools.install_optional_git
+                    || config.base.git_tools.install_optional_gh
+                    || config.base.git_tools.offer_gh_login)
+            {
+                return Err((
+                    2,
+                    "Git/gh optional installation not implemented in this CLI action".to_owned(),
+                ));
+            }
+            complete(
+                &plan,
+                output::success_v3(&config, &plan),
+                &action,
+                &db_action,
+                Some(&config.database),
+                json,
+            )?;
+        } else if version == "2" {
             let mut config = InstallerConfigV2::parse(&text)
                 .map_err(|_| (3, "invalid version 2 configuration".to_owned()))?;
             if let Some(path) = install_dir {
@@ -225,7 +288,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
                     "Git/gh optional installation not implemented in file-only CLI".to_owned(),
                 ));
             }
-            complete(&plan, output::success_v2(&config, &plan), &action, json)?;
+            complete(&plan, output::success_v2(&config, &plan), &action, &db_action, None, json)?;
         } else {
             let mut config = InstallerConfig::parse(&text)
                 .map_err(|_| (3, "invalid version 1 configuration".to_owned()))?;
@@ -238,7 +301,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
             let plan = config
                 .preview(Mode::Silent)
                 .map_err(|_| (3, "invalid installation plan".to_owned()))?;
-            complete(&plan, output::success(&config, &plan), &action, json)?;
+            complete(&plan, output::success(&config, &plan), &action, &db_action, None, json)?;
         }
     } else {
         let mut config = InstallerConfig::defaults()
@@ -252,7 +315,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), (u8, String)> {
         let plan = config
             .preview(Mode::Silent)
             .map_err(|_| (3, "invalid installation plan".to_owned()))?;
-        complete(&plan, output::success(&config, &plan), &action, json)?;
+        complete(&plan, output::success(&config, &plan), &action, &db_action, None, json)?;
     }
     Ok(())
 }

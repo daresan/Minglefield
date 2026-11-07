@@ -242,6 +242,26 @@ consents and distinct credentials must be supplied**;
 `--silent --defaults` never invents a login password. No complete
 end-user desktop or portable Setup Manager acceptance is implied.
 
+**Persistent native app start (new focused CLI slice):** Choose
+`--start-native-app` in place of `--verify-native-start` only within the
+consented fresh `--setup-local-host` operation. Both flags together are
+rejected before filesystem writes. The CLI exits after checking that the
+installed, inventory-pinned Minglefield process remains reachable on
+`127.0.0.1`; no browser is opened in the unattended path. Its JSON
+receipt adds `native_application_running=true`,
+`native_application_process_id` and `native_application_port`.
+The SQLCipher key goes only through private stdin to the native process,
+not into process arguments or saved configuration. This operation still
+requires explicit file/new-DB/local-Host approvals and a separate account
+password. It does **not** claim an existing Host or enable a generic
+post-install re-provision command. After the native process has started,
+the installer CLI is no longer needed to keep Minglefield running; the
+normal account login is required in the application. The GUI provides a
+separate start action with backend-pinned installation/database paths
+and normal browser opening after readiness. On startup failure, the
+already-created files/DB/Host are retained for manual review; no hidden
+replay or deletion is allowed.
+
 ## Unfinished required CLI parity
 
 The **binding Bee-like credential contract** is documented in
@@ -249,12 +269,12 @@ The **binding Bee-like credential contract** is documented in
 CLI values, password files, administrator-authored configuration, environment
 variables, prompt and private stdin. Noninteractive sources are implemented
 for the focused SQLCipher verification/copy and fresh local Host CLI path;
-the optional native launch probe is shared with the Tauri GUI. **Still
-unfinished:** interactive CLI password prompts, migration of an existing
-user database as part of one complete installation transaction, a persistent
-application launch/desktop UX after setup, full Standard/Advanced/silent
-parameter parity, and manual native end-user acceptance. A verified probe
-is not a persistent running application and never replaces account login.
+the optional native readiness probe and independent live-app start share
+the same engine with Tauri. **Still unfinished:** interactive CLI password
+prompts, integration of existing-DB migration into one complete installation
+transaction, polished desktop and console-free Windows startup UX, full
+Standard/Advanced/silent parameter parity, and manual native end-user
+acceptance. A successful CI handoff is not full application/login acceptance.
 Do not infer complete M2.11 acceptance from green focused CI. The CLI,
 Tauri UI and independently launched Minglefield application must continue
 to respect existing Host ownership and the single versioned config contract.

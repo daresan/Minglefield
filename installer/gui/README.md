@@ -7,7 +7,7 @@ The portable build passed CI but **failed its first manual Windows acceptance**.
 
 The Setup Manager reuses the shared Rust `minglefield-installer-core` planner and the existing Alpha/Host implementations. **Current controlled Alpha behavior (2026-11-07):** An explicitly consented, backup-verified SQLCipher migration creates a separate, non-overwriting encrypted destination. A second, separately approved Tauri command copies the bundled, pinned Python 3.11 + SQLCipher runtime and Minglefield application files into a *new, unoccupied* installation directory after independently checking the compiled managed-file inventory. A third consented step uses native, single-use in-process proof of **both successful operations in this Setup Manager session** to create an editable local `mingleadmin` user and its owner-scoped local Host through the existing atomic `HostCommitPolicy` transaction. The sign-in password is separate from the database key, the console bootstrap token is not reused, and no global/remote Host authority is granted.
 
-**Still unavailable in the portable GUI:** creating a fresh empty encrypted database without a migratable source, a persistent end-user application launch from the installer, full release-publisher provenance, repair/update automation, and manual cross-platform portable user acceptance. The headless CLI already provides a separately approved fresh DB/local Host path, and both GUI and CLI now support an explicitly selected short native startup probe using the same Rust core; neither feature by itself completes M2.11. The existing M2.07 interruption diagnostics remain optional and read-only; a failed copy can be repeated at a new unused destination without touching the source or independent verified backup. The earlier README sections below describe the *historical* non-installing preview gates; this current capability summary supersedes their old statements about installation being impossible. Neither green CI nor a database-only copy establishes a completed end-user installation.
+**Still unavailable in the portable GUI:** creating a fresh empty encrypted database without a migratable source, complete one-transaction Standard/Advanced/silent parity, full release-publisher provenance, repair/update automation, and manual cross-platform portable user acceptance. An explicitly selected independent native start is now implemented and CI-tested, but its Windows Shadow/Finder/Linux end-user experience is **not yet manually accepted**. The headless CLI already provides a separately approved fresh DB/local Host path, and both GUI and CLI now support an explicitly selected short native startup probe using the same Rust core; neither feature by itself completes M2.11. The existing M2.07 interruption diagnostics remain optional and read-only; a failed copy can be repeated at a new unused destination without touching the source or independent verified backup. The earlier README sections below describe the *historical* non-installing preview gates; this current capability summary supersedes their old statements about installation being impossible. Neither green CI nor a database-only copy establishes a completed end-user installation.
 
 ## M2.11 optional native post-first-run check (focused technical milestone)
 
@@ -31,6 +31,34 @@ This is engineering CI scope only. Real GUI clicks, a console-free Windows
 application starter, full Windows Shadow acceptance, Linux desktop packaging,
 macOS Finder usability and complete Standard/Advanced/silent parity still
 require separate user-visible acceptance.
+
+## M2.11 independent installed-application handoff (CI-verified, T4 pending)
+
+The final Review page also offers a distinct **Installierte Minglefield-Anwendung starten**
+button. After a verified encrypted database copy and an inventory-checked
+native application install in this same Setup Manager session, the button
+may start the native application with either existing preserved Alpha
+users/Host authority or a newly initialized local Host. The backend does
+not accept a freely chosen executable, database path or Host identity from
+JavaScript: it reuses the paths recorded by its trusted installation
+writers, rechecks SQLCipher integrity and the pinned native inventory,
+and requires a separate exact launch confirmation. The SQLCipher key is
+delivered to the installed Minglefield executable over a private stdin
+frame; normal application account login is still required. The native
+process remains running when the Setup Manager exits, with its dynamic
+loopback port and nonsecret PID shown in the GUI. On a desktop, the
+native starter opens the OS browser only after readiness. Duplicate
+launches in the same current-session context are denied. The former
+short readiness probe remains separate and unchanged.
+
+A disposable real-Alpha CLI integration test verifies the shared
+independent start on Windows/macOS/Linux, checks the local HTTP response
+after CLI termination, and then explicitly stops only the test process
+tree. UI wiring, Rust backend and cross-OS tests passed. These are
+engineering results, not a claim that a portable Setup Manager or
+a Windows console-free executable has been manually accepted on Shadow.
+Do not publish a new portable build without the agreed MDCI acceptance
+gate and explicit milestone scope.
 
 On a trusted developer workstation with Node.js/npm, Rust and Tauri OS prerequisites:
 

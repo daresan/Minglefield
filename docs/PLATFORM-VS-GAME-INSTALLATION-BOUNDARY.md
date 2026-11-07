@@ -6,7 +6,7 @@
 
 **Owner:** `installer/` (shared Rust installer core, CLI, Tauri GUI) and application first-run/Hosts integration.
 
-**Subject:** Minglefield **itself**, from an official release or an explicitly chosen fork/source checkout. Responsibilities: OS-specific packages and install locations; detecting existing Minglefield source and installed application; install/launch/update/repair/uninstall; required runtime provisioning; preserving user data; and authenticated provisioning of the *local computer* as a Host.
+**Subject:** Minglefield **itself**. **First Alpha application payload: official, verified package only.** An explicitly chosen fork/source checkout is a possible **later** install source, not an Alpha acceptance gate; a checkout selected for *data migration* is never implicitly executed. Responsibilities: OS-specific packages/locations; detecting existing source and installed application; install/launch/update/repair/uninstall; required runtime; non-destructive existing-data/ownership preservation; and approved provisioning of the *local computer* as a Host.
 
 **Applicable requirements:** published framework GNU GPL license and notices; application release integrity and source/publisher provenance; OS packaging and safe filesystem operations; explicit consent for optional runtimes; application configuration and Host authentication. A Minglefield installation is **not** a marketplace transaction and does **not** incur a 5% platform fee.
 
@@ -31,4 +31,4 @@
 
 ## Current state
 
-Tauri native *setup-manager preview* packages exist. The app installer can preview a plan and manually inspect a selected source checkout. It **cannot yet install Minglefield**, authenticate/provision a Host, update or repair an application, or verify packaged app identity. Source structural recognition is not proof of provenance. Continue the app installer plan independently of community-game work.
+**Updated 2026-11-07:** The portable Tauri manager can execute experimental verified Alpha SQLCipher-copy, installed-file and once-per-operation local Host-first-run paths, but M2.08 operator acceptance **FAILED** on an incomplete delivered Windows package; full installed application launch, fresh encrypted DB creation, repair/update and installer-CLI execution remain open. The application's separate shell-start path is M2.09; GUI and installer-CLI parity is M2.11. Source structural recognition is neither package provenance nor permission to execute the data source. **Remote Host acquisition/management and client-only installations are future application capabilities**, not installer acceptance; preserving existing imported remote Host references, grants and owners remains mandatory.

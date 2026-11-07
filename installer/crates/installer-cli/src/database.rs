@@ -118,9 +118,11 @@ impl DatabaseAction {
         };
         let key = db
             .password
-            .resolve(env::var("MINGLEFIELD_DB_PASSWORD").ok(), input.db_password.as_deref())
-            .map_err(|_| (3, "conflicting or invalid database password source".to_owned()))?
-            .ok_or((3, "SQLCipher database password is required".to_owned()))?;
+            .resolve(
+                env::var("MINGLEFIELD_DB_PASSWORD").ok(),
+                input.db_password.as_deref(),
+            )
+            .map_err(|_| (3, "conflicting or invalid database password source".to_owned()))?;
         let destination = db
             .database_path
             .as_deref()
@@ -129,6 +131,7 @@ impl DatabaseAction {
             if input.new_db_password.is_some() || env::var_os("MINGLEFIELD_NEW_DB_PASSWORD").is_some() {
                 return Err((3, "new database password must not be supplied for verification".into()));
             }
+            let key = key.ok_or((3, "SQLCipher database password is required".to_owned()))?;
             let report = verify_encrypted_database(Path::new(destination), &key)
                 .map_err(|_| (4, "encrypted database verification rejected".to_owned()))?;
             if json {
@@ -164,7 +167,7 @@ impl DatabaseAction {
             Path::new(source),
             Path::new(destination),
             Path::new(backup),
-            &key,
+            key.as_deref().unwrap_or(""),
             &new_key,
             &self.schema_additions,
             EXPERIMENTAL_COPY_CONFIRMATION,
@@ -177,12 +180,22 @@ impl DatabaseAction {
         {
             return Err((4, "published ciphertext did not pass verification".to_owned()));
         }
-        // The publication operation identity is a non-secret receipt, not a
-        // newly minted Host ID; do not route it into first-run Host creation.
+        // The publication operation identity is a non-secret receipt, NOT
+        // a newly minted Host ID. The separate first-run contract governs
+        // whether activation is appropriate for a genuinely new Host.
+        let operation_id = report.recovery_operation_id.as_deref().ok_or((
+            4,
+            "published ciphertext is missing its recovery operation receipt".to_owned(),
+        ))?;
+        if operation_id.len() != 32
+            || !operation_id.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err((4, "published ciphertext operation receipt invalid".to_owned()));
+        }
         if json {
             println!(
-                "{{\"schema_version\":1,\"status\":\"experimental_encrypted_copy_created\",\"exit_code\":0,\"destination_created\":true,\"ciphertext_verified\":true,\"checked_rows\":{},\"checked_tables\":{},\"checked_schema_entries\":{},\"host_provisioning_enabled\":false,\"application_launch_enabled\":false,\"full_installation_completed\":false}}",
-                report.rows_checked, report.tables_checked, report.schema_entries_checked
+                "{{\"schema_version\":1,\"status\":\"experimental_encrypted_copy_created\",\"exit_code\":0,\"destination_created\":true,\"ciphertext_verified\":true,\"checked_rows\":{},\"checked_tables\":{},\"checked_schema_entries\":{},\"recovery_operation_id\":\"{}\",\"host_provisioning_enabled\":false,\"application_launch_enabled\":false,\"full_installation_completed\":false}}",
+                report.rows_checked, report.tables_checked, report.schema_entries_checked, operation_id
             );
         } else {
             println!(

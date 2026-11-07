@@ -82,6 +82,52 @@ Apple code signing, notarization, Gatekeeper acceptance or a release DMG.
 Those remain M2.10/M2.14 requirements. Linux desktop packaging is likewise
 still pending. The runtime directory and its managed files must remain together.
 
+## Desktop startup file/password dialogs (implemented; CI-tested logic)
+
+For ordinary launch **without a complete selected SQLCipher database and key**,
+the existing native Minglefield executable now requests only the missing
+items using operating-system GUI dialogs. An administrator can open
+`Minglefield.exe` on Windows or `Minglefield.app` on macOS without typing
+Python commands. The database chooser selects an **existing** file; the
+password is entered into a masked field. The native executable still checks
+its pinned file inventory and SQLCipher unlock and starts the existing
+loopback Alpha gateway; a Minglefield user then signs in separately with
+their account password. The dialogs do not create a fresh DB, reset a
+password, or grant Host rights.
+
+Windows uses the OS Windows Forms picker and masked text field through
+a fixed PowerShell program; macOS uses the system's file and hidden-answer
+dialogs through fixed `osascript` programs. On Linux the launcher uses an
+already installed `zenity` or `kdialog` from fixed OS locations; absence
+fails closed, with no implicit package installation. The dialog commands
+never interpolate a SQLCipher password, database path, account credentials
+or user-supplied shell input into a command line. Passwords are returned
+only through an inherited pipe and never persisted in generated config.
+
+The shared Bee-like administrator-provided CLI options still take precedence:
+if a database is selected in the explicit/owner-authored version-3
+config, it is not selected a second time; if a password is supplied by an
+approved config field, argument, file, environment variable or private
+stdin, it is not prompted for again. Automation operations
+`--verify-only`, `--probe-exit`, `--no-browser`, `--secrets-stdin` and
+explicit `--no-dialog` never open a UI. An intentional Cancel exits
+without an additional warning dialog. A failed *graphical* unlock can
+display one fixed, secret-free desktop warning message; raw paths, keys
+or backend errors are never used in its command arguments.
+
+**CI evidence for the implementation (2026-11-07):**
+[Ubuntu Rust](https://github.com/daresan/Minglefield/actions/runs/42396774160)
+passed; [Windows and macOS native security](https://github.com/daresan/Minglefield/actions/runs/42396774215)
+both passed. Tests verify masked input response parsing, cancellation,
+headless/no-key refusal, supplied-password precedence, preserved blank
+spaces, no runtime secret injection into dialog scripts, and real native
+startup with the existing installed encrypted Alpha and local-only Host
+policy. These tests **do not physically click desktop dialogs** in a
+Windows/macOS user session; graphic appearance and Finder/Windows
+double-click usability still need manual operator acceptance. The current
+Windows native program remains a console-subsystem executable behind the
+OS dialogs, not the finished polished GUI application shell.
+
 ## Direct native launch, without the installer
 
 For an **existing, individually owned encrypted Alpha database** that has
@@ -129,12 +175,14 @@ payloads. It does not access private user DBs.
 
 ## Remaining required product acceptance
 
-The default double-click UX still lacks an application-owned **graphical
-SQLCipher password prompt** and database chooser when there is no
-owner-provided config. The current native binary is a first real native
-execution target, **not** the final desktop user flow. macOS Finder
-interactive acceptance/signing/notarization, Linux desktop packages,
-application process shutdown/restart UX, publisher
+The application-owned database chooser and masked SQLCipher password
+dialog are implemented, but their **actual visual interaction, cancellation,
+focus, error notifications and double-click startup** have not been
+independently accepted by a user. The current native binary remains a
+working executable and a first desktop adapter, **not** the final polished
+shell. macOS Finder interactive acceptance/signing/notarization, Linux
+desktop packages, Windows console-window UX, application process
+shutdown/restart controls, publisher
 signature/release integrity, independent portable artifacts, GUI/silent
 installer integration and installed-user acceptance on Shadow remain
 unfulfilled. The official/fork source-build mode remains a mandatory

@@ -40,6 +40,7 @@ def create_fixture(root):
     return source, digest
 
 
+@unittest.skipIf(os.name == "nt", "macOS executable mode requires POSIX filesystem")
 class MacOSBundleTests(unittest.TestCase):
     def test_builds_native_bundle_with_unchanged_managed_inventory(self):
         with tempfile.TemporaryDirectory() as td:

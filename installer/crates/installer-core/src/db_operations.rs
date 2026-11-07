@@ -33,7 +33,6 @@ pub fn verify_encrypted_database(
     })
 }
 
-
 pub const NEW_ENCRYPTED_DATABASE_CONFIRMATION: &str = "CREATE NEW ENCRYPTED DATABASE";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,11 +89,8 @@ pub fn create_new_encrypted_database(
         .open(destination)
         .map_err(|_| "Fresh SQLCipher target already exists or cannot be created")?;
     drop(initial_file);
-    let connection = Connection::open_with_flags(
-        destination,
-        OpenFlags::SQLITE_OPEN_READ_WRITE,
-    )
-    .map_err(|_| "Cannot initialize fresh SQLCipher file")?;
+    let connection = Connection::open_with_flags(destination, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|_| "Cannot initialize fresh SQLCipher file")?;
     connection
         .pragma_update(None, "key", new_password)
         .map_err(|_| "Cannot set new SQLCipher key")?;
@@ -206,7 +202,6 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-
     #[test]
     fn new_ciphertext_requires_consent_and_never_creates_host_or_user() {
         let dir = std::env::temp_dir().join(format!(
@@ -216,9 +211,7 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("first-install.db");
-        assert!(
-            create_new_encrypted_database(&path, "FreshKey123!", "MISSING APPROVAL").is_err()
-        );
+        assert!(create_new_encrypted_database(&path, "FreshKey123!", "MISSING APPROVAL").is_err());
         assert!(!path.exists());
         let result = create_new_encrypted_database(
             &path,
@@ -235,14 +228,12 @@ mod tests {
         assert!(!verified.alpha_users_table_present);
         assert!(verify_encrypted_database(&path, "WrongPassword9!").is_err());
         let original = std::fs::read(&path).unwrap();
-        assert!(
-            create_new_encrypted_database(
-                &path,
-                "FreshKey123!",
-                NEW_ENCRYPTED_DATABASE_CONFIRMATION,
-            )
-            .is_err()
-        );
+        assert!(create_new_encrypted_database(
+            &path,
+            "FreshKey123!",
+            NEW_ENCRYPTED_DATABASE_CONFIRMATION,
+        )
+        .is_err());
         assert_eq!(std::fs::read(&path).unwrap(), original);
         std::fs::remove_dir_all(dir).unwrap();
     }

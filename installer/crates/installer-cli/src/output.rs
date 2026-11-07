@@ -61,6 +61,15 @@ pub fn installed_alpha_files(install_dir: &str, entries: usize) -> String {
     )
 }
 
+/// Versioned V3 extends V2 with DB input fields but never serializes secrets.
+pub fn success_v3(
+    config: &minglefield_installer_core::config_v3::InstallerConfigV3,
+    plan: &InstallPlan,
+) -> String {
+    success_v2(&config.base, plan)
+        .replace("\"config_version\":2", "\"config_version\":3")
+}
+
 pub fn failure(code: u8, message: &str) -> String {
     format!(
         "{{\"schema_version\":1,\"status\":\"error\",\"exit_code\":{code},\"execution_enabled\":false,\"error\":{}}}",

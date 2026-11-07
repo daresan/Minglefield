@@ -48,18 +48,28 @@ def run_smoke(package, *, require_native=False):
             "--confirm-install", FILE_CONFIRM,
             "--create-new-encrypted-db",
             "--database", str(database),
-            "--new-db-password", TEST_DB_KEY,
             "--confirm-new-db", DB_CONFIRM,
             "--setup-local-host",
             "--login-user-id", "mingleadmin",
-            "--login-password", TEST_LOGIN,
             "--confirm-local-admin", HOST_CONFIRM,
+            "--secrets-stdin",
         ]
+        # Exercise the shared version-3 private credential channel in a REAL
+        # installation. Neither SQLCipher nor account passwords may appear in
+        # process argv, the generated setup receipt, or captured diagnostics.
+        secrets_frame = json.dumps({
+            "db_password": None,
+            "new_db_password": TEST_DB_KEY,
+            "login_password": TEST_LOGIN,
+        })
+        assert TEST_DB_KEY not in command and TEST_LOGIN not in command
         completed = subprocess.run(
-            command, encoding="utf-8", errors="replace",
+            command, input=secrets_frame, encoding="utf-8", errors="replace",
             capture_output=True, timeout=300,
             check=False,
         )
+        assert TEST_DB_KEY not in completed.stdout + completed.stderr
+        assert TEST_LOGIN not in completed.stdout + completed.stderr
         assert completed.returncode == 0, "local setup CLI did not complete"
         receipt = json.loads(completed.stdout)
         assert receipt["status"] == "local_host_admin_created"
@@ -288,7 +298,7 @@ assert store.principal("Bearer " + authorization) is not None
         prior_db = fingerprint(database)
         prior_inventory = fingerprint(installed / "managed-file-inventory.json")
         again = subprocess.run(
-            command, encoding="utf-8", errors="replace",
+            command, input=secrets_frame, encoding="utf-8", errors="replace",
             capture_output=True, timeout=120, check=False,
         )
         assert again.returncode != 0, "repeated local first-run setup was accepted"

@@ -3,6 +3,7 @@
 //! from this process's native encrypted-copy and application-file writers can
 //! arm an activation; neither an IPC-supplied path nor a DB password alone can.
 use minglefield_installer_core::integrity::sha256_reader_hex;
+use minglefield_installer_core::managed_alpha_install::verify_installed_application;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -215,7 +216,7 @@ fn activate_with_permit(
     }
     let expected = option_env!("MINGLEFIELD_ALPHA_INVENTORY_SHA256")
         .ok_or("Native setup manager is not bundled with a managed Alpha runtime")?;
-    crate::alpha_application_install::verify_installed_application(&permit.application, expected)?;
+    verify_installed_application(&permit.application, expected)?;
     let (python, worker) = runtime_paths(&permit.application);
     for path in [&python, &worker] {
         let meta =

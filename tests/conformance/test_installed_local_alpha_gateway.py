@@ -131,9 +131,20 @@ class InstalledGatewayRealCipherTests(unittest.TestCase):
         return server, worker
 
     def test_local_login_persists_across_server_restart_with_real_host_scope(self):
+        prior_session = None
         for _ in range(2):
             server, worker = self.open_and_serve()
             try:
+                # A previously issued bearer remains usable after restart,
+                # provided its client still has it and it is not expired/revoked.
+                # Host ownership is not an ephemeral installer token.
+                if prior_session is not None:
+                    prior_status, prior_hosts = self.request(
+                        server, "GET", "/api/hosts", session=prior_session)
+                    self.assertEqual(prior_status, 200)
+                    self.assertEqual(
+                        [host["host_id"] for host in prior_hosts["hosts"]],
+                        ["host.local"])
                 wrong, _ = self.request(server, "POST", "/api/login", {
                     "user_id": "mingleadmin", "password": CIPHER_KEY})
                 self.assertEqual(wrong, 401)
@@ -142,6 +153,8 @@ class InstalledGatewayRealCipherTests(unittest.TestCase):
                 self.assertEqual(ok, 200)
                 self.assertIn("session_token", session_reply)
                 token = session_reply["session_token"]
+                if prior_session is None:
+                    prior_session = token
                 status, listing = self.request(server, "GET", "/api/hosts", session=token)
                 self.assertEqual(status, 200)
                 self.assertEqual(

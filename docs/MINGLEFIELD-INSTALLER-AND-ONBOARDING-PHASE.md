@@ -1,6 +1,6 @@
 # Minglefield Platform Installer & First-Run Onboarding — active next phase
 
-Status: **approved priority; M2.08 Windows file-copy step user-verified (4,156 entries; [portable build #20](https://github.com/daresan/Minglefield/actions/runs/42342372030)); GUI and CLI now share a tested inventory-checked file-copy core, but the native Minglefield program, database/Host/launch CLI execution and full M2.08–M2.11 acceptance remain unfinished** (updated 2026-11-07). Historical requirements below retain their original approval dates.
+Status: **approved priority; M2.08 Windows file-copy step user-verified (4,156 entries; [portable build #20](https://github.com/daresan/Minglefield/actions/runs/42342372030)); GUI and CLI share the tested inventory-checked file-copy core; CLI SQLCipher verification and exclusive encrypted-copy actions are implemented with version-3 Bee-like password input but still require new CI evidence. The independent native Minglefield program, orchestrated database/Host/application start and full M2.08–M2.11 acceptance remain unfinished** (updated 2026-11-07). Historical requirements below retain their original approval dates.
 Scope: installing, configuring, launching, updating and recovering **Minglefield itself**, not installing third-party games. This phase takes precedence over unfinished roadmap features; previous work remains planned and is sequenced after this phase, except blocking security fixes and prerequisites.
 
 ## Product outcome and acceptance target

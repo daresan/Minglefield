@@ -126,7 +126,14 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
     {
         return Err("native application directory cannot be a symlink");
     }
-    let root = fs::canonicalize(root).map_err(|_| "native application root unavailable")?;
+    // Use the canonical identity for security checks, but preserve the
+    // original, absolute OS path for Python subprocess execution. On Windows
+    // fs::canonicalize() produces a \\?\-prefixed extended-length path,
+    // which the pinned Python/SQLite worker does not consistently accept.
+    // The previously verified Python start adapter uses the ordinary path.
+    let canonical_root =
+        fs::canonicalize(root).map_err(|_| "native application root unavailable")?;
+    let root = root.to_path_buf();
     let manifest_path = root.join("runtime-manifest.json");
     regular_file(&manifest_path)?;
     let file_size = fs::metadata(&manifest_path)
@@ -156,7 +163,7 @@ fn installed_app(executable: &Path) -> Result<InstalledApp, &'static str> {
         return Err("native Minglefield executable name mismatch");
     }
     if fs::canonicalize(executable).map_err(|_| "native Minglefield path unavailable")?
-        != root.join(executable_name)
+        != canonical_root.join(executable_name)
     {
         return Err("native executable not located in its managed Alpha root");
     }
@@ -278,10 +285,12 @@ fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &
     if !verified.alpha_users_table_present {
         return Err("Alpha account login has not yet been initialized");
     }
-    Ok((
-        fs::canonicalize(path).map_err(|_| "cannot identify selected database")?,
-        secret,
-    ))
+    // Keep the canonical identity check, but pass the operator's original
+    // absolute path to the embedded Python worker. This is the same path
+    // spelling accepted by the independent CI reference launcher; otherwise
+    // Windows may receive \\?\-prefixed database filenames through JSON.
+    fs::canonicalize(path).map_err(|_| "cannot identify selected database")?;
+    Ok((path.to_path_buf(), secret))
 }
 
 fn private_start_frame(database: &Path, key: &str) -> Result<Vec<u8>, &'static str> {

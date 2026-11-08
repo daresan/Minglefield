@@ -12,6 +12,8 @@ use minglefield_installer_core::db_operations::verify_encrypted_database;
 use minglefield_installer_core::managed_alpha_install::verify_installed_application;
 use serde_json::{json, Value};
 mod native_start_dialog;
+#[cfg(windows)]
+mod native_tray;
 use native_start_dialog::DialogKind;
 use std::env;
 use std::fs;
@@ -536,6 +538,19 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), &'static str> {
         println!("{report}");
         return Ok(());
     }
+    #[cfg(windows)]
+    let _tray = if !opts.no_browser {
+        match native_tray::start_tray(&executable, child.id(), port) {
+            Ok(tray) => Some(tray),
+            Err(reason) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(reason);
+            }
+        }
+    } else {
+        None
+    };
     println!("{report}");
     if !opts.no_browser {
         open_browser(port);

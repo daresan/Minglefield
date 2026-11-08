@@ -508,6 +508,134 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
     })
 }
 
+/// Normal end-user installation: a single consented SQLCipher destination,
+/// NOT the experimental copy/recovery fixture protocol.
+///
+/// The selected original database is only opened read-only. Reviewed edits
+/// and selected schema additions are applied on an independently verified
+/// memory copy, then exported straight to the requested NEW encrypted file.
+/// Stale recovery receipts, abandoned test staging directories and earlier
+/// source-backup artifacts are not consulted and cannot reserve this name.
+///
+/// Crashes/replay and concurrent Setup Manager processes are outside this
+/// product installer operation's scope; a normally reported failure cleans
+/// up only the destination that this exact call created. An existing target
+/// is NEVER silently overwritten; it is handled separately by the caller.
+pub fn export_installer_encrypted_database(
+    source_path: &Path,
+    destination_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    schema_additions: &[String],
+) -> Result<EncryptedTestCopy, String> {
+    validate_new_database_password(new_password)
+        .map_err(|_| "A strong new SQLCipher password is required")?;
+    if !existing_password.is_empty() && existing_password == new_password {
+        return Err("New SQLCipher key must differ from the existing key".into());
+    }
+    let before = preview_migration_destination(source_path, destination_path)
+        .map_err(|_| "Installer encrypted destination is unavailable")?;
+    let (original, inspection) = open_inspected_snapshot(&before.source, existing_password)
+        .map_err(|_| "Cannot inspect original installation source")?;
+    if !inspection.integrity_ok || inspection.foreign_key_violations != 0 {
+        return Err("Installation source failed integrity verification".into());
+    }
+    let source_key = if inspection.source_encrypted {
+        existing_password
+    } else {
+        ""
+    };
+    let (mut memory, source_proof) = create_verified_memory_copy(&original, source_key)?;
+    if !source_proof.values_verified {
+        return Err("Source memory snapshot did not verify".into());
+    }
+    if !corrections.is_empty() {
+        validate_alpha_schema(&inspection)?;
+        let counts = table_counts(&original, &inspection)?;
+        apply_staged_to_isolated_copy(
+            &mut memory,
+            &inspection,
+            &counts,
+            corrections,
+            true,
+        )?;
+    }
+    let additions =
+        add_selected_registered_schema_objects(&mut memory, schema_additions)?.added_objects;
+
+    // Validate the parent before writing. Never grant authority because a
+    // receipt exists, and do not change existing database contents.
+    crate::migration_destination::create_missing_destination_parent(&before.destination)?;
+    let checked = preview_migration_destination(&before.source, destination_path)
+        .map_err(|_| "Installer destination changed before export")?;
+    if checked.destination != before.destination {
+        return Err("Installer destination changed before export".into());
+    }
+    let guard = PinnedDestinationParent::open(&checked)?;
+    // Exclusive file creation protects an existing user-selected DB without
+    // introducing receipt-based reservation, source backups or disk staging.
+    let newly_created = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&before.destination)
+        .map_err(|_| "Selected database destination already exists or is unavailable")?;
+    drop(newly_created);
+
+    let outcome = (|| -> Result<EncryptedTestCopy, String> {
+        export(&memory, &before.destination, new_password)?;
+        let mut header = [0u8; 16];
+        fs::File::open(&before.destination)
+            .map_err(|_| "Cannot reopen installed SQLCipher destination")?
+            .read_exact(&mut header)
+            .map_err(|_| "Installed SQLCipher destination header is truncated")?;
+        if &header == b"SQLite format 3\\0" {
+            return Err("Installed destination has an unencrypted SQLite header".into());
+        }
+        let verified = Connection::open_with_flags(
+            &before.destination,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(|_| "Cannot reopen installed SQLCipher data")?;
+        verified
+            .pragma_update(None, "key", new_password)
+            .map_err(|_| "Cannot unlock installed encrypted database")?;
+        let fidelity = verify_snapshot_equality(&memory, &verified)?;
+        if !fidelity.values_verified {
+            return Err("Installed encrypted database differs from reviewed memory copy".into());
+        }
+        drop(verified);
+        sync_verified_ciphertext_stage(&before.destination)?;
+        guard.revalidate_identity()?;
+        Ok(EncryptedTestCopy {
+            full_source_verified: true,
+            ciphertext_header_verified: true,
+            wrong_key_rejected: false,
+            atomic_temporary_publication_verified: false,
+            full_disk_copy_verified: true,
+            staged_changes_verified: corrections.len(),
+            staged_values_match_ciphertext: true,
+            rows_checked: fidelity.rows_checked,
+            tables_checked: fidelity.tables_checked,
+            schema_entries_checked: fidelity.schema_entries_checked,
+            added_schema_objects: additions,
+            recovery_operation_id: None,
+            recovery_receipt_directory_synced: false,
+            destination_directory_synced: false,
+            temporary_files_removed: true,
+            destination_created: true,
+            encrypted_destination_verified: true,
+            execution_enabled: true,
+        })
+    })();
+    if outcome.is_err() {
+        // Only the output created by this call can be removed on ordinary
+        // error; the original, other DBs and all older artifacts stay intact.
+        let _ = fs::remove_file(&before.destination);
+    }
+    outcome
+}
+
 /// Explicitly permitted, experimental encrypted *copy*, not application
 /// installation or Host authorization. The caller must provide a separate,
 /// independently verified backup and the exact opt-in phrase. Unlike the

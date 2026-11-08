@@ -683,16 +683,10 @@ mod tests {
             "host.local"
         );
         assert_eq!(
-            selected_local_host(&path, "HostDatabase9!", Some("host.local"))
-                .unwrap(),
+            selected_local_host(&path, "HostDatabase9!", Some("host.local")).unwrap(),
             "host.local"
         );
-        assert!(selected_local_host(
-            &path,
-            "HostDatabase9!",
-            Some("remote.other")
-        )
-        .is_err());
+        assert!(selected_local_host(&path, "HostDatabase9!", Some("remote.other")).is_err());
         {
             let db = Connection::open(&path).unwrap();
             db.pragma_update(None, "key", "HostDatabase9!").unwrap();
@@ -707,8 +701,7 @@ mod tests {
             "host.local"
         );
         assert_eq!(
-            selected_local_host(&path, "HostDatabase9!", Some("host.local"))
-                .unwrap(),
+            selected_local_host(&path, "HostDatabase9!", Some("host.local")).unwrap(),
             "host.local"
         );
         fs::remove_dir_all(root).unwrap();

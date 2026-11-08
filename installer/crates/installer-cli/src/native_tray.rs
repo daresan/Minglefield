@@ -18,11 +18,15 @@ $nativeId = [int]::Parse($env:MINGLEFIELD_TRAY_NATIVE_PID)
 $workerId = [int]::Parse($env:MINGLEFIELD_TRAY_WORKER_PID)
 $port = [int]::Parse($env:MINGLEFIELD_TRAY_PORT)
 $executable = $env:MINGLEFIELD_TRAY_NATIVE_EXE
+$expectedWorker = Join-Path (Split-Path -Parent $executable) 'runtime\python\python.exe'
 $context = New-Object System.Windows.Forms.ApplicationContext
 $icon = New-Object System.Windows.Forms.NotifyIcon
 try {
     $icon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($executable)
 } catch {
+    $icon.Icon = [System.Drawing.SystemIcons]::Application
+}
+if ($null -eq $icon.Icon) {
     $icon.Icon = [System.Drawing.SystemIcons]::Application
 }
 $icon.Text = 'Minglefield - Local Host'
@@ -39,12 +43,15 @@ $icon.Add_DoubleClick({
 $quit.Add_Click({
     # The native app owns its embedded Python worker. /T terminates that
     # entire owned subtree and no other unrelated Minglefield or Python.
-    $icon.Visible = $false
     $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
     if (Test-Path -LiteralPath $taskkill -PathType Leaf) {
+        $icon.Visible = $false
         & $taskkill /PID $nativeId /T /F 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $icon.Visible = $true
+        }
     }
-    $context.ExitThread()
+    if (-not $icon.Visible) { $context.ExitThread() }
 })
 $icon.ContextMenuStrip = $menu
 $timer = New-Object System.Windows.Forms.Timer
@@ -55,7 +62,8 @@ $timer.Add_Tick({
     if ($null -eq $parent -or $null -eq $worker) {
         # If the native parent is killed unexpectedly, its embedded Python
         # process must not be left behind when the tray can still observe it.
-        if ($null -eq $parent -and $null -ne $worker) {
+        if ($null -eq $parent -and $null -ne $worker -and
+            $worker.Path -eq $expectedWorker) {
             Stop-Process -Id $workerId -Force -ErrorAction SilentlyContinue
         }
         $icon.Visible = $false

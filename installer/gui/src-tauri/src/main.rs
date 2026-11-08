@@ -142,7 +142,10 @@ fn inspect_existing_data(path: String) -> Vec<DataInventoryItem> {
             sqlite_page_size: candidate.sqlite_page_size,
             sqlite_user_version: candidate.sqlite_user_version,
             sqlite_application_id: candidate.sqlite_application_id,
-            schema_version_status: if candidate.kind == "sqlite_database" {
+            schema_version_status: if candidate.kind == "sqlite_database"
+                && candidate.sqlite_application_id.is_some()
+                && candidate.sqlite_user_version.is_some()
+            {
                 use minglefield_installer_core::schema_versions::{
                     classify_header, HeaderVersionStatus,
                 };

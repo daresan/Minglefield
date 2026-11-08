@@ -73,6 +73,16 @@ body.review-data main{max-width:1280px}
 <section class="wizard-page" data-wizard-page="database" hidden>
 <h2>Datenbank</h2>
 <p>Optional eine bisherige Alpha-Datenbank auswählen. Ohne Quelle wird eine neue verschlüsselte Datenbank angelegt. Eine bereits gültige verschlüsselte Zieldatenbank wird unverändert übernommen.</p>
+<label for="detected-database">Erkannte Minglefield-Datenbanken im Standard-Datenordner</label>
+<select id="detected-database" aria-label="Automatisch gefundene Datenbankvorschläge">
+<option value="">Keine Datenbank ausgewählt</option>
+</select>
+<p id="database-discovery-status" class="help" role="status" aria-live="polite">Suche im Minglefield-Datenordner …</p>
+<button type="button" class="secondary" id="rescan-default-databases">Erneut suchen</button>
+<div class="mode" role="group" aria-label="Gefundene Datenbank übernehmen">
+<button type="button" class="secondary" id="use-detected-as-source">Als Migrationsquelle verwenden</button>
+<button type="button" class="secondary" id="use-detected-as-target">Bereits verschlüsselte DB übernehmen</button>
+</div>
 <label for="source-database">Bestehende Quelldatenbank (optional)</label>
 <input id="source-database" spellcheck="false" placeholder="Keine Quelle – neue Datenbank erstellen">
 <button type="button" id="browse-source-db" class="secondary">Datenbank auswählen</button>

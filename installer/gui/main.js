@@ -12,6 +12,65 @@ let installing = false;
 let complete = false;
 let databasePathCustomized = false;
 let defaultDirs = null;
+let defaultDbCandidates = [];
+let discoveredDbReady = false;
+
+async function discoverDefaultDatabases() {
+  const status = byId("database-discovery-status");
+  const select = byId("detected-database");
+  status.textContent = "Suche im Minglefield-Datenordner …";
+  try {
+    const entries = await invoke("inspect_default_user_data");
+    const found = entries
+      .filter(item => item.kind === "sqlite_database" && typeof item.sourceDirectory === "string" &&
+        typeof item.relativePath === "string" && item.relativePath !== "");
+    defaultDbCandidates = found.map(item => ({
+      path: item.sourceDirectory.replace(/[\\/]+$/, "") +
+        (item.sourceDirectory.includes("\\") ? "\\" : "/") + item.relativePath,
+      status: item.status
+    }));
+    select.replaceChildren();
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = found.length ? "Datenbank auswählen" : "Keine Datenbank gefunden";
+    select.append(empty);
+    defaultDbCandidates.forEach((item, i) => {
+      const option = document.createElement("option");
+      option.value = String(i);
+      option.textContent = item.path +
+        (item.status === "sqlite_header_valid_unverified" ? " (SQLite)" : " (verschlüsselt / noch ungeprüft)");
+      select.append(option);
+    });
+    status.textContent = found.length
+      ? found.length + " DB-Vorschläge gefunden. Verwende die passende DB als Quelle oder bereits verschlüsseltes Ziel."
+      : "Keine bekannten DB-Dateien gefunden. Eine Datei kann weiterhin manuell gewählt werden.";
+  } catch {
+    status.textContent = "Automatische Suche nicht verfügbar; Datenbank kann manuell ausgewählt werden.";
+  }
+  discoveredDbReady = true;
+}
+
+function useDiscoveredDatabase(target) {
+  const index = Number(byId("detected-database").value);
+  if (byId("detected-database").value === "" || !Number.isInteger(index)) return;
+  const candidate = defaultDbCandidates[index];
+  if (!candidate) return;
+  if (target) {
+    // The DB must be unlocked with its existing SQLCipher password.
+    byId("source-database").value = "";
+    byId("database-path").value = candidate.path;
+    databasePathCustomized = true;
+  } else {
+    byId("source-database").value = candidate.path;
+    // Keep the proposed destination DISTINCT from the selected source.
+    if (byId("database-path").value.trim() === candidate.path) {
+      byId("database-path").value = candidate.path + ".migrated.sqlite3";
+      databasePathCustomized = true;
+    }
+  }
+  databaseEditor.clear();
+  if (wizardIndex === 5) refreshReview();
+}
 const databaseEditor = createInstallationDataEditor(document, invoke);
 
 function collectForm() {
@@ -187,6 +246,9 @@ for (const id of [
   });
 }
 byId("installation-approved").addEventListener("change", refreshReview);
+byId("rescan-default-databases").addEventListener("click", discoverDefaultDatabases);
+byId("use-detected-as-source").addEventListener("click", () => useDiscoveredDatabase(false));
+byId("use-detected-as-target").addEventListener("click", () => useDiscoveredDatabase(true));
 byId("inspect-selected-database").addEventListener("click", () => databaseEditor.inspect(collectForm()));
 byId("browse-install-dir").addEventListener("click",
   () => choosePath("install-dir", "browse_directory"));
@@ -240,5 +302,6 @@ async function initialize() {
     byId("readme-text").textContent = "Projektinformationen sind nicht verfügbar.";
   }
   showPage(0);
+  await discoverDefaultDatabases();
 }
 initialize();

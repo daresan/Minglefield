@@ -103,7 +103,16 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
             let Ok(mut file) = std::fs::File::open(&path) else {
                 continue;
             };
-            if file.read_exact(&mut header).is_err() || &header[..16] != b"SQLite format 3\0" {
+            if file.read_exact(&mut header).is_err() {
+                continue;
+            }
+            let plaintext = &header[..16] == b"SQLite format 3\0";
+            let looks_like_database = path.extension().and_then(|ext| ext.to_str())
+                .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(),
+                    "db" | "sqlite" | "sqlite3" | "sqlcipher"));
+            // SQLCipher encrypts even the SQLite header. Known extensions
+            // remain read-only *candidates*, never proofs of a valid DB.
+            if !plaintext && !looks_like_database {
                 continue;
             }
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
@@ -113,12 +122,17 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
             results.push(DataCandidate {
                 relative_path: name.to_owned(),
                 kind: "sqlite_database",
-                status: "sqlite_header_valid_unverified",
-                sqlite_page_size: Some(if size == 1 { 65536 } else { u32::from(size) }),
-                sqlite_user_version: Some(u32::from_be_bytes([
+                status: if plaintext {
+                    "sqlite_header_valid_unverified"
+                } else {
+                    "encrypted_or_unknown_header_unverified"
+                },
+                sqlite_page_size: plaintext
+                    .then_some(if size == 1 { 65536 } else { u32::from(size) }),
+                sqlite_user_version: plaintext.then_some(u32::from_be_bytes([
                     header[60], header[61], header[62], header[63],
                 ])),
-                sqlite_application_id: Some(u32::from_be_bytes([
+                sqlite_application_id: plaintext.then_some(u32::from_be_bytes([
                     header[68], header[69], header[70], header[71],
                 ])),
             });
@@ -147,19 +161,25 @@ mod tests {
         header[16..18].copy_from_slice(&4096u16.to_be_bytes());
         std::fs::write(root.join("custom-name.anything"), header).unwrap();
         std::fs::write(root.join("not-a-database.sqlite3"), b"not sqlite").unwrap();
+        // Ciphertext headers are indistinguishable from random bytes.
+        // These are offered for password-based inspection, not trusted.
+        std::fs::write(root.join("already-migrated.sqlcipher"), [0x83u8; 100]).unwrap();
         std::fs::write(
             root.join("untrusted.py"),
             b"raise Exception('must not execute')",
         )
         .unwrap();
         let found = inspect_data_directory(&root);
-        assert_eq!(found.len(), 2);
+        assert_eq!(found.len(), 3);
         assert_eq!(found[0].relative_path, ".minglefield/project.json");
         assert_eq!(found[0].status, "json_candidate_unvalidated");
-        assert_eq!(found[1].relative_path, "custom-name.anything");
-        assert_eq!(found[1].status, "sqlite_header_valid_unverified");
-        assert_eq!(found[1].sqlite_page_size, Some(4096));
-        assert_eq!(found[1].sqlite_user_version, Some(0));
+        assert_eq!(found[1].relative_path, "already-migrated.sqlcipher");
+        assert_eq!(found[1].status, "encrypted_or_unknown_header_unverified");
+        assert_eq!(found[1].sqlite_page_size, None);
+        assert_eq!(found[2].relative_path, "custom-name.anything");
+        assert_eq!(found[2].status, "sqlite_header_valid_unverified");
+        assert_eq!(found[2].sqlite_page_size, Some(4096));
+        assert_eq!(found[2].sqlite_user_version, Some(0));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

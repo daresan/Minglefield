@@ -177,6 +177,115 @@ assert store.principal("Bearer " + authorization) is not None
             errors="replace", timeout=120, check=False,
         )
         assert check.returncode == 0, "installed SQLCipher Host/login verification failed"
+        # Product acceptance: importing a DB with an already working Host
+        # and a DIFFERENT existing administrator must append mingleadmin,
+        # without replacing either the old owner, user, password or session.
+        # This is an internal CI check, never a user-facing installer step.
+        imported_db = root / "private-data" / "preexisting-host.sqlite3"
+        import shutil
+        shutil.copyfile(database, imported_db)
+        prepare_existing = r"""
+import json, sys
+from pathlib import Path
+msg=json.loads(sys.stdin.buffer.read())
+sys.path.insert(0, str(Path(msg["installed"])/"application"/"server"))
+from alpha_sqlcipher_runtime import open_alpha_database
+db=open_alpha_database(msg["database"], key_provider=lambda:msg["key"])
+try:
+    assert db.execute("SELECT count(*) FROM alpha_users WHERE user_id='mingleadmin'").fetchone()[0]==1
+    for table,column in (
+        ("alpha_users","user_id"),
+        ("alpha_passwords","user_id"),
+        ("alpha_sessions","user_id"),
+        ("alpha_executor_hosts","operator_id"),
+        ("sec01_host_owners","owner_id"),
+    ):
+        db.execute("UPDATE "+table+" SET "+column+"='originalowner' WHERE "+column+"='mingleadmin'")
+    db.commit()
+finally:
+    db.close()
+"""
+        prepare = subprocess.run(
+            [str(embedded), "-I", "-B", "-c", prepare_existing],
+            input=json.dumps({
+                "installed": str(installed), "database": str(imported_db),
+                "key": TEST_DB_KEY,
+            }), capture_output=True, encoding="utf-8", errors="replace",
+            check=False, timeout=90,
+        )
+        assert prepare.returncode == 0, "could not prepare existing owner test DB"
+        previous_digest = fingerprint(database)
+        previous_owner_digest = fingerprint(imported_db)
+        ensure = {
+            "version": 2, "mode": "ensure_local_admin",
+            "databasePath": str(imported_db), "sqlcipherKey": TEST_DB_KEY,
+            "loginUserId": "mingleadmin", "loginPassword": "NewInstallerLogin9!",
+            "localHostId": host_id,
+        }
+        first = subprocess.run(
+            [str(embedded), "-I", "-B",
+             str(installed / "application/server/installed_alpha_first_run.py")],
+            input=json.dumps(ensure), capture_output=True, encoding="utf-8",
+            errors="replace", check=False, timeout=90,
+        )
+        assert TEST_DB_KEY not in first.stdout + first.stderr
+        assert first.returncode == 0, "additive imported administrator transaction refused"
+        assert json.loads(first.stdout)["status"] == "local_host_admin_created"
+        verify_existing = r"""
+import json,sys
+from pathlib import Path
+msg=json.loads(sys.stdin.buffer.read())
+sys.path.insert(0,str(Path(msg["installed"])/"application"/"server"))
+from alpha_sqlcipher_runtime import open_alpha_database
+from private_alpha_auth import AlphaAuthStore
+db=open_alpha_database(msg["database"],key_provider=lambda:msg["key"])
+try:
+    assert set(r[0] for r in db.execute("SELECT user_id FROM alpha_users"))=={"originalowner","mingleadmin"}
+    assert db.execute("SELECT owner_id FROM sec01_host_owners WHERE host_id=?",
+        (msg["host"],)).fetchone()==("originalowner",)
+    assert db.execute("SELECT operator_id FROM alpha_executor_hosts WHERE host_id=?",
+        (msg["host"],)).fetchone()==("originalowner",)
+    assert db.execute("SELECT admin_id FROM sec01_host_admins WHERE host_id=?",
+        (msg["host"],)).fetchone()==("mingleadmin",)
+    assert db.execute("SELECT count(*) FROM alpha_sessions WHERE user_id='originalowner'").fetchone()[0]>=1
+    assert db.execute("SELECT count(*) FROM alpha_passwords").fetchone()[0]==2
+finally:
+    db.close()
+store=AlphaAuthStore(msg["database"],sqlcipher_key_provider=lambda:msg["key"])
+assert store.login("originalowner",msg["old_login"]) is not None
+assert store.login("mingleadmin",msg["new_login"]) is not None
+"""
+        verify = subprocess.run(
+            [str(embedded), "-I", "-B", "-c", verify_existing],
+            input=json.dumps({
+                "installed": str(installed), "database": str(imported_db),
+                "key": TEST_DB_KEY, "host": host_id, "old_login": TEST_LOGIN,
+                "new_login": ensure["loginPassword"],
+            }), capture_output=True, encoding="utf-8", errors="replace",
+            check=False, timeout=120,
+        )
+        assert verify.returncode == 0, "imported owner/password/Host preservation failed"
+        # A second approved installation must preserve the existing
+        # mingleadmin password/hash, not silently reset it or append rights.
+        prior_import_digest = fingerprint(imported_db)
+        second = subprocess.run(
+            [str(embedded), "-I", "-B",
+             str(installed / "application/server/installed_alpha_first_run.py")],
+            input=json.dumps({**ensure, "loginPassword": ""}),
+            capture_output=True, encoding="utf-8", errors="replace",
+            check=False, timeout=90,
+        )
+        assert second.returncode == 0, "existing mingleadmin could not be reused"
+        assert json.loads(second.stdout)["status"] == "local_host_admin_existing"
+        assert prior_import_digest == fingerprint(imported_db), (
+            "reusing existing admin changed encrypted DB content"
+        )
+        assert fingerprint(database) == previous_digest, (
+            "imported-admin operation modified original fresh-setup DB"
+        )
+        assert previous_owner_digest != fingerprint(imported_db), (
+            "additive administrator was not actually persisted"
+        )
         has_native = manifest.get("nativeApplicationIncluded") is True
         if require_native:
             assert has_native, "build did not include OS-native Minglefield executable"

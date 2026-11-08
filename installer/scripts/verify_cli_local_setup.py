@@ -201,6 +201,11 @@ try:
         ("sec01_host_owners","owner_id"),
     ):
         db.execute("UPDATE "+table+" SET "+column+"='originalowner' WHERE "+column+"='mingleadmin'")
+    # Legacy Alpha used a named local host ID, not necessarily local.*.
+    # The installed application's real Host identity must be reused.
+    for table in ("alpha_executor_hosts","sec01_host_owners"):
+        db.execute("UPDATE "+table+" SET host_id='host.local' WHERE host_id=?",
+                   (msg["old_host"],))
     db.commit()
 finally:
     db.close()
@@ -209,7 +214,7 @@ finally:
             [str(embedded), "-I", "-B", "-c", prepare_existing],
             input=json.dumps({
                 "installed": str(installed), "database": str(imported_db),
-                "key": TEST_DB_KEY,
+                "key": TEST_DB_KEY, "old_host": host_id,
             }), capture_output=True, encoding="utf-8", errors="replace",
             check=False, timeout=90,
         )
@@ -220,7 +225,7 @@ finally:
             "version": 2, "mode": "ensure_local_admin",
             "databasePath": str(imported_db), "sqlcipherKey": TEST_DB_KEY,
             "loginUserId": "mingleadmin", "loginPassword": "NewInstallerLogin9!",
-            "localHostId": host_id,
+            "localHostId": "host.local",
         }
         first = subprocess.run(
             [str(embedded), "-I", "-B",
@@ -279,7 +284,7 @@ assert policy.host_settings("remote.other","mingleadmin") is None
             [str(embedded), "-I", "-B", "-c", verify_existing],
             input=json.dumps({
                 "installed": str(installed), "database": str(imported_db),
-                "key": TEST_DB_KEY, "host": host_id, "old_login": TEST_LOGIN,
+                "key": TEST_DB_KEY, "host": "host.local", "old_login": TEST_LOGIN,
                 "new_login": ensure["loginPassword"],
             }), capture_output=True, encoding="utf-8", errors="replace",
             check=False, timeout=120,

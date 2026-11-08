@@ -2,6 +2,7 @@
 //! The Setup Manager owns the single operation, while the existing shared
 //! installer-core still owns SQLCipher migration, file installation, local
 //! account provisioning and native application startup.
+use crate::migration_review::StagedCorrection;
 use minglefield_installer_core::database_password::validate_new_database_password;
 use minglefield_installer_core::db_operations::{
     create_new_encrypted_database, verify_encrypted_database, NEW_ENCRYPTED_DATABASE_CONFIRMATION,
@@ -10,11 +11,10 @@ use minglefield_installer_core::encrypted_copy_preflight::{
     execute_reviewed_encrypted_copy_with_schema, EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::local_first_run_worker::ensure_verified_installer_local_admin;
-use minglefield_installer_core::migration_dry_run::ReviewCorrection;
-use crate::migration_review::StagedCorrection;
 use minglefield_installer_core::managed_alpha_install::{
     install_or_reuse_application, verify_installed_application,
 };
+use minglefield_installer_core::migration_dry_run::ReviewCorrection;
 use minglefield_installer_core::native_application_probe::{
     ensure_native_starter, start_installed_application,
 };
@@ -240,10 +240,17 @@ fn execute_install(
     {
         return Err("Mingleadmin-Loginpasswort und Bestätigung sind ungültig".into());
     }
-    if request.corrections.iter().any(|edit| !matches!(edit, StagedCorrection::FullRow { .. })) {
-        return Err("Die Produkt-Datenbearbeitung erlaubt nur geprüfte vollständige Tabellenzeilen".into());
+    if request
+        .corrections
+        .iter()
+        .any(|edit| !matches!(edit, StagedCorrection::FullRow { .. }))
+    {
+        return Err(
+            "Die Produkt-Datenbearbeitung erlaubt nur geprüfte vollständige Tabellenzeilen".into(),
+        );
     }
-    if source.is_none() && (!request.corrections.is_empty() || !request.schema_additions.is_empty()) {
+    if source.is_none() && (!request.corrections.is_empty() || !request.schema_additions.is_empty())
+    {
         return Err("Daten- und Schemaänderungen erfordern eine gewählte Quelldatenbank".into());
     }
     let (_existing_application, existing_db) =
@@ -251,7 +258,11 @@ fn execute_install(
     if existing_db && (!request.corrections.is_empty() || !request.schema_additions.is_empty()) {
         return Err("Eine bereits vorhandene SQLCipher-Zieldatenbank bleibt unverändert. Für Daten- oder Schemaänderungen bitte einen neuen Zielpfad wählen.".into());
     }
-    let changes: Vec<ReviewCorrection> = request.corrections.into_iter().map(ReviewCorrection::from).collect();
+    let changes: Vec<ReviewCorrection> = request
+        .corrections
+        .into_iter()
+        .map(ReviewCorrection::from)
+        .collect();
     let digest = option_env!("MINGLEFIELD_ALPHA_INVENTORY_SHA256")
         .ok_or("Kein festgelegtes Alpha-Anwendungspaket vorhanden")?;
     let package = crate::alpha_application_install::find_packaged_alpha_source(

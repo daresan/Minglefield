@@ -818,7 +818,11 @@ mod tests {
             db.pragma_update(None, "key", "VerifiedKey9!").unwrap();
             db.execute("UPDATE alpha_users SET rowid=77", []).unwrap();
         }
-        fs::write(root.join("minglefield-target-stale.receipt"), b"old-operation").unwrap();
+        fs::write(
+            root.join("minglefield-target-stale.receipt"),
+            b"old-operation",
+        )
+        .unwrap();
         fs::create_dir(root.join(".minglefield-source-backup-old")).unwrap();
         let before = fs::read(&dest).unwrap();
         assert!(verify_existing_migration_intent(
@@ -899,18 +903,27 @@ mod tests {
         fs::create_dir_all(&app).unwrap();
         // A pre-existing EMPTY Windows Programs/Minglefield directory is
         // not a conflict and must not consume an override confirmation.
-        assert_eq!(check_existing_paths(&app, &db, false).unwrap(), (true, false));
+        assert_eq!(
+            check_existing_paths(&app, &db, false).unwrap(),
+            (true, false)
+        );
         // The existing destination path may be reused with explicit warning.
         fs::write(app.join("foreign-file.txt"), b"preserve").unwrap();
         assert!(check_existing_paths(&app, &db, false)
             .unwrap_err()
             .starts_with("INSTALL_WARNING_EXISTING:"));
-        assert_eq!(check_existing_paths(&app, &db, true).unwrap(), (true, false));
+        assert_eq!(
+            check_existing_paths(&app, &db, true).unwrap(),
+            (true, false)
+        );
         // Other DBs in the same directory are unrelated to the selected
         // target filename and do not cause an existing-destination warning.
         fs::remove_file(app.join("foreign-file.txt")).unwrap();
         fs::write(root.join("another-database.sqlite3"), b"unrelated").unwrap();
-        assert_eq!(check_existing_paths(&app, &db, false).unwrap(), (true, false));
+        assert_eq!(
+            check_existing_paths(&app, &db, false).unwrap(),
+            (true, false)
+        );
         // The selected target file itself requires the existing approval.
         fs::write(&db, b"pre-existing").unwrap();
         assert!(check_existing_paths(&app, &db, false)

@@ -1,134 +1,104 @@
 <!doctype html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Minglefield Installer</title>
+<html lang="de">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Minglefield installieren</title>
 <style>
-body{font:16px system-ui,sans-serif;background:#101827;color:#f2f5fa;margin:0;padding:32px}main{max-width:1200px;margin:auto}label{display:block;margin:18px 0 8px}input,textarea,select{box-sizing:border-box;width:100%;padding:12px;background:#fff;color:#111;border-radius:6px;border:0}textarea{min-height:160px;font:13px monospace}button{margin-top:18px;padding:12px 20px;border:0;border-radius:6px;background:#74c8b3;color:#101827;font-weight:bold;cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#1c293b;border-radius:6px}small{color:#b4c5d9}details{margin:16px 0;padding:14px;border:1px solid #4c6077;border-radius:6px}summary{cursor:pointer;font-weight:600}#license-text,#readme-text{max-height:240px;overflow:auto;font:12px/1.5 monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#1c293b;padding:12px;border-radius:6px}.mode{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.mode label{margin:10px 0}.mode input{width:auto}.help{color:#b4c5d9;font-size:14px}fieldset{border:1px solid #4c6077;border-radius:6px;margin:18px 0;padding:12px}legend{font-weight:600}.wizard-page[hidden]{display:none}#wizard-navigation{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:18px}#wizard-navigation button:disabled{opacity:.45;cursor:not-allowed}#wizard-progress{color:#b4c5d9}button.secondary{background:#30445d;color:#fff}
-.data-table-scroll{overflow:auto;margin:10px 0 18px;border:1px solid #4c6077;border-radius:6px}.data-review-table{border-collapse:collapse;width:100%;font-size:13px}.data-review-table th,.data-review-table td{border-bottom:1px solid #4c6077;padding:9px;text-align:left;vertical-align:middle;white-space:nowrap}.data-review-table th{background:#25354a}.data-review-table td input[type=text]{width:210px;min-width:140px;padding:8px}.data-review-table td input[type=checkbox]{min-width:18px;min-height:18px}
-.data-review-table td select{width:94px;min-width:94px;padding:6px;margin-bottom:6px}
-.data-review-table td textarea{min-height:68px;width:300px;padding:6px;font:12px/1.4 monospace}
-.data-review-table td input{padding:6px}</style></head>
-<body><main><h1>Minglefield Installer</h1><p>Application installation remains a preview. An optional, expressly approved experimental database copy is available on the final review page.</p>
-<p id="wizard-progress" role="status" aria-live="polite">Step 1 of 6 — Welcome</p><section class="wizard-page" data-wizard-page="welcome"><h2>Welcome and project information</h2><p class="help">Review the bundled documentation before choosing your setup configuration.</p><details id="license-panel"><summary>Framework license — GPL-3.0-or-later (read-only)</summary><p>The Minglefield framework uses the GNU GPL. Marketplace service terms are separate. Reading this license does not authorize installation or accept marketplace terms.</p><pre id="license-text" tabindex="0" aria-label="Complete GNU GPL version 3 license">Loading license…</pre></details>
-<details id="readme-panel"><summary>Minglefield application README (read-only)</summary><p class="help">Bundled project overview, available offline in both setup modes.</p><pre id="readme-text" tabindex="0" aria-label="Minglefield application README">Loading README…</pre></details>
-</section><section class="wizard-page" data-wizard-page="configuration" hidden><h2>Configuration</h2><fieldset><legend>Setup mode</legend><div class="mode"><label><input type="radio" name="setup-mode" value="standard" checked> Standard (recommended)</label><label><input type="radio" name="setup-mode" value="advanced"> Advanced</label></div><p class="help" id="setup-description">Uses safe per-user installation and data locations. No optional components are selected.</p></fieldset>
-<section id="advanced-options" hidden>
-<fieldset><legend>Advanced configuration source</legend><div class="mode"><label><input type="radio" name="mode" value="defaults" checked> Custom paths</label><label><input type="radio" name="mode" value="config"> Versioned configuration</label></div></fieldset>
-<section id="paths"><label for="destination">Installation directory</label><input id="destination" aria-label="Installation directory" /><button type="button" class="secondary" id="browse-destination">Browse folder</button>
-<label for="data-directory">Persistent data directory</label><input id="data-directory" aria-label="Persistent data directory" /><button type="button" class="secondary" id="browse-data-directory">Browse folder</button></section>
-<section id="config-section" hidden><label for="config">Configuration (key=value, version 1 or 2)</label><textarea id="config" spellcheck="false" aria-label="Versioned configuration"></textarea><p class="help">Optional runtime choices require explicit consent and are validated by the shared Rust core. No runtime will be installed in preview mode.</p></section>
+:root{color-scheme:dark;font:16px system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#0f1927;color:#edf3f8;padding:20px}
+main{max-width:760px;margin:auto}header{border-bottom:1px solid #344a62;padding-bottom:18px;margin-bottom:20px}
+h1{font-size:26px;letter-spacing:-.03em;margin:10px 0}h2{font-size:20px;margin:8px 0 18px}p{line-height:1.55}
+.help{color:#afc2d4;font-size:14px}label{display:block;margin:16px 0 6px;font-weight:500}
+input{width:100%;padding:11px 12px;border:1px solid #536980;border-radius:7px;background:#172638;color:#edf3f8;font:inherit}
+input:focus,button:focus-visible{outline:2px solid #8cd7c3;outline-offset:2px}input[readonly]{opacity:.8}
+input[type=radio],input[type=checkbox]{width:auto;accent-color:#83d8ba;vertical-align:middle}
+.mode{display:flex;flex-wrap:wrap;gap:20px}.mode label{margin:6px 0}
+button{background:#83d8ba;color:#0e2025;border:0;padding:11px 18px;margin:12px 8px 8px 0;border-radius:7px;font:inherit;font-weight:650;cursor:pointer}
+button.secondary{background:#30475e;color:#edf3f8}button:disabled{opacity:.48;cursor:not-allowed}
+fieldset{border:1px solid #3c546c;border-radius:10px;padding:15px;margin:15px 0}legend{font-weight:650;padding:0 6px}
+.wizard-page[hidden],[hidden]{display:none!important}
+#wizard-progress{font-size:14px;color:#afc2d4}
+#wizard-navigation{border-top:1px solid #344a62;margin-top:22px;padding-top:12px;display:flex;align-items:center;justify-content:space-between}
+#ready-status{margin:16px 0;color:#b1e3cd}
+#installation-status{padding:14px;background:#18293c;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+#existing-warning{padding:16px;border:1px solid #ddb276;border-radius:8px;background:#2f2925}
+.summary{display:grid;grid-template-columns:minmax(130px,34%) 1fr;gap:12px 16px;margin:16px 0}
+.summary dt{color:#a9bfd4}.summary dd{margin:0;overflow-wrap:anywhere}
+.confirm{margin:22px 0;padding:14px;border:1px solid #628b7a;border-radius:8px}.confirm label{margin:0}
+a{color:#93e2c9}details{margin-top:18px;border:1px solid #385067;border-radius:7px;padding:12px}
+details pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:260px;overflow:auto}
+</style>
+</head>
+<body><main>
+<header><h1>Minglefield installieren</h1>
+<p class="help">Lokale Anwendung und SQLCipher-Datenbank – ohne Entwicklerwerkzeuge und ohne vorgeschaltete Tests.</p>
+<p id="wizard-progress" role="status">Schritt 1 von 6 – Willkommen</p></header>
+<section class="wizard-page" data-wizard-page="welcome">
+<h2>Willkommen</h2>
+<p>Dieser Setup Manager installiert die mitgelieferte Minglefield-Anwendung, übernimmt auf Wunsch eine vorhandene Datenbank, ergänzt den lokalen Administrator und startet anschließend Minglefield.</p>
+<p>Bestehende Daten, Benutzer, Passwörter und Hostberechtigungen bleiben erhalten. Bei Migration legt der Installer intern eine unabhängige Sicherung an.</p>
+<details><summary>Lizenz und Projektinformationen</summary>
+<p>Der Minglefield-Quellcode unterliegt der GPL-3.0-or-later. Marketplace-Dienste haben eigene Bedingungen.</p>
+<pre id="license-text">Lizenz wird geladen…</pre></details>
 </section>
-</section><section class="wizard-page" data-wizard-page="optional" hidden><h2>Optional installations</h2><p class="help">Optional components are disabled by default. Selection only; no installation starts here.</p><fieldset><legend>Development tools</legend><label><input type="checkbox" id="optional-git" style="width:auto"> Git</label><label><input type="checkbox" id="consent-git" style="width:auto"> Approve Git installation</label><label><input type="checkbox" id="optional-gh" style="width:auto"> GitHub CLI</label><label><input type="checkbox" id="consent-gh" style="width:auto"> Approve GitHub CLI installation</label><label><input type="checkbox" id="optional-gh-login" style="width:auto"> Offer GitHub CLI login</label><label><input type="checkbox" id="consent-gh-login" style="width:auto"> Approve login offer</label></fieldset><fieldset><legend>Optional runtimes</legend><label><input type="checkbox" id="optional-conda" style="width:auto"> Conda</label><label><input type="checkbox" id="optional-comfyui" style="width:auto"> ComfyUI</label><label><input type="checkbox" id="consent-runtime" style="width:auto"> Approve selected runtime installations</label><p class="help">Runtime paths remain configurable per Host.</p></fieldset><p class="help" id="optional-status" role="status" aria-live="polite">No optional components selected.</p></section><section class="wizard-page" data-wizard-page="source" hidden><section id="source-discovery"><h2>Existing Minglefield source (read-only)</h2><p class="help">Inspect a directory you select. Recognition does not verify the publisher or enable installation.</p><label for="source-path">Source checkout directory</label><input id="source-path" aria-label="Existing Minglefield source directory" placeholder="Absolute directory path" /><button type="button" class="secondary" id="browse-source-path">Browse folder</button><button type="button" id="inspect-source">Inspect directory</button><pre id="source-result" role="status" aria-live="polite">No directory inspected.</pre></section><section id="data-discovery"><h2>Existing user data (read-only)</h2><p class="help">Inspect the selected directory for known configuration and database candidates, even when it is not a recognized source checkout. No files are changed or imported.</p><button type="button" id="inspect-data">Inspect selected directory</button><button type="button" id="inspect-default-data" class="secondary">Rescan Minglefield app data</button><p class="help">Minglefield application data is inspected automatically at startup, independently of the repository. If multiple databases are found, select one for the future migration preview.</p><div id="database-selection" role="group" aria-label="Detected SQLite databases"></div><button type="button" id="browse-database" class="secondary">Browse database file</button><button type="button" id="inspect-selected-database">Inspect selected database (read-only)</button><fieldset><legend>Database credentials (migration preparation)</legend><label for="existing-db-password">Existing database unlock password (optional for unencrypted SQLite)</label><input id="existing-db-password" type="password" autocomplete="off" spellcheck="false" /><p class="help">The inspector accepts plaintext SQLite without a key and uses this password to unlock SQLCipher databases. Wrong keys are rejected.</p><label for="new-db-password">New encrypted database password</label><input id="new-db-password" type="password" autocomplete="new-password" spellcheck="false" /><label for="confirm-db-password">Confirm new database password</label><input id="confirm-db-password" type="password" autocomplete="new-password" spellcheck="false" /><p class="help" id="new-db-password-status" role="status" aria-live="polite">Minimum 8 characters, one uppercase letter, one digit and one special character. Migration remains disabled.</p></fieldset><pre id="data-result" role="status" aria-live="polite">No user data inspected.</pre></section>
-</section><section class="wizard-page" data-wizard-page="data-review" hidden>
-<h2>Data Review — application database records</h2>
-<p class="help">Anwendungswerte können vor dem Anlegen der verschlüsselten Kopie korrigiert werden. Die Quelle bleibt unverändert; die Freigabe der tatsächlichen Kopie erfolgt getrennt.</p>
-<p class="help">Die Daten der geprüften SQLite-Tabellen sind den fünf Fachbereichen zugeordnet und vollständig typisiert bearbeitbar. Änderungen werden nur vorgemerkt. Bitte vertrauliche Werte nicht in Screenshots oder Logs aufnehmen; die isolierten Migrationsprüfungen erzwingen Datenbankkonsistenz.</p>
-<div class="mode" role="group" aria-label="Application data categories">
-<button type="button" class="secondary" id="data-tab-login">Anmeldung</button>
-<button type="button" class="secondary" id="data-tab-hosts">Hosts</button>
-<button type="button" class="secondary" id="data-tab-effects">Effekte</button>
-<button type="button" class="secondary" id="data-tab-jobs">Jobs</button>
-<button type="button" class="secondary" id="data-tab-games">Games</button>
-<button type="button" class="secondary" id="data-tab-all" hidden>Sonstige DB-Tabellen</button>
-</div>
-<section id="data-editor-login"><h3>Anmeldung</h3><div id="data-fields-login"></div></section>
-<section id="data-editor-hosts" hidden><h3>Hosts</h3><div id="data-fields-hosts"></div></section>
-<section id="data-editor-effects" hidden><h3>Effekte</h3><div id="data-fields-effects"></div></section>
-<section id="data-editor-jobs" hidden><h3>Jobs</h3><div id="data-fields-jobs"></div></section>
-<section id="data-editor-games" hidden><h3>Games</h3><div id="data-fields-games"></div></section>
-<section id="data-editor-all" hidden><h3>Sonstige DB-Tabellen</h3>
-<p class="help">Nur Tabellen, die keinem der fünf Fachbereiche zugeordnet werden können, erscheinen hier. Auch Erweiterungstabellen verwenden denselben geprüften Bearbeitungs- und Migrationspfad.</p>
-<div id="data-fields-all"></div></section>
-<p id="data-editor-status" class="help" role="status">Keine Datensätze geladen. Vor dem Kopieren Quelle und unabhängige Sicherung prüfen.</p>
-<fieldset id="missing-schema-section" hidden><legend>Fehlende Schemaobjekte – mögliche ältere Datenbankversion</legend>
-<p class="help" id="missing-schema-description" role="status">Fehlende registrierte Schemaobjekte können auf eine ältere Datenbankversion hinweisen. Die Auswahl ist optional. Ergänzungen werden nur auf der neuen isolierten SQLCipher-Kopie ausgeführt, niemals in der Quelldatenbank. SQLite prüft dabei Abhängigkeiten und vorhandene Daten; bei Konflikten wird die gesamte Auswahl zurückgerollt.</p>
-<div id="missing-schema-choices" role="group" aria-label="Fehlende Schemaobjekte auswählen"></div>
-<button id="select-all-missing-schema" type="button" class="secondary">Alle fehlenden auswählen</button>
-<button id="select-no-missing-schema" type="button" class="secondary">Keine Ergänzungen</button>
-<p class="help" id="missing-schema-status" role="status" aria-live="polite">Keine Ergänzungen ausgewählt.</p>
-</fieldset>
-<fieldset id="migration-target-controls"><legend>Verschlüsseltes Datenbankziel festlegen</legend>
-<p class="help">Wähle eine neue, noch nicht vorhandene SQLCipher-Datei. Das übergeordnete Verzeichnis darf bei einer Neuinstallation noch fehlen und wird erst beim autorisierten Kopiervorgang angelegt. Die ursprüngliche Datenbank und die separate Sicherung bleiben unverändert. Du darfst denselben Dateinamen wie in einem anderen Quellverzeichnis verwenden.</p>
-<label for="migration-destination-path">Neue verschlüsselte SQLCipher-Datenbankdatei (absoluter Pfad)</label>
-<input id="migration-destination-path" spellcheck="false" placeholder="Neuer freier Dateipfad – auch in einem noch nicht existierenden Verzeichnis" />
-<button id="browse-migration-destination" type="button" class="secondary">Vorhandenen übergeordneten Ordner auswählen</button>
-</fieldset>
-<details id="optional-migration-diagnostics">
-<summary>Optionale Diagnose für Entwickler: Migrationsprobe und temporäre Testkopie</summary>
-<fieldset><legend>Nur für Fehleranalyse – nicht zum Installieren erforderlich</legend>
-<p class="help">Die echte SQLCipher-Kopie verifiziert Quelle, unabhängiges Backup, Daten und Verschlüsselung eigenständig. Die folgenden optionalen Tests legen keine endgültige Datenbank an und können übersprungen werden.</p>
-<button id="preview-migration-rehearsal" type="button" class="secondary">Optionale Migrationsprobe (keine Zieldatei)</button>
-<div id="migration-field-coverage" aria-label="Verified database column coverage" role="region"><p class="help">Zusätzliche Feldübersicht nach der optionalen Migrationsprobe.</p></div>
-<pre id="migration-rehearsal-result" role="status" aria-live="polite">Keine zusätzliche Migrationsprobe erforderlich.</pre>
-<fieldset><legend>Optionaler temporärer SQLCipher-Test</legend>
-<p class="help">Erstellt eine temporäre verschlüsselte Testkopie, verifiziert und löscht sie. Verwendet das auf Seite 3 eingegebene neue Datenbankpasswort, ohne es erneut abzufragen. Nur für die Diagnose erforderlich.</p>
-<button type="button" id="verify-temporary-sqlcipher" class="secondary">Optionale temporäre SQLCipher-Testkopie</button>
-<pre id="temporary-sqlcipher-result" role="status" aria-live="polite">Keine zusätzliche temporäre Testkopie erforderlich.</pre>
-</fieldset>
-</fieldset>
-</details>
-</section><section class="wizard-page" data-wizard-page="review" hidden><h2>Review installation preview</h2><p class="help">Pfade und Passwörter prüfen. Eine echte verschlüsselte Kopie, Anwendungsinstallation und lokale Host-Einrichtung können anschließend jeweils ausdrücklich bestätigt werden. Optionale Entwicklerdiagnosen sind dafür nicht erforderlich.</p><div class="mode" role="group" aria-label="Review categories">
-<button type="button" class="secondary" id="review-tab-paths">Paths</button>
-<button type="button" class="secondary" id="review-tab-database">Database</button>
-<button type="button" class="secondary" id="review-tab-security">Security</button>
-</div>
-<section id="review-paths"><label for="review-install-dir">Installation directory</label><input id="review-install-dir" />
-<label for="review-data-dir">Persistent data directory</label><input id="review-data-dir" />
-<label for="review-source-dir">Optionales Quellcode-Verzeichnis (für die Installation nicht erforderlich)</label><input id="review-source-dir" />
-<p class="help" id="review-paths-status" role="status" aria-live="polite">Review the effective paths for the chosen setup mode.</p></section>
-<section id="review-database" hidden><label for="review-database-path">Selected existing database</label><input id="review-database-path" readonly />
-<pre id="review-database-summary">No database inspected yet.</pre><h3>Staged application data corrections</h3><div id="review-data-corrections" role="status" aria-live="polite">No verified application records loaded for review.</div>
-<p class="help" id="review-migration-rehearsal-status">Optionale Migrationsprobe noch nicht ausgeführt. Für die echte Kopie nicht erforderlich.</p><p class="help">Die Originaldatenbank bleibt unverändert. Ausgewählte Änderungen werden erst beim freigegebenen Erstellen der neuen SQLCipher-Datenbank übernommen.</p></section>
-<section id="review-security" hidden><p id="review-security-summary" class="help">Neue SQLCipher-Datenbank und lokale Host-Einrichtung müssen ausdrücklich bestätigt werden.</p></section>
-<fieldset id="experimental-copy-controls"><legend>Experimental encrypted database copy — explicit permission required</legend>
-<p class="help">Diese Aktion erstellt direkt die verschlüsselte Datenbank. Vorherige Testdatenbanken und Probeprüfungen sind dafür nicht erforderlich. This action creates a REAL new encrypted SQLCipher file at the selected migration destination. It does not install Minglefield, replace the source database, authorize a Host, or activate the application. Use only controlled tests or data with a separate verified backup. Back up the original database while it is stopped; a separate filename is not automatically a valid backup. The Rust core checks the backup's contents and physical file identity before any destination publication.</p>
-<label for="experimental-backup-path">Existing separate source database backup (absolute file path)</label>
-<input id="experimental-backup-path" spellcheck="false" placeholder="Select an existing, independent SQLite or SQLCipher source backup" />
-<button id="browse-experimental-backup" type="button" class="secondary">Select existing backup file</button>
-<label for="experimental-copy-confirmation">Type CREATE EXPERIMENTAL ENCRYPTED COPY to acknowledge this test-only write</label>
-<input id="experimental-copy-confirmation" spellcheck="false" autocomplete="off" aria-label="Exact experimental database-copy confirmation" />
-<button id="create-experimental-copy" type="button">Create verified encrypted database copy (experimental)</button>
-<pre id="experimental-copy-result" role="status" aria-live="polite">Noch nicht ausgeführt: Quelle, separates Backup, Datenbankpasswort, freier Zielpfad und Zustimmung erforderlich. Zusätzliche Testkopien sind optional.</pre>
-</fieldset>
-<fieldset id="read-only-recovery-controls">
-<legend>Optionale Diagnose einer früheren Migration (nur lesen)</legend>
-<p class="help">Nach einem Abbruch kannst Du die Migration mit derselben unveränderten Quelle und dem geprüften Backup auf einen <strong>neuen, freien Zielpfad</strong> erneut starten. Die Diagnose des alten Zielpfads ist optional und für den neuen Versuch nicht erforderlich. Bestehende Zieldateien oder Belege niemals automatisch überschreiben oder löschen.</p>
-<p class="help">Prüft den ausgewählten Quell- und Backup-Pfad, den gespeicherten Recovery-Beleg und die verschlüsselte Zieldatei, ohne Dateien zu verändern. Dafür dieselben Datenbankpasswörter und dieselbe Auswahl der Änderungen und Schemaobjekte wie beim ursprünglichen Versuch verwenden. Ein passender Beleg beweist keine Autorisierung und erlaubt weder automatisches Fortsetzen noch Rollback oder Löschen.</p>
-<p class="help">Nach einem Abbruch genügt für den ersten, vorläufigen Dateistatus der bisherige Zielpfad. Diese Kurzprüfung liest nur Dateieinträge und einen eventuell vorhandenen Recovery-Beleg; sie prüft KEINE SQLCipher-Inhalte, benötigt keine Passwörter und berechtigt niemals zu einem Wiederholungsversuch.</p>
-<button id="inspect-interrupted-copy-status-only" type="button" class="secondary">Kurzstatus prüfen – nur Ziel und Beleg</button>
-<p class="help">Für die vollständige Prüfung Quelle, separates Backup, Datenbankpasswörter und genau dieselben Änderungen sowie Schema-Ergänzungen auswählen. Auch eine vollständige Übereinstimmung ist keine Wiederherstellungsfreigabe.</p>
-<button id="inspect-interrupted-copy" type="button" class="secondary">Recovery-Zustand prüfen (nur lesen)</button>
-<pre id="read-only-recovery-result" role="status" aria-live="polite">Noch keine Recovery-Prüfung durchgeführt. Vorhandene Belege und Zieldateien niemals automatisch löschen oder überschreiben.</pre>
-</fieldset>
-<fieldset id="alpha-application-install-controls">
-<legend>Minglefield-Alpha-Anwendungsdateien installieren (separater Schritt)</legend>
-<p class="help">Der portable Setup Manager installiert die mitgelieferte und überprüfte Python-/SQLCipher-Laufzeit samt Minglefield-Anwendung. Ein <strong>neuer, noch nicht angelegter Ordner</strong> wird automatisch erstellt. Enthält der gewählte Ordner bereits die neue verschlüsselte Datenbank, bleibt diese erhalten. Bestehende Installationen und Benutzerdaten werden niemals überschrieben. Ist in dieser Testversion kein gültiges Anwendungspaket enthalten, wird der Vorgang abgelehnt. Dies ist noch keine Host-Registrierung und kein Anwendungsstart.</p>
-<p class="help">Ziel ist das oben unter „Installation directory“ angezeigte Verzeichnis. Bestätige die gesonderte Schreiboperation ausdrücklich; eine Datenbankmigration oder ein Installationsplan alleine erteilt keine Freigabe.</p>
-<label for="alpha-application-install-confirmation">Bestätigung: INSTALL MINGLEFIELD ALPHA FILES</label>
-<input id="alpha-application-install-confirmation" spellcheck="false" autocomplete="off" aria-label="Bestätigung zum Kopieren der Minglefield-Anwendungsdateien" />
-<button type="button" id="install-alpha-application-files">Geprüfte Alpha-Anwendungsdateien installieren</button>
-<pre id="alpha-application-install-result" role="status" aria-live="polite">Noch keine Anwendungsdateien installiert. Lokale Host-Aktivierung und Anwendungsstart bleiben gesperrt.</pre>
-</fieldset>
-<fieldset id="alpha-first-run-controls">
-<legend>Lokalen Host-Administrator einrichten (einmalig)</legend>
-<p class="help">Nach einer in dieser Setup-Sitzung verifizierten neuen SQLCipher-Kopie und der Installation der Alpha-Anwendungsdateien kann der lokale Host ohne Einladungscode erstellt werden. Der Benutzer hat ausschließlich Rechte am neu zugeordneten lokalen Host, nicht an entfernten oder fremden Hosts. Die Originaldatenbank und das Backup bleiben unverändert.</p>
-<label for="alpha-first-run-login">Lokaler Anmeldename</label>
-<input id="alpha-first-run-login" value="mingleadmin" autocomplete="username" spellcheck="false" />
-<label for="alpha-first-run-password">Separates Loginpasswort (mind. 12 Zeichen, NICHT das Datenbankpasswort)</label>
-<input id="alpha-first-run-password" type="password" autocomplete="new-password" spellcheck="false" />
-<label for="alpha-first-run-confirm-password">Loginpasswort wiederholen</label>
-<input id="alpha-first-run-confirm-password" type="password" autocomplete="new-password" spellcheck="false" />
-<label><input id="alpha-first-run-consent" type="checkbox" /> Ich bestätige die einmalige Einrichtung dieses lokalen Hosts für den neuen Administrator.</label>
-<label><input id="alpha-first-run-native-probe" type="checkbox" /> Nach der Einrichtung den installierten nativen Minglefield-Start prüfen (nur Prüfstart, kein dauerhafter Dienst; benötigt das vollständige native Anwendungspaket).</label>
-<button type="button" id="activate-alpha-first-run">Lokalen Host und Administrator einrichten</button>
-<pre id="alpha-first-run-result" role="status" aria-live="polite">Erst nach verifizierter Datenbankkopie und Anwendungsdatei-Installation möglich. Keine automatische Host-Übernahme.</pre>
-</fieldset>
-<fieldset id="alpha-native-launch-controls">
-<legend>Installierte Minglefield-Anwendung starten</legend>
-<p class="help">Dieser Start ist unabhängig vom Setup Manager. Er erfordert eine verifizierte SQLCipher-Datenbank und die installierten nativen Anwendungsdateien. Vorhandene Benutzer und Hostberechtigungen werden nicht verändert; eine normale Anmeldung in Minglefield bleibt erforderlich. Der Browser öffnet sich erst nach bestätigtem lokalem Anwendungsstart.</p>
-<button type="button" id="start-native-minglefield" disabled>Installierte Minglefield-Anwendung starten</button>
-<pre id="native-minglefield-start-result" role="status" aria-live="polite">Anwendung noch nicht gestartet. Zuerst verifizierte Datenbank und Anwendungsdateien installieren.</pre>
-</fieldset>
-<h3>Complete installation and migration check</h3><button id="preview" type="button">Validate installation plan</button>
-<pre id="result" role="status" aria-live="polite">Loading default locations…</pre>
-<small>Optionale Fremd-Runtimes bleiben deaktiviert. Datenbankkopie, Anwendungsdateien und lokale Host-Einrichtung benötigen jeweils eine eigene Bestätigung. Allgemeine Updates und die vollständige Endanwender-Abnahme folgen später.</small></section><nav id="wizard-navigation" aria-label="Installer steps"><button type="button" id="wizard-back" class="secondary" disabled>Back</button><span class="help" id="wizard-step-label">Welcome</span><button type="button" id="wizard-next">Next</button></nav>
-</main><script type="module" src="/main.js"></script></body></html>
+<section class="wizard-page" data-wizard-page="mode" hidden>
+<h2>Installationsmodus</h2><div class="mode" role="group" aria-label="Installationsmodus">
+<label><input type="radio" name="setup-mode" value="standard" checked> Standard</label>
+<label><input type="radio" name="setup-mode" value="advanced"> Erweitert</label></div>
+<p id="mode-description" class="help">Standard verwendet die empfohlenen Speicherorte im Benutzerprofil.</p>
+<p>Die native Minglefield-Anwendung und ihre Python-/SQLCipher-Laufzeit sind im Paket enthalten. Für die Installation sind keine Entwicklerwerkzeuge erforderlich.</p>
+</section>
+<section class="wizard-page" data-wizard-page="paths" hidden>
+<h2>Speicherorte</h2>
+<label for="install-dir">Anwendungsordner</label><input id="install-dir" spellcheck="false">
+<button type="button" id="browse-install-dir" class="secondary">Ordner auswählen</button>
+<label for="data-dir">Datenordner</label><input id="data-dir" spellcheck="false">
+<button type="button" id="browse-data-dir" class="secondary">Ordner auswählen</button>
+<p class="help">Bereits vorhandene Verzeichnisse sind zulässig. Vor dem Übernehmen oder Aktualisieren erscheint eine Warnung mit „Weiter“ oder „Abbruch“. Bisherige Programmdateien werden vor einem Austausch gesichert.</p>
+</section>
+<section class="wizard-page" data-wizard-page="database" hidden>
+<h2>Datenbank</h2>
+<p>Optional eine bisherige Alpha-Datenbank auswählen. Ohne Quelle wird eine neue verschlüsselte Datenbank angelegt. Eine bereits gültige verschlüsselte Zieldatenbank wird unverändert übernommen.</p>
+<label for="source-database">Bestehende Quelldatenbank (optional)</label>
+<input id="source-database" spellcheck="false" placeholder="Keine Quelle – neue Datenbank erstellen">
+<button type="button" id="browse-source-db" class="secondary">Datenbank auswählen</button>
+<label for="source-password">SQLCipher-Passwort der bisherigen Quelle (falls verschlüsselt)</label>
+<input id="source-password" type="password" autocomplete="off">
+<label for="database-path">SQLCipher-Zieldatei</label>
+<input id="database-path" spellcheck="false">
+<label for="database-password">SQLCipher-Passwort der Ziel-Datenbank</label>
+<input id="database-password" type="password" autocomplete="new-password">
+<label for="database-password-confirm">Passwort bestätigen</label>
+<input id="database-password-confirm" type="password" autocomplete="new-password">
+<p class="help">Migration und Verschlüsselungsprüfung erfolgen intern erst während der Installation. Keine zusätzlichen Testkopien oder Passworteingaben auf der letzten Seite.</p>
+</section>
+<section class="wizard-page" data-wizard-page="admin" hidden>
+<h2>Lokalen Host-Administrator einrichten</h2>
+<label for="admin-login">Anmeldename</label><input id="admin-login" value="mingleadmin" readonly>
+<label for="admin-password">Loginpasswort für einen neu anzulegenden mingleadmin</label>
+<input id="admin-password" type="password" autocomplete="new-password">
+<label for="admin-password-confirm">Loginpasswort bestätigen</label>
+<input id="admin-password-confirm" type="password" autocomplete="new-password">
+<p class="help">Ist <strong>mingleadmin</strong> schon vorhanden, bleiben Passwort und Berechtigungen erhalten; dann können diese Felder leer bleiben. Andernfalls ein separates Loginpasswort mit mindestens zwölf Zeichen wählen. Andere Benutzer, Eigentümer und Hostberechtigungen bleiben unverändert. Neue Berechtigungen gelten nur für den lokalen Host, nicht für Remote-Hosts.</p>
+</section>
+<section class="wizard-page" data-wizard-page="review" hidden>
+<h2>Zusammenfassung</h2>
+<p class="help">Hier erscheinen nur Deine gewählten Installationsoptionen. Migration, Dateiinstallation, lokale Administratoranlage und Anwendungsstart erfolgen intern nach der Bestätigung.</p>
+<dl class="summary" id="install-summary" aria-label="Gewählte Installationsoptionen"></dl>
+<p id="ready-status" role="status" aria-live="polite">Konfiguration wird geprüft…</p>
+<div class="confirm"><label><input type="checkbox" id="installation-approved"> Installation durchführen</label></div>
+<button type="button" id="install-now" disabled>Installieren</button>
+<section id="existing-warning" hidden aria-live="polite">
+<p>Ein Anwendungsordner oder eine Zieldatenbank ist bereits vorhanden. Eine gültige SQLCipher-Datenbank wird unverändert übernommen; bisherige Programmdateien werden vor einer Aktualisierung gesichert. Vorhandene Fremddateien werden nicht gelöscht.</p>
+<button type="button" id="existing-continue">Weiter</button>
+<button type="button" class="secondary" id="existing-abort">Abbruch</button>
+</section>
+<p id="installation-status" role="status" aria-live="polite">Noch keine Installation gestartet.</p>
+<a href="#" id="installed-url" hidden>Installierte Anwendung öffnen</a>
+</section>
+<nav id="wizard-navigation" aria-label="Installationsschritte">
+<button type="button" id="wizard-back" class="secondary">Zurück</button>
+<span id="wizard-step-label" class="help">Willkommen</span>
+<button type="button" id="wizard-next">Weiter</button>
+</nav>
+</main>
+<script type="module" src="/main.js"></script>
+</body></html>

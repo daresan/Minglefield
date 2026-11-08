@@ -252,13 +252,10 @@ pub async fn inspect_host_bindings(
 ) -> Result<Vec<ExistingHostBinding>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let file = absolute_path(&path)?;
-        let db = Connection::open_with_flags(
-            file,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|_| "Datenbank kann nicht geöffnet werden")?;
-        db.pragma_update(None, "key", &password)
-            .map_err(|_| "Datenbank kann nicht entschlüsselt werden")?;
+        // Use the same read-only SQLite/SQLCipher snapshot as the page-five
+        // database editor. Plaintext SQLite must not be keyed as SQLCipher.
+        let (db, _) = open_inspected_snapshot(&file, &password)
+            .map_err(|_| "Hostdatenbank konnte nicht schreibgeschützt geprüft werden")?;
         let exists: i64 = db
             .query_row(
                 "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='alpha_executor_hosts'",

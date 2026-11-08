@@ -44,6 +44,12 @@ pub struct InstallRequest {
     local_host_id: Option<String>,
     approved: bool,
     continue_existing: bool,
+    #[serde(default = "launch_by_default")]
+    launch_after_install: bool,
+}
+
+fn launch_by_default() -> bool {
+    true
 }
 
 #[derive(Serialize)]
@@ -56,10 +62,10 @@ pub struct InstalledAndRunning {
     application_reused: bool,
     local_admin_user: &'static str,
     local_host_id: String,
-    native_process_id: u32,
-    local_url: String,
+    native_process_id: Option<u32>,
+    local_url: Option<String>,
     encrypted_database_verified: bool,
-    // This is a real GUI installation, not full CLI/silent/release acceptance.
+    // A verified no-launch install must not pretend that an app is running.
     native_application_running: bool,
 }
 
@@ -597,28 +603,43 @@ fn execute_install(
         "Mingleadmin konnte nicht hinzugefügt/übernommen werden. Bereits migrierte DB und Anwendungsdateien bleiben erhalten; bitte Loginpasswort und bisherigen DB-Zustand prüfen."
             .to_owned()
     })?;
-    let running = start_installed_application(
-        Path::new(&installed.install_dir),
-        &database,
-        &request.database_password,
-        digest,
-        true,
-    )
-    .map_err(|reason| {
-        format!("Anwendungsstart fehlgeschlagen: {reason}. Daten und vorherige Anwendungssicherung bleiben erhalten")
-    })?;
+    // The GUI checkbox determines whether to launch the separately installed
+    // application. It never changes whether migration, verification or
+    // installer Host administration is completed.
+    let running = if request.launch_after_install {
+        Some(
+            start_installed_application(
+                Path::new(&installed.install_dir),
+                &database,
+                &request.database_password,
+                digest,
+                true,
+            )
+            .map_err(|reason| {
+                format!("Anwendungsstart fehlgeschlagen: {reason}. Daten und vorherige Anwendungssicherung bleiben erhalten")
+            })?,
+        )
+    } else {
+        None
+    };
     Ok(InstalledAndRunning {
-        status: "minglefield_installed_and_running",
+        status: if running.is_some() {
+            "minglefield_installed_and_running"
+        } else {
+            "minglefield_installed"
+        },
         installed_application: installed.install_dir,
         encrypted_database: database.to_string_lossy().into_owned(),
         database_action,
         application_reused: reused,
         local_admin_user: "mingleadmin",
         local_host_id: admin.local_host_id,
-        native_process_id: running.process_id,
-        local_url: format!("http://127.0.0.1:{}/", running.port),
+        native_process_id: running.as_ref().map(|process| process.process_id),
+        local_url: running
+            .as_ref()
+            .map(|process| format!("http://127.0.0.1:{}/", process.port)),
         encrypted_database_verified: true,
-        native_application_running: true,
+        native_application_running: running.is_some(),
     })
 }
 
@@ -669,6 +690,19 @@ pub async fn install_minglefield(
     .await
     .map_err(|_| "Installationsausführung unerwartet beendet".to_owned())?;
     result
+}
+
+/// Called only after the native installation receipt was verified.
+#[tauri::command]
+pub fn close_completed_setup_manager(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, InstallExecutionState>,
+) -> Result<(), String> {
+    if !state.completed.load(Ordering::Acquire) {
+        return Err("Setup Manager kann vor Abschluss nicht automatisch geschlossen werden".into());
+    }
+    app.exit(0);
+    Ok(())
 }
 
 #[cfg(test)]

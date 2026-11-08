@@ -5,6 +5,7 @@ mod alpha_application_install;
 mod alpha_first_run;
 mod full_database_review;
 mod install_execution;
+mod windows_app_registration;
 mod legacy_record_review;
 mod migration_review;
 

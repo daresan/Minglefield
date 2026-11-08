@@ -397,6 +397,11 @@ fn execute_install(
             })?;
     verify_installed_application(Path::new(&installed.install_dir), digest)
         .map_err(|_| "Installierte Minglefield-Dateien konnten nicht verifiziert werden")?;
+    // Register the *installed application* in Windows Installed Apps, never
+    // the portable Setup Manager. Database files remain outside its remover.
+    crate::windows_app_registration::register_installed_application(
+        Path::new(&installed.install_dir),
+    )?;
     let local_host_id = selected_local_host(
         &database,
         &request.database_password,

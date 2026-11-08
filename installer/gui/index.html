@@ -133,6 +133,11 @@ body.review-data main{max-width:1280px}
 </fieldset>
 <fieldset id="local-admin-section">
 <legend>Lokalen Host-Administrator mingleadmin einrichten</legend>
+<label for="selected-local-host">Vorhandener lokaler Host dieses Computers</label>
+<select id="selected-local-host">
+<option value="">Lokalen Host automatisch erkennen</option>
+</select>
+<p id="host-selection-info" class="help" role="status">Hostzuordnungen werden aus der entsperrten Datenbank angezeigt. Bestehende Host-IDs bleiben erhalten; bitte keinen Remote-Host auswählen.</p>
 <label for="admin-login">Anmeldename</label>
 <input id="admin-login" value="mingleadmin" readonly>
 <label for="admin-password">Loginpasswort für einen neu anzulegenden mingleadmin</label>

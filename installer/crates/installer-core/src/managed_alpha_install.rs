@@ -439,7 +439,7 @@ pub fn install_or_reuse_application(
             installed.push(name.clone());
         }
         verify_installed_application(destination, pinned_inventory)
-            .map_err(|_| "Updated installed application failed inventory check")
+            .map_err(|_| "Updated installed application failed inventory check".to_owned())
     })();
     if let Err(reason) = result {
         let mut restore_ok = true;

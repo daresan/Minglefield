@@ -154,6 +154,36 @@ pub fn start_tray(native_exe: &Path, worker_pid: u32, port: u16) -> Result<Child
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn embedded_powershell_is_parseable_without_executing_installer_operations() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let code = concat!(
+            "$src=[Console]::In.ReadToEnd();",
+            "$tokens=$null;$issues=$null;",
+            "[void][System.Management.Automation.Language.Parser]::ParseInput(",
+            "$src,[ref]$tokens,[ref]$issues);",
+            "if($issues.Count -gt 0){exit 1};exit 0"
+        );
+        let powershell = super::powershell_executable()
+            .unwrap();
+        let mut parser = Command::new(powershell)
+            .args(["-NoProfile", "-NonInteractive", "-Command", code])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        parser
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(super::TRAY_SCRIPT.as_bytes())
+            .unwrap();
+        assert!(parser.wait().unwrap().success());
+    }
+
     #[test]
     fn tray_has_both_requested_actions_and_ties_worker_shutdown_to_native_pid() {
         assert!(TRAY_SCRIPT.contains("Minglefield im Browser öffnen"));

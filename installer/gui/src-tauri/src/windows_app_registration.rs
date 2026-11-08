@@ -183,6 +183,36 @@ pub fn register_installed_application(_root: &Path) -> Result<(), String> {
 mod tests {
     #[cfg(windows)]
     #[test]
+    fn embedded_powershell_is_parseable_without_executing_installer_operations() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let code = concat!(
+            "$src=[Console]::In.ReadToEnd();",
+            "$tokens=$null;$issues=$null;",
+            "[void][System.Management.Automation.Language.Parser]::ParseInput(",
+            "$src,[ref]$tokens,[ref]$issues);",
+            "if($issues.Count -gt 0){exit 1};exit 0"
+        );
+        let powershell = super::system_executable("WindowsPowerShell\\v1.0\\powershell.exe")
+            .unwrap();
+        let mut parser = Command::new(powershell)
+            .args(["-NoProfile", "-NonInteractive", "-Command", code])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        parser
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(super::UNINSTALL_SCRIPT.as_bytes())
+            .unwrap();
+        assert!(parser.wait().unwrap().success());
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn script_is_bound_to_the_managed_application_and_preserves_user_data() {
         use super::UNINSTALL_SCRIPT;
         assert!(UNINSTALL_SCRIPT.contains("managed-file-inventory.json"));

@@ -893,6 +893,28 @@ mod tests {
     }
 
     #[test]
+    fn explicit_launch_opt_out_deserializes_without_changing_install_consent() {
+        let request: InstallRequest = serde_json::from_value(serde_json::json!({
+            "installDir": "/tmp/minglefield-app",
+            "databasePath": "/tmp/minglefield.sqlite3",
+            "sourceDatabase": null,
+            "sourcePassword": "",
+            "databasePassword": "ExampleCipherKey9!",
+            "loginPassword": "ExampleLoginKey8!",
+            "loginPasswordConfirmation": "ExampleLoginKey8!",
+            "corrections": [],
+            "schemaAdditions": [],
+            "localHostId": null,
+            "approved": true,
+            "continueExisting": false,
+            "launchAfterInstall": false
+        }))
+        .unwrap();
+        assert!(request.approved);
+        assert!(!request.launch_after_install);
+    }
+
+    #[test]
     fn single_consent_and_existing_path_warning_are_independent_of_user_tests() {
         let root = std::env::temp_dir().join(format!(
             "mf-single-install-review-{}",

@@ -60,7 +60,7 @@ class OwnerUiTests(unittest.TestCase):
         from private_alpha_gateway import PAGE
         for marker in ('id="hostUsersPanel"', 'id="userAdminHost"',
                        'id="userAdminList"', 'id="userAdminDatabasePassword"',
-                       'id="userAdminGrant"', 'data.tab'):
+                       'id="userAdminGrant"', 'button.dataset.tab'):
             self.assertIn(marker, PAGE)
         self.assertEqual(self.claim(self.owner)[0], 200)
         status, users = self.req(

@@ -1128,17 +1128,34 @@ mod tests {
             row_id: Some("1".into()),
             columns: vec!["user_id".into(), "disabled".into()],
             before: vec![
-                RawCell { kind: "text".into(), value: Some("old-user".into()) },
-                RawCell { kind: "integer".into(), value: Some("0".into()) },
+                RawCell {
+                    kind: "text".into(),
+                    value: Some("old-user".into()),
+                },
+                RawCell {
+                    kind: "integer".into(),
+                    value: Some("0".into()),
+                },
             ],
             after: vec![
-                RawCell { kind: "text".into(), value: Some("old-user".into()) },
-                RawCell { kind: "integer".into(), value: Some("1".into()) },
+                RawCell {
+                    kind: "text".into(),
+                    value: Some("old-user".into()),
+                },
+                RawCell {
+                    kind: "integer".into(),
+                    value: Some("1".into()),
+                },
             ],
         };
         let addition = vec!["uq_game_install_one_active_project".to_owned()];
         let report = export_installer_encrypted_database(
-            &source, &dest, "", "NewCipherPassword123!", &[change], &addition,
+            &source,
+            &dest,
+            "",
+            "NewCipherPassword123!",
+            &[change],
+            &addition,
         )
         .unwrap();
         assert_eq!(report.staged_changes_verified, 1);
@@ -1146,10 +1163,15 @@ mod tests {
         assert!(report.encrypted_destination_verified);
         assert_eq!(fs::read(&source).unwrap(), original_bytes);
         let db = Connection::open(&dest).unwrap();
-        db.pragma_update(None, "key", "NewCipherPassword123!").unwrap();
-        let value: i64 = db.query_row(
-            "SELECT disabled FROM alpha_users WHERE user_id='old-user'", [], |r| r.get(0),
-        ).unwrap();
+        db.pragma_update(None, "key", "NewCipherPassword123!")
+            .unwrap();
+        let value: i64 = db
+            .query_row(
+                "SELECT disabled FROM alpha_users WHERE user_id='old-user'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(value, 1);
         let count: i64 = db.query_row(
             "SELECT count(*) FROM sqlite_schema WHERE name='uq_game_install_one_active_project'",

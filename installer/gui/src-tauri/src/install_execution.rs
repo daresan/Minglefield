@@ -414,6 +414,41 @@ pub async fn install_minglefield(
 mod tests {
     use super::*;
     #[test]
+    fn real_install_request_accepts_typed_staged_row_changes_and_selected_schema_objects() {
+        let input = serde_json::json!({
+            "installDir": "/tmp/minglefield-app",
+            "databasePath": "/tmp/minglefield-encrypted.sqlite3",
+            "sourceDatabase": "/tmp/legacy.sqlite3",
+            "sourcePassword": "",
+            "databasePassword": "ExampleCipherKey9!",
+            "loginPassword": "ExampleLoginKey8!",
+            "loginPasswordConfirmation": "ExampleLoginKey8!",
+            "corrections": [{
+                "kind": "full_row",
+                "table": "alpha_users",
+                "row_id": "1",
+                "columns": ["disabled"],
+                "before": [{"kind":"integer","value":"0"}],
+                "after": [{"kind":"integer","value":"1"}]
+            }],
+            "schemaAdditions": ["registered_missing_index"],
+            "approved": true,
+            "continueExisting": false
+        });
+        let request: InstallRequest = serde_json::from_value(input).unwrap();
+        assert!(request.approved);
+        assert_eq!(request.schema_additions, ["registered_missing_index"]);
+        assert!(matches!(request.corrections[0], StagedCorrection::FullRow { .. }));
+        let changes: Vec<ReviewCorrection> = request
+            .corrections
+            .drain(..)
+            .map(ReviewCorrection::from)
+            .collect();
+        assert_eq!(changes.len(), 1);
+        assert!(matches!(changes[0], ReviewCorrection::FullRow { .. }));
+    }
+
+    #[test]
     fn single_consent_and_existing_path_warning_are_independent_of_user_tests() {
         let root = std::env::temp_dir().join(format!(
             "mf-single-install-review-{}",

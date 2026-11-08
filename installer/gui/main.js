@@ -72,7 +72,10 @@ function refreshReview() {
     dd.textContent = value;
     summary.append(dt, dd);
   }
-  const issue = validateInstallSelections(form) || sourceIssue;
+  const issue = validateInstallSelections(form) || sourceIssue ||
+    (!form.loginPassword && !staged.adminExists
+      ? "Bitte auf Seite 5 ein Loginpasswort für den neuen mingleadmin festlegen."
+      : "");
   byId("ready-status").textContent = issue || "Bereit zur Installation.";
   byId("ready-status").style.color = issue ? "#f5c898" : "#b1e3cd";
   byId("install-now").disabled =
@@ -121,6 +124,9 @@ async function install(continueExisting) {
   let issue = validateInstallSelections(form);
   try { staged = databaseEditor.selection(form); }
   catch (error) { issue = issue || String(error); }
+  if (!issue && !form.loginPassword && !staged.adminExists) {
+    issue = "Bitte auf Seite 5 ein Loginpasswort für den neuen mingleadmin festlegen.";
+  }
   if (issue || !byId("installation-approved").checked) {
     refreshReview();
     return;

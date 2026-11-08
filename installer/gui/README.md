@@ -1,3 +1,10 @@
+# Minglefield Setup Manager – aktuelle Produktoberfläche (2026-11-08)
+
+Die neue GUI ist ein sechsstufiger Installer. Auf Seite 5 stehen die Anmeldedaten für `mingleadmin`, auf Seite 6 ausschließlich gewählte Optionen, Bereitschaft, eine Checkbox **Installation durchführen** und **Installieren**. Keine manuellen Migrations-, Schreib-, SQLCipher- oder Starttests und keine langen Bestätigungstexte. Das abschließende Installieren führt die internen Schritte (DB übernehmen/erstellen/migrieren, Anwendung installieren/aktualisieren/übernehmen, `mingleadmin` hinzufügen falls fehlend, Anwendung starten) automatisch aus. Vorhandene Anwendungsordner oder verschlüsselte DB-Ziele warnen mit **Weiter/Abbruch**, ohne bestehende Rechte oder Daten zu überschreiben. Ist `mingleadmin` bereits vorhanden, bleiben seine Zugangsdaten unverändert. Diese neue Version ist noch NICHT manuell auf Shadow abgenommen. Der bestehende ComfyUI-Jobs-Fehler bleibt separat zu überprüfen.
+
+Die nachfolgenden Abschnitte beschreiben historische, nun abgelöste Entwicklungsschritte. Sie sind keine Endanwenderanleitung und dürfen nicht wieder als UI-Testdialoge eingebaut werden.
+
+---
 # Portable Tauri 2 Setup Manager — Alpha database, application files and local first run
 
 ## Rejected M2.08 Shadow acceptance: corrected operator path (2026-11-07)

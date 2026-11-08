@@ -510,7 +510,8 @@ mod tests {
 
     #[test]
     fn existing_directory_update_archives_old_managed_entries_without_touching_user_files() {
-        let (source, dest, digest) = fixture();
+        let (root, source, digest) = fixture();
+        let dest = root.join("existing-with-user-files");
         // Use a previously populated destination rather than rejecting it.
         fs::create_dir_all(dest.join("application/server")).unwrap();
         fs::write(dest.join("application/server/legacy.py"), b"older edition").unwrap();
@@ -542,6 +543,7 @@ mod tests {
         );
         let (_same, reused) = install_or_reuse_application(&source, &dest, &digest, true).unwrap();
         assert!(reused);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

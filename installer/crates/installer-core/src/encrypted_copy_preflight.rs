@@ -589,7 +589,7 @@ pub fn export_installer_encrypted_database(
             .map_err(|_| "Cannot reopen installed SQLCipher destination")?
             .read_exact(&mut header)
             .map_err(|_| "Installed SQLCipher destination header is truncated")?;
-        if &header == b"SQLite format 3\\0" {
+        if &header == b"SQLite format 3\0" {
             return Err("Installed destination has an unencrypted SQLite header".into());
         }
         let verified = Connection::open_with_flags(

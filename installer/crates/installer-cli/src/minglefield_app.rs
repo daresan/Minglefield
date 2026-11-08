@@ -25,6 +25,11 @@ use std::time::Duration;
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_FRAME: usize = 8192;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
+// Native application port is stable across reinstalls, logins and browser opens.
+// Probes deliberately use an ephemeral port so they do not disturb a running
+// ordinary Minglefield instance. A busy normal port is an explicit failure,
+// never a reason to silently expose another random URL.
+const MINGLEFIELD_LOCAL_PORT: u16 = 8765;
 
 #[derive(Default)]
 struct LaunchOptions {
@@ -337,12 +342,12 @@ fn resolve_key(opts: &LaunchOptions, root: &Path) -> Result<(PathBuf, String), &
     Ok((path.to_path_buf(), secret))
 }
 
-fn private_start_frame(database: &Path, key: &str) -> Result<Vec<u8>, &'static str> {
+fn private_start_frame(database: &Path, key: &str, probe_exit: bool) -> Result<Vec<u8>, &'static str> {
     let data = serde_json::to_vec(&json!({
         "version": 1,
         "databasePath": database,
         "sqlcipherKey": key,
-        "port": 0
+        "port": if probe_exit { 0 } else { MINGLEFIELD_LOCAL_PORT }
     }))
     .map_err(|_| "cannot encode private Alpha startup frame")?;
     if data.is_empty() || data.len() > MAX_FRAME {
@@ -505,7 +510,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), &'static str> {
         );
         return Ok(());
     }
-    let frame = private_start_frame(&database, &secret)?;
+    let frame = private_start_frame(&database, &secret, opts.probe_exit)?;
     let (mut child, port) = start_worker(&app, &frame)?;
     let report = json!({
         "status": if opts.probe_exit {
@@ -577,7 +582,17 @@ mod tests {
     #[test]
     fn verifies_bounded_private_launch_frames_without_logging_credentials() {
         let frame =
-            private_start_frame(Path::new("/test/alpha.db"), "NotPrintedSecret123!").unwrap();
+            private_start_frame(Path::new("/test/alpha.db"), "NotPrintedSecret123!", false)
+                .unwrap();
+        let json: Value = serde_json::from_slice(&frame).unwrap();
+        assert_eq!(json["port"], MINGLEFIELD_LOCAL_PORT);
+        let probe = private_start_frame(
+            Path::new("/test/alpha.db"),
+            "NotPrintedSecret123!",
+            true,
+        )
+        .unwrap();
+        assert_eq!(serde_json::from_slice::<Value>(&probe).unwrap()["port"], 0);
         assert!(frame.len() < MAX_FRAME);
         assert!(parse_readiness(
             br#"{"version":1,"status":"ready","bind":"127.0.0.1","port":32111,"encryptedDatabase":true,"hostClaimBootstrapEnabled":false}"#

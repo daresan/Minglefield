@@ -4,8 +4,7 @@
 use std::path::Path;
 
 #[cfg(windows)]
-const UNINSTALL_KEY: &str =
-    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Minglefield";
+const UNINSTALL_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Minglefield";
 
 #[cfg(windows)]
 const UNINSTALL_SCRIPT: &str = r#"
@@ -93,8 +92,7 @@ if (@(Get-ChildItem -LiteralPath $root -Force).Count -eq 0) {
 
 #[cfg(windows)]
 fn system_executable(name: &str) -> Result<std::path::PathBuf, String> {
-    let root = std::env::var_os("SystemRoot")
-        .ok_or("Windows-Verzeichnis ist nicht verfügbar")?;
+    let root = std::env::var_os("SystemRoot").ok_or("Windows-Verzeichnis ist nicht verfügbar")?;
     let path = Path::new(&root).join("System32").join(name);
     if !path.is_file() {
         return Err("Windows-Anwendungsregistrierung ist nicht verfügbar".into());
@@ -122,17 +120,17 @@ pub fn register_installed_application(root: &Path) -> Result<(), String> {
     use std::fs;
     use std::io::Write;
     let app = root.join("Minglefield.exe");
-    let metadata = fs::symlink_metadata(&app)
-        .map_err(|_| "Die installierte Minglefield.exe fehlt")?;
+    let metadata =
+        fs::symlink_metadata(&app).map_err(|_| "Die installierte Minglefield.exe fehlt")?;
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err("Installierter Minglefield-Starter ist ungültig".into());
     }
-    let root = fs::canonicalize(root)
-        .map_err(|_| "Installationsordner ist nicht erreichbar")?;
+    let root = fs::canonicalize(root).map_err(|_| "Installationsordner ist nicht erreichbar")?;
     let uninstall_file = root.join("MinglefieldUninstall.ps1");
     match fs::symlink_metadata(&uninstall_file) {
         Ok(meta) => {
-            if !meta.is_file() || meta.file_type().is_symlink()
+            if !meta.is_file()
+                || meta.file_type().is_symlink()
                 || fs::read(&uninstall_file).map_err(|_| "Uninstaller unlesbar")?
                     != UNINSTALL_SCRIPT.as_bytes()
             {
@@ -163,7 +161,9 @@ pub fn register_installed_application(root: &Path) -> Result<(), String> {
     add_value(UNINSTALL_KEY, "Publisher", "REG_SZ", "Minglefield")?;
     add_value(UNINSTALL_KEY, "InstallLocation", "REG_SZ", &location)?;
     add_value(
-        UNINSTALL_KEY, "DisplayIcon", "REG_SZ",
+        UNINSTALL_KEY,
+        "DisplayIcon",
+        "REG_SZ",
         &app.to_string_lossy(),
     )?;
     add_value(UNINSTALL_KEY, "NoModify", "REG_DWORD", "1")?;

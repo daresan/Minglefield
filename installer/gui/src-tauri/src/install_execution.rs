@@ -10,16 +10,16 @@ use minglefield_installer_core::db_operations::{
 use minglefield_installer_core::encrypted_copy_preflight::{
     execute_reviewed_encrypted_copy_with_schema, EXPERIMENTAL_COPY_CONFIRMATION,
 };
-use minglefield_installer_core::local_first_run_worker::ensure_verified_installer_local_admin;
 use minglefield_installer_core::legacy_alpha_constraints::audit_registered_alpha_schema_objects;
+use minglefield_installer_core::local_first_run_worker::ensure_verified_installer_local_admin;
 use minglefield_installer_core::managed_alpha_install::{
     install_or_reuse_application, verify_installed_application,
 };
 use minglefield_installer_core::migration_dry_run::{RawCell, ReviewCorrection};
-use minglefield_installer_core::sqlite_inspection::open_inspected_snapshot;
 use minglefield_installer_core::native_application_probe::{
     ensure_native_starter, start_installed_application,
 };
+use minglefield_installer_core::sqlite_inspection::open_inspected_snapshot;
 use rusqlite::{types::Value, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -294,21 +294,15 @@ pub async fn inspect_host_bindings(
 fn db_value_matches(cell: &RawCell, value: &Value) -> bool {
     match (cell.kind.as_str(), cell.value.as_deref(), value) {
         ("null", None, Value::Null) => true,
-        ("integer", Some(raw), Value::Integer(actual)) => {
-            raw.parse::<i64>() == Ok(*actual)
+        ("integer", Some(raw), Value::Integer(actual)) => raw.parse::<i64>() == Ok(*actual),
+        ("real", Some(raw), Value::Real(actual)) => {
+            raw.parse::<f64>().ok().filter(|number| number.is_finite()) == Some(*actual)
         }
-        ("real", Some(raw), Value::Real(actual)) => raw
-            .parse::<f64>()
-            .ok()
-            .filter(|number| number.is_finite())
-            == Some(*actual),
         ("text", Some(raw), Value::Text(actual)) => raw == actual,
         ("blob", Some(raw), Value::Blob(bytes)) => {
             raw.len() == bytes.len() * 2
                 && bytes.iter().enumerate().all(|(index, byte)| {
-                    u8::from_str_radix(&raw[index * 2..index * 2 + 2], 16)
-                        .ok()
-                        == Some(*byte)
+                    u8::from_str_radix(&raw[index * 2..index * 2 + 2], 16).ok() == Some(*byte)
                 })
         }
         _ => false,
@@ -316,10 +310,7 @@ fn db_value_matches(cell: &RawCell, value: &Value) -> bool {
 }
 
 fn quoted_sqlite_identifier(identifier: &str) -> Result<String, String> {
-    if identifier.is_empty()
-        || identifier.len() > 256
-        || identifier.as_bytes().contains(&0)
-    {
+    if identifier.is_empty() || identifier.len() > 256 || identifier.as_bytes().contains(&0) {
         return Err("Ungültiger Name in der Datenbearbeitung".into());
     }
     Ok(format!("\"{}\"", identifier.replace('"', "\"\"")))
@@ -339,9 +330,12 @@ fn match_rows(
             after,
         } = correction
         else {
-            return Err("Eine ältere Korrektur kann hier nicht automatisch übernommen werden".into());
+            return Err(
+                "Eine ältere Korrektur kann hier nicht automatisch übernommen werden".into(),
+            );
         };
-        if columns.len() < 1 || columns.len() > 1024
+        if columns.len() < 1
+            || columns.len() > 1024
             || before.len() != columns.len()
             || after.len() != columns.len()
         {
@@ -383,9 +377,11 @@ fn match_rows(
                 .map(|index| row.get::<_, Value>(index))
                 .collect::<rusqlite::Result<Vec<_>>>()
                 .map_err(|_| "Datenbankwert konnte nicht verglichen werden")?;
-            if actual.iter().zip(expected.iter()).all(|(value, cell)| {
-                db_value_matches(cell, value)
-            }) {
+            if actual
+                .iter()
+                .zip(expected.iter())
+                .all(|(value, cell)| db_value_matches(cell, value))
+            {
                 matches += 1;
             }
         }
@@ -412,9 +408,10 @@ fn verify_existing_migration_intent(
     match_rows(&source_db, changes, false)?;
     let source_audit = audit_registered_alpha_schema_objects(&source_db, &source_schema)
         .map_err(|_| "Original-Schema konnte nicht überprüft werden")?;
-    if additions.iter().any(|name| {
-        !source_audit.missing_objects.contains(name)
-    }) {
+    if additions
+        .iter()
+        .any(|name| !source_audit.missing_objects.contains(name))
+    {
         return Err("Schemaauswahl entspricht nicht mehr der Migrationsquelle".into());
     }
     let (target_db, target_schema) = open_inspected_snapshot(destination, new_password)
@@ -499,11 +496,14 @@ fn execute_install(
         verify_encrypted_database(&database, &request.database_password)
             .map_err(|_| "Vorhandene DB nicht mit dem angegebenen SQLCipher-Schlüssel verwendbar; anderer Zielpfad nötig")?;
         if !changes.is_empty() || !request.schema_additions.is_empty() {
-            let source_path = source
-                .as_deref()
-                .ok_or("Für die Übernahme vorgemerkter Korrekturen ist eine Quelldatenbank erforderlich")?;
+            let source_path = source.as_deref().ok_or(
+                "Für die Übernahme vorgemerkter Korrekturen ist eine Quelldatenbank erforderlich",
+            )?;
             if source_path == database.as_path() {
-                return Err("Quelle und verschlüsselte Zieldatenbank dürfen nicht dieselbe Datei sein".into());
+                return Err(
+                    "Quelle und verschlüsselte Zieldatenbank dürfen nicht dieselbe Datei sein"
+                        .into(),
+                );
             }
             verify_existing_migration_intent(
                 source_path,
@@ -560,9 +560,9 @@ fn execute_install(
         .map_err(|_| "Installierte Minglefield-Dateien konnten nicht verifiziert werden")?;
     // Register the *installed application* in Windows Installed Apps, never
     // the portable Setup Manager. Database files remain outside its remover.
-    crate::windows_app_registration::register_installed_application(
-        Path::new(&installed.install_dir),
-    )?;
+    crate::windows_app_registration::register_installed_application(Path::new(
+        &installed.install_dir,
+    ))?;
     let local_host_id = selected_local_host(
         &database,
         &request.database_password,
@@ -659,7 +659,8 @@ mod tests {
     #[test]
     fn existing_encrypted_migration_reuses_matching_edits_without_deleting_user_db() {
         let root = std::env::temp_dir().join(format!(
-            "minglefield-existing-migration-{}", random_hex().unwrap()
+            "minglefield-existing-migration-{}",
+            random_hex().unwrap()
         ));
         fs::create_dir(&root).unwrap();
         let source = root.join("source.sqlite3");
@@ -668,34 +669,54 @@ mod tests {
             let db = Connection::open(&source).unwrap();
             db.execute_batch(
                 "CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);
-                 INSERT INTO alpha_users VALUES('user.daniel',0);"
-            ).unwrap();
+                 INSERT INTO alpha_users VALUES('user.daniel',0);",
+            )
+            .unwrap();
         }
         {
             let db = Connection::open(&dest).unwrap();
             db.pragma_update(None, "key", "VerifiedKey9!").unwrap();
             db.execute_batch(
                 "CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);
-                 INSERT INTO alpha_users VALUES('user.daniel',1);"
-            ).unwrap();
+                 INSERT INTO alpha_users VALUES('user.daniel',1);",
+            )
+            .unwrap();
         }
         let correction = ReviewCorrection::FullRow {
             table: "alpha_users".into(),
             row_id: Some("1".into()),
             columns: vec!["user_id".into(), "disabled".into()],
             before: vec![
-                RawCell { kind:"text".into(), value:Some("user.daniel".into()) },
-                RawCell { kind:"integer".into(), value:Some("0".into()) },
+                RawCell {
+                    kind: "text".into(),
+                    value: Some("user.daniel".into()),
+                },
+                RawCell {
+                    kind: "integer".into(),
+                    value: Some("0".into()),
+                },
             ],
             after: vec![
-                RawCell { kind:"text".into(), value:Some("user.daniel".into()) },
-                RawCell { kind:"integer".into(), value:Some("1".into()) },
+                RawCell {
+                    kind: "text".into(),
+                    value: Some("user.daniel".into()),
+                },
+                RawCell {
+                    kind: "integer".into(),
+                    value: Some("1".into()),
+                },
             ],
         };
         let before = fs::read(&dest).unwrap();
         assert!(verify_existing_migration_intent(
-            &source, "", &dest, "VerifiedKey9!", &[correction.clone()], &[],
-        ).is_ok());
+            &source,
+            "",
+            &dest,
+            "VerifiedKey9!",
+            &[correction.clone()],
+            &[],
+        )
+        .is_ok());
         assert_eq!(before, fs::read(&dest).unwrap());
         {
             let db = Connection::open(&dest).unwrap();
@@ -703,8 +724,14 @@ mod tests {
             db.execute("UPDATE alpha_users SET disabled=0", []).unwrap();
         }
         assert!(verify_existing_migration_intent(
-            &source, "", &dest, "VerifiedKey9!", &[correction], &[],
-        ).is_err());
+            &source,
+            "",
+            &dest,
+            "VerifiedKey9!",
+            &[correction],
+            &[],
+        )
+        .is_err());
         fs::remove_dir_all(root).unwrap();
     }
 

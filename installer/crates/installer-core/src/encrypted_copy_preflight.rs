@@ -1108,6 +1108,61 @@ mod tests {
     }
 
     #[test]
+    fn product_install_applies_page_five_edits_and_schema_to_single_encrypted_db() {
+        use crate::migration_dry_run::RawCell;
+        let parent = target_volume_fixture();
+        let source = parent.join("legacy.sqlite3");
+        let dest = parent.join("minglefield.sqlite3");
+        crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch(
+                "DROP INDEX uq_game_install_one_active_project;
+                 INSERT INTO alpha_users(user_id,disabled) VALUES('old-user',0);",
+            )
+            .unwrap();
+        }
+        let original_bytes = fs::read(&source).unwrap();
+        let change = ReviewCorrection::FullRow {
+            table: "alpha_users".into(),
+            row_id: Some("1".into()),
+            columns: vec!["user_id".into(), "disabled".into()],
+            before: vec![
+                RawCell { kind: "text".into(), value: Some("old-user".into()) },
+                RawCell { kind: "integer".into(), value: Some("0".into()) },
+            ],
+            after: vec![
+                RawCell { kind: "text".into(), value: Some("old-user".into()) },
+                RawCell { kind: "integer".into(), value: Some("1".into()) },
+            ],
+        };
+        let addition = vec!["uq_game_install_one_active_project".to_owned()];
+        let report = export_installer_encrypted_database(
+            &source, &dest, "", "NewCipherPassword123!", &[change], &addition,
+        )
+        .unwrap();
+        assert_eq!(report.staged_changes_verified, 1);
+        assert_eq!(report.added_schema_objects, addition);
+        assert!(report.encrypted_destination_verified);
+        assert_eq!(fs::read(&source).unwrap(), original_bytes);
+        let db = Connection::open(&dest).unwrap();
+        db.pragma_update(None, "key", "NewCipherPassword123!").unwrap();
+        let value: i64 = db.query_row(
+            "SELECT disabled FROM alpha_users WHERE user_id='old-user'", [], |r| r.get(0),
+        ).unwrap();
+        assert_eq!(value, 1);
+        let count: i64 = db.query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE name='uq_game_install_one_active_project'",
+            [], |r| r.get(0),
+        ).unwrap();
+        assert_eq!(count, 1);
+        drop(db);
+        let entries: Vec<_> = fs::read_dir(&parent).unwrap().collect();
+        assert_eq!(entries.len(), 2); // unchanged source + sole output DB
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
     fn plaintext_source_exports_to_encrypted_file_and_cleans() {
         let path = fixture(false);
         let original = fs::read(&path).unwrap();

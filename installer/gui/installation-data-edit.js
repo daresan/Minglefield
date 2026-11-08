@@ -210,11 +210,8 @@ export function createInstallationDataEditor(doc, invoke) {
             JSON.stringify(table.columns) !== JSON.stringify(tables.get(table.name)))) {
         throw new Error("Die gespeicherten Tabellen entsprechen nicht der geprüften Schemaübersicht.");
       }
-      const hosts = await invoke("inspect_host_bindings", { path, password: key });
-      if (currentId !== requestId) return;
       original = data;
       edited = createFullReview(data);
-      renderHostBindings(hosts);
       loadedSource = path;
       loadedPassword = key;
       loadedFromOriginalSource = Boolean(form.sourceDatabase);
@@ -229,6 +226,17 @@ export function createInstallationDataEditor(doc, invoke) {
       render();
       refreshEdits();
       renderSchema(inspection);
+      // Host inventory is supplemental to the existing editable DB review.
+      // A Host-specific failure must not discard successfully loaded tables.
+      try {
+        const hosts = await invoke("inspect_host_bindings", { path, password: key });
+        if (currentId !== requestId) return;
+        renderHostBindings(hosts);
+      } catch {
+        if (currentId !== requestId) return;
+        el("host-selection-info").textContent =
+          "Hostzuordnungen konnten nicht gelesen werden. Der Datenbankeditor bleibt verfügbar; die Hostzuordnung wird bei der Installation weiterhin geprüft.";
+      }
     } catch (problem) {
       if (currentId !== requestId) return;
       error = String(problem);

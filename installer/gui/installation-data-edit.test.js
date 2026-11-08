@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { approvedSchemaAdditions, selectedDataCorrections, DATABASE_DOMAINS } from "./installation-data-edit.js";
+import { approvedSchemaAdditions, selectedDataCorrections, existingInstallerAdmin, DATABASE_DOMAINS } from "./installation-data-edit.js";
 import { createFullReview, stageFullCell } from "./full-database-review.js";
 
 test("existing product DB editor retains all five domains plus extra tables", () => {
@@ -49,4 +49,27 @@ test("typed edited records survive staging and become full_row corrections for a
   assert.deepEqual(selectedDataCorrections(null, null), []);
   assert.throws(() => selectedDataCorrections(original, null));
   assert.equal(original.tables[0].rows[0].cells[1].value, "0");
+});
+
+test("page-five account inventory allows existing mingleadmin but prevents missing new password", () => {
+  const account = disabled => createFullReview({ tables: [{
+    name: "alpha_users", columns: ["user_id", "disabled"],
+    rows: [{rowId:"1", cells:[
+      {kind:"text", value:"mingleadmin"},
+      {kind:"integer", value:String(disabled)}
+    ]}]
+  }]});
+  const other = createFullReview({ tables: [{
+    name: "alpha_users", columns: ["user_id", "disabled"],
+    rows: [{rowId:"1", cells:[
+      {kind:"text", value:"other-admin"},
+      {kind:"integer", value:"0"}
+    ]}]
+  }]});
+  assert.equal(existingInstallerAdmin(account(0)), true);
+  assert.equal(existingInstallerAdmin(other), false);
+  assert.equal(existingInstallerAdmin(null), false);
+  // A disabled account is still an existing identity. The backend must
+  // reject unauthorized reactivation rather than silently creating a clone.
+  assert.equal(existingInstallerAdmin(account(1)), true);
 });

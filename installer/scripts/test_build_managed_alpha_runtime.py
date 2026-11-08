@@ -26,11 +26,12 @@ class ManagedAlphaRuntimeBuildTests(unittest.TestCase):
             self.assertNotEqual(archive_sha, wheel_sha)
 
     def test_external_alpha_runtime_versions_are_exactly_pinned(self):
-        self.assertEqual(len(RUNTIME_REQUIREMENTS), 7)
+        self.assertEqual(len(RUNTIME_REQUIREMENTS), 8)
         self.assertEqual(
             {name for name, _ in RUNTIME_REQUIREMENTS},
             {"attrs", "jsonschema", "jsonschema_specifications",
-             "packaging", "referencing", "rpds_py", "typing_extensions"})
+             "packaging", "referencing", "rpds_py", "typing_extensions",
+             "tzdata"})
         for name, version in RUNTIME_REQUIREMENTS:
             self.assertTrue(name.replace("_", "").isalnum())
             self.assertTrue(version)
@@ -41,7 +42,11 @@ class ManagedAlphaRuntimeBuildTests(unittest.TestCase):
     def test_every_supported_platform_has_exactly_pinned_dependency_hashes(self):
         common = {filename for filename in PINNED_APPLICATION_WHEELS
                   if not filename.startswith("rpds_py-")}
-        self.assertEqual(len(common), 6)
+        self.assertEqual(len(common), 7)
+        self.assertIn(("tzdata", "2026.6"), RUNTIME_REQUIREMENTS)
+        self.assertEqual(
+            PINNED_APPLICATION_WHEELS["tzdata-2026.6-py2.py3-none-any.whl"],
+            "0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec")
         for variant in BUNDLES:
             if variant[0] == "windows":
                 rpds_platform = "win_amd64"

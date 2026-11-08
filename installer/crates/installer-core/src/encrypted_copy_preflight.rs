@@ -1416,7 +1416,7 @@ mod tests {
             &dest,
             "",
             "NewCipherPassword123!",
-            &[change],
+            std::slice::from_ref(&change),
             &addition,
         )
         .unwrap();
@@ -1443,6 +1443,42 @@ mod tests {
         drop(db);
         let entries: Vec<_> = fs::read_dir(&parent).unwrap().collect();
         assert_eq!(entries.len(), 2); // unchanged source + sole output DB
+        let prior_ciphertext = fs::read(&dest).unwrap();
+        let replacement = replace_installer_encrypted_database(
+            &source,
+            &dest,
+            "",
+            "NewCipherPassword123!",
+            std::slice::from_ref(&change),
+            &addition,
+        )
+        .unwrap();
+        assert!(replacement.encrypted_destination_verified);
+        assert_eq!(replacement.staged_changes_verified, 1);
+        assert_eq!(replacement.added_schema_objects, addition);
+        assert_eq!(fs::read(&source).unwrap(), original_bytes);
+        let archives = fs::read_dir(&parent)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.to_string_lossy().contains(".minglefield-previous-"))
+            .collect::<Vec<_>>();
+        assert_eq!(archives.len(), 1);
+        assert_eq!(fs::read(&archives[0]).unwrap(), prior_ciphertext);
+        let replaced_db = Connection::open(&dest).unwrap();
+        replaced_db
+            .pragma_update(None, "key", "NewCipherPassword123!")
+            .unwrap();
+        let disabled: i64 = replaced_db
+            .query_row(
+                "SELECT disabled FROM alpha_users WHERE user_id='old-user'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(disabled, 1);
+        drop(replaced_db);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 3); // source, output, archived target
         fs::remove_dir_all(parent).unwrap();
     }
 

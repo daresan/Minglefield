@@ -25,6 +25,20 @@ fieldset{border:1px solid #3c546c;border-radius:10px;padding:15px;margin:15px 0}
 .confirm{margin:22px 0;padding:14px;border:1px solid #628b7a;border-radius:8px}.confirm label{margin:0}
 a{color:#93e2c9}details{margin-top:18px;border:1px solid #385067;border-radius:7px;padding:12px}
 details pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:260px;overflow:auto}
+select{width:100%;background:#172638;border:1px solid #536980;color:#edf3f8;border-radius:7px;font:inherit;padding:11px}
+body:has(.wizard-page[data-wizard-page="admin"]:not([hidden])) main{max-width:1280px}
+#data-editor{border:1px solid #344a62;padding:14px;border-radius:8px;margin:14px 0}
+#data-editor .mode{gap:6px}
+#data-editor .mode button{margin:4px 2px}
+.data-table-scroll{overflow:auto;max-height:440px;border:1px solid #344a62;border-radius:7px;margin:12px 0}
+.data-review-table{border-collapse:collapse;min-width:100%;font-size:13px}
+.data-review-table th,.data-review-table td{border-bottom:1px solid #344a62;border-right:1px solid #344a62;padding:8px;min-width:130px;vertical-align:top;text-align:left}
+.data-review-table th{position:sticky;top:0;background:#283d52;z-index:1}
+.data-review-table input{min-width:120px}
+.data-review-table textarea{font:12px/1.5 ui-monospace,monospace;min-width:180px;min-height:52px;width:100%;padding:8px;background:#172638;color:#edf3f8;border:1px solid #536980;border-radius:6px}
+.sqlite-fixed-type{display:block;color:#9fc9db;font:10px ui-monospace,monospace;margin-bottom:5px}
+#missing-schema-choices{overflow-wrap:anywhere;font-family:ui-monospace,monospace;font-size:13px}
+#data-review-corrections{overflow-wrap:anywhere}
 </style>
 </head>
 <body><main>
@@ -73,13 +87,50 @@ details pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-heigh
 <p class="help">Migration und Verschlüsselungsprüfung erfolgen intern erst während der Installation. Keine zusätzlichen Prüfaktionen oder Passworteingaben auf der letzten Seite.</p>
 </section>
 <section class="wizard-page" data-wizard-page="admin" hidden>
-<h2>Lokalen Host-Administrator einrichten</h2>
-<label for="admin-login">Anmeldename</label><input id="admin-login" value="mingleadmin" readonly>
+<h2>Datenbank bearbeiten, Schema prüfen und lokalen Administrator einrichten</h2>
+<p class="help">Die auf Seite 4 gewählte Datenbank wird mit ihrem Passwort schreibgeschützt geöffnet. Du kannst vorhandene Datensätze ansehen und Änderungen für die spätere Migration vormerken. Die Quelldatenbank bleibt unverändert. Dies ist keine Testmigration.</p>
+<button type="button" id="inspect-selected-database" class="secondary">Datenbank öffnen und Schema anzeigen</button>
+<p id="data-source-status" class="help" role="status" aria-live="polite">Noch keine Datenbank geöffnet. Ohne Quelldatenbank wird eine neue verschlüsselte Datenbank erstellt.</p>
+<div id="data-editor" hidden>
+<div class="mode" role="group" aria-label="Datenbank-Fachbereiche">
+<button type="button" class="secondary" id="data-tab-login">Anmeldung</button>
+<button type="button" class="secondary" id="data-tab-hosts">Hosts</button>
+<button type="button" class="secondary" id="data-tab-effects">Effekte</button>
+<button type="button" class="secondary" id="data-tab-jobs">Jobs</button>
+<button type="button" class="secondary" id="data-tab-games">Games</button>
+<button type="button" class="secondary" id="data-tab-all" hidden>Sonstige DB-Tabellen</button>
+</div>
+<section id="data-editor-login"><h3>Anmeldung</h3><div id="data-fields-login"></div></section>
+<section id="data-editor-hosts" hidden><h3>Hosts</h3><div id="data-fields-hosts"></div></section>
+<section id="data-editor-effects" hidden><h3>Effekte</h3><div id="data-fields-effects"></div></section>
+<section id="data-editor-jobs" hidden><h3>Jobs</h3><div id="data-fields-jobs"></div></section>
+<section id="data-editor-games" hidden><h3>Games</h3><div id="data-fields-games"></div></section>
+<section id="data-editor-all" hidden><h3>Sonstige Datenbanktabellen</h3><div id="data-fields-all"></div></section>
+<p id="data-editor-status" class="help" role="status" aria-live="polite">Keine Datenänderungen vorgemerkt.</p>
+<div id="data-review-corrections" class="help" role="status" aria-live="polite">Keine Datenänderungen vorgemerkt.</div>
+</div>
+<fieldset id="schema-review-section" hidden>
+<legend>Schemaüberprüfung und optionale Schemamigration</legend>
+<p id="schema-audit-status" role="status" aria-live="polite">Noch kein Schema gelesen.</p>
+<p class="help" id="missing-schema-description">Fehlende registrierte Schemaobjekte werden nach dem Entsperren der Datenbank angezeigt.</p>
+<div id="missing-schema-choices" aria-label="Fehlende registrierte Schemaobjekte"></div>
+<label for="schema-migrate-choice">Sollen die fehlenden registrierten Schemaobjekte in der neuen Datenbank ergänzt werden?</label>
+<select id="schema-migrate-choice">
+<option value="no" selected>Nein – bestehendes Schema beibehalten</option>
+<option value="yes">Ja – fehlende registrierte Schemaobjekte ergänzen</option>
+</select>
+<p class="help">Die Ergänzungen werden nur bei der tatsächlichen Installation auf einer neuen verschlüsselten Zielkopie ausgeführt. Keine Änderung an der Quelle, kein vorgeschalteter Schreibtest.</p>
+</fieldset>
+<fieldset id="local-admin-section">
+<legend>Lokalen Host-Administrator mingleadmin einrichten</legend>
+<label for="admin-login">Anmeldename</label>
+<input id="admin-login" value="mingleadmin" readonly>
 <label for="admin-password">Loginpasswort für einen neu anzulegenden mingleadmin</label>
 <input id="admin-password" type="password" autocomplete="new-password">
 <label for="admin-password-confirm">Loginpasswort bestätigen</label>
 <input id="admin-password-confirm" type="password" autocomplete="new-password">
-<p class="help">Ist <strong>mingleadmin</strong> schon vorhanden, bleiben Passwort und Berechtigungen erhalten; dann können diese Felder leer bleiben. Andernfalls ein separates Loginpasswort mit mindestens zwölf Zeichen wählen. Andere Benutzer, Eigentümer und Hostberechtigungen bleiben unverändert. Neue Berechtigungen gelten nur für den lokalen Host, nicht für Remote-Hosts.</p>
+<p class="help">Falls mingleadmin bereits existiert, bleiben sein Passwort und seine bestehenden Rechte erhalten; dann können die beiden Passwortfelder leer bleiben. Ansonsten ein separates Passwort mit mindestens zwölf Zeichen wählen. Andere User und Host-Administratoren bleiben unverändert, es entstehen keine Remote-Host-Rechte.</p>
+</fieldset>
 </section>
 <section class="wizard-page" data-wizard-page="review" hidden>
 <h2>Zusammenfassung</h2>

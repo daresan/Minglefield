@@ -1903,6 +1903,15 @@ def handler_for(service, *, local_bootstrap_secret=None):
                     self.reply(200, {"users":[]})
             elif path == "/api/jobs":
                 self.reply(200, {"jobs": service.jobs(principal)})
+            elif path == "/api/host/admin-users":
+                policy=getattr(service,"_host_policy",None)
+                hosts=parse_qs(urlsplit(self.path).query).get("host_id",[])
+                if policy is None or len(hosts)!=1:
+                    self.reply(400,{"error":"invalid_host_users_query"})
+                else:
+                    users=policy.list_host_admin_candidates(hosts[0],principal.user_id)
+                    self.reply(403 if users is None else 200,
+                        {"error":"not_host_admin"} if users is None else {"users":users})
             elif path == "/api/host/jobs":
                 policy=getattr(service,"_host_policy",None)
                 host_id=parse_qs(urlsplit(self.path).query).get("host_id",[])
@@ -2200,7 +2209,7 @@ def handler_for(service, *, local_bootstrap_secret=None):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/game/projects", "/api/game/projects/update", "/api/game/projects/delete", "/api/game/projects/prepare", "/api/game/projects/manifest/prepare", "/api/git/profiles", "/api/game/git/init"):
+            if path not in DELETE_ROUTES and path not in ("/api/jobs", "/api/jobs/delete", "/api/agents", "/api/grants", "/api/logout", "/api/redeem", "/api/login", "/api/password/set", "/api/host/rules", "/api/host/rules/delete", "/api/host/claim", "/api/host/effects", "/api/host/effects/manual", "/api/host/jobs/cancel", "/api/host/jobs/retry", "/api/host/jobs/delete", "/api/host/jobs/evaluate", "/api/host/jobs/reserve", "/api/host/jobs/release", "/api/host/jobs/execute", "/api/host/runtimes", "/api/host/runtimes/delete", "/api/host/comfy/inspect", "/api/host/comfy/import", "/api/host/comfy/upload", "/api/host/assets/stage", "/api/host/settings", "/api/host/admin-users", "/api/game/projects", "/api/game/projects/update", "/api/game/projects/delete", "/api/game/projects/prepare", "/api/game/projects/manifest/prepare", "/api/git/profiles", "/api/game/git/init"):
                 self.reply(404, {"error": "not_found"})
                 return
             if path in ("/api/redeem", "/api/login", "/api/password/set"):
@@ -2285,6 +2294,50 @@ def handler_for(service, *, local_bootstrap_secret=None):
                 else:
                     revoke(self.headers.get("Authorization"))
                     self.reply(200, {"status": "session_revoked"})
+                return
+            if path == "/api/host/admin-users":
+                policy=getattr(service,"_host_policy",None)
+                if (policy is None or self.client_address[0] not in ("127.0.0.1","::1")):
+                    self.reply(403,{"error":"host_admin_unavailable"})
+                    return
+                origin=self.headers.get("Origin")
+                host=self.headers.get("Host","")
+                allowed=("127.0.0.1:"+str(self.server.server_port),
+                         "localhost:"+str(self.server.server_port))
+                if (host not in allowed or (origin is not None and origin not in
+                    tuple("http://"+name for name in allowed))):
+                    self.reply(403,{"error":"local_origin_required"})
+                    return
+                with throttle:
+                    now=time.monotonic()
+                    label="host-admin-key:"+principal.user_id
+                    recent=[t for t in attempts.get(label,[]) if now-t<60]
+                    if len(recent)>=5:
+                        self.reply(429,{"error":"try_again_later"})
+                        return
+                if self.headers.get("Content-Type","").split(";")[0].strip()!="application/json":
+                    self.reply(415,{"error":"json_required"})
+                    return
+                length=self.headers.get("Content-Length","")
+                if not length.isdecimal() or not 0<int(length)<=MAX_BODY:
+                    self.reply(413,{"error":"invalid_body_length"})
+                    return
+                try:
+                    body=json.loads(self.rfile.read(int(length)))
+                except (UnicodeDecodeError,ValueError):
+                    self.reply(400,{"error":"invalid_json"})
+                    return
+                if type(body) is not dict or set(body)!={"host_id","user_ids","database_password"}:
+                    self.reply(400,{"error":"invalid_host_admin_request"})
+                    return
+                result=policy.grant_host_admins(
+                    body["host_id"],principal.user_id,body["user_ids"],
+                    body["database_password"])
+                if result.reason=="invalid_database_password":
+                    with throttle:
+                        attempts[label]=[t for t in attempts.get(label,[]) if now-t<60]+[now]
+                self.reply(200 if result.state=="saved" else 403,
+                           {"state":result.state,"reason":result.reason})
                 return
             if path == "/api/host/assets/stage":
                 from pathlib import Path

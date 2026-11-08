@@ -1,3 +1,35 @@
+# M2.11 – gezielter Shadow-Testbuild nach Host-Admin-Benutzerverwaltung (2026-11-08)
+
+**Explizite Benutzerfreigabe:** Der Eigentümer hat einen neuen portablen
+Testbuild **nach** Implementierung der Host-Admin-Benutzerverwaltung und
+erfolgreichen Kompatibilitätsprüfungen erlaubt. Dieser eine neue Marker
+fordert ausschließlich den bestehenden portablen Milestone-Workflow an.
+Kein Merge, kein Release, kein Deployment.
+
+**Geprüfter Quellstand vor dieser reinen Triggeränderung:**
+`29a5b2164d5489a49f8711c01116b09d58d6522e`
+auf `feat/game-integration-updates`.
+
+**Erfolgreiche Checks dieses Quellstands:**
+- [MAP v0.1 Draft Conformance #42449148877](https://github.com/daresan/Minglefield/actions/runs/42449148877) – bestanden (einschließlich bestehender Alpha/Host-Conformance-Suite).
+- [Installer Rust Ubuntu #42449148846](https://github.com/daresan/Minglefield/actions/runs/42449148846) – bestanden.
+- [Installer Native Security Windows/macOS #42449148867](https://github.com/daresan/Minglefield/actions/runs/42449148867) – beide Betriebssysteme bestanden, einschließlich installierter SQLCipher-/Host-/Login-Integration.
+- [Game installation cross-platform security #42449148888](https://github.com/daresan/Minglefield/actions/runs/42449148888) – bestanden.
+- [AGENTS security guard #42449148858](https://github.com/daresan/Minglefield/actions/runs/42449148858) – bestanden.
+
+**Enthaltene gezielte Korrekturen:**
+- Ursprünglicher Installer-Datenbankeditor bleibt bei einer gesondert fehlgeschlagenen Hostübersicht geöffnet; Hostleser nutzt denselben SQLite/SQLCipher-Inspektor.
+- Bestehende Hostadministratoren können ComfyUI-Effekte importieren und aktivieren; Jobfolge bleibt `queued → waiting → reserved → submitting` ohne neue Freigabedialoge.
+- Nach Anmeldung gibt es den zusätzlichen Tab *Benutzerverwaltung* nur für berechtigte Hostadministratoren. Er listet bestehende aktive Benutzer und erteilt nach einmaliger SQLCipher-Passwortbestätigung ausschließlich scoped Host-Adminrechte in `sec01_host_admins`. Keine DB-Administratorrolle, kein Zurücksetzen alter Host-Owners oder User, keine neue DB-Migration.
+- Die fünf bestehenden Installer-Korrekturen aus dem untenstehenden früheren Marker bleiben bestehen; auf Shadow sind sie weiterhin nicht durch eine neue Benutzerabnahme bestätigt.
+
+**Abnahmegrenzen:** Portable Paketierung ist keine erfolgreiche Shadow-Installation.
+Die tatsächliche ComfyUI-`/prompt`-Ausführung auf Shadow, die interaktive
+Installer-Bedienung und die neue Benutzerverwaltung sind noch manuell zu prüfen.
+Keine neue portable Wiederholung ohne ausdrückliche Freigabe.
+
+---
+
 # M2.11 – korrigierter Shadow-Abnahmebuild nach fünf gemeldeten Regressionen (2026-11-08)
 
 **Gezielter zweiter T4-Paketierungslauf, auf Basis des bereits vorhandenen portablen Workflows.**

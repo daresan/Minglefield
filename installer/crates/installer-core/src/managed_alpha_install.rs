@@ -386,9 +386,6 @@ pub fn install_or_reuse_application(
         return install_from_verified_root(source, destination, pinned_inventory)
             .map(|result| (result, false));
     }
-    if !approve_existing {
-        return Err("Existing application directory requires confirmation".into());
-    }
     let mut roots = std::collections::BTreeSet::new();
     for entry in inventory.files.keys() {
         let relative = relative_install_path(entry)?;
@@ -404,8 +401,13 @@ pub fn install_or_reuse_application(
         .iter()
         .any(|name| fs::symlink_metadata(destination.join(name)).is_ok());
     if !has_conflicts {
+        // An existing empty (or non-conflicting) folder does NOT constitute
+        // replacement of application files and needs no separate warning.
         return install_from_verified_root(source, destination, pinned_inventory)
             .map(|result| (result, false));
+    }
+    if !approve_existing {
+        return Err("Existing managed application files require confirmation".into());
     }
     // A staged package is complete and hash-verified before anything in the
     // existing target can be renamed. Distinct names preserve old files for

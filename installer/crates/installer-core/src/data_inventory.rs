@@ -107,9 +107,15 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                 continue;
             }
             let plaintext = &header[..16] == b"SQLite format 3\0";
-            let looks_like_database = path.extension().and_then(|ext| ext.to_str())
-                .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(),
-                    "db" | "sqlite" | "sqlite3" | "sqlcipher"));
+            let looks_like_database =
+                path.extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| {
+                        matches!(
+                            ext.to_ascii_lowercase().as_str(),
+                            "db" | "sqlite" | "sqlite3" | "sqlcipher"
+                        )
+                    });
             // SQLCipher encrypts even the SQLite header. Known extensions
             // remain read-only *candidates*, never proofs of a valid DB.
             if !plaintext && !looks_like_database {
@@ -127,8 +133,11 @@ pub fn inspect_data_directory(root: &Path) -> Vec<DataCandidate> {
                 } else {
                     "encrypted_or_unknown_header_unverified"
                 },
-                sqlite_page_size: plaintext
-                    .then_some(if size == 1 { 65536 } else { u32::from(size) }),
+                sqlite_page_size: plaintext.then_some(if size == 1 {
+                    65536
+                } else {
+                    u32::from(size)
+                }),
                 sqlite_user_version: plaintext.then_some(u32::from_be_bytes([
                     header[60], header[61], header[62], header[63],
                 ])),

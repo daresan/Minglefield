@@ -168,6 +168,9 @@ pub fn register_installed_application(root: &Path) -> Result<(), String> {
     )?;
     add_value(UNINSTALL_KEY, "NoModify", "REG_DWORD", "1")?;
     add_value(UNINSTALL_KEY, "NoRepair", "REG_DWORD", "1")?;
+    // Windows Settings must offer "Deinstallieren", including when an older
+    // per-user entry retained a disabled/unavailable uninstall flag.
+    add_value(UNINSTALL_KEY, "NoRemove", "REG_DWORD", "0")?;
     // Last: do not advertise a complete uninstall command until all the
     // other registry information and the actual removal script are present.
     add_value(UNINSTALL_KEY, "UninstallString", "REG_SZ", &uninstall)?;

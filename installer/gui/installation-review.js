@@ -2,7 +2,7 @@
  * stays in the native installer engine, never as manual wizard tests. */
 export const WIZARD_PAGES = [
   "Willkommen", "Installationsmodus", "Speicherorte",
-  "Datenbank", "Host-Administrator", "Zusammenfassung"
+  "Datenbank", "Datenbearbeitung & Administrator", "Zusammenfassung"
 ];
 export function validateInstallSelections(form) {
   if (!form || typeof form !== "object") return "Einstellungen fehlen.";
@@ -26,13 +26,16 @@ export function validateInstallSelections(form) {
   }
   return null;
 }
-export function reviewRows(form) {
+export function reviewRows(form, staged = { correctionCount: 0, missingCount: 0, schemaChoice: "no" }) {
   return [
     ["Modus", form.mode === "advanced" ? "Erweitert" : "Standard"],
     ["Anwendung", form.installDir],
     ["Datenbank", form.databasePath],
     ["Datenquelle", form.sourceDatabase || "Neue verschlüsselte Datenbank"],
     ["SQLCipher-Passwort", form.databasePassword ? "Festgelegt" : "Fehlt"],
+    ["Datenkorrekturen", String(staged.correctionCount) + " vorgemerkte Datensätze"],
+    ["Schemaüberprüfung", staged.missingCount + " fehlende registrierte Objekte"],
+    ["Schema migrieren", staged.schemaChoice === "yes" ? "Ja – fehlende Objekte ergänzen" : "Nein – Schema beibehalten"],
     ["Host-Administrator", "mingleadmin (vorhandenen Zugang beibehalten)"],
     ["Neues Loginpasswort", form.loginPassword ? "Festgelegt (nur bei Neuanlage)" : "Vorhandenen Zugang verwenden"],
     ["Anwendungsstart", "Automatisch nach erfolgreicher Installation"]
@@ -41,7 +44,7 @@ export function reviewRows(form) {
 export function isExistingTargetWarning(error) {
   return String(error).startsWith("INSTALL_WARNING_EXISTING:");
 }
-export function installationRequest(form, continueExisting = false) {
+export function installationRequest(form, continueExisting = false, staged = { corrections: [], schemaAdditions: [] }) {
   return {
     installDir: form.installDir, databasePath: form.databasePath,
     sourceDatabase: form.sourceDatabase || null,
@@ -49,6 +52,8 @@ export function installationRequest(form, continueExisting = false) {
     databasePassword: form.databasePassword,
     loginPassword: form.loginPassword,
     loginPasswordConfirmation: form.loginPasswordConfirmation,
+    corrections: staged.corrections,
+    schemaAdditions: staged.schemaAdditions,
     approved: true, continueExisting
   };
 }

@@ -1181,11 +1181,11 @@ document.getElementById("hostJobExecute").onclick=async()=>{
       typeof result.data?.prompt_id==="string" && result.data.prompt_id.length>0;
     output.textContent=accepted
       ? "ComfyUI hat den Workflow erhalten. Prompt-ID: "+result.data.prompt_id+
-        "\n"+JSON.stringify(result,null,2)
+        "\\n"+JSON.stringify(result,null,2)
       : "NICHT AN COMFYUI ÜBERGEBEN. "+
         (result.data?.error||result.data?.reason||
           "Keine bestätigte ComfyUI-Prompt-ID")+
-        "\n"+JSON.stringify(result,null,2);
+        "\\n"+JSON.stringify(result,null,2);
     if(accepted)document.getElementById("hostJobsRefresh").click();
   }catch(error){
     output.textContent="ComfyUI-Übertragung fehlgeschlagen: "+String(error);

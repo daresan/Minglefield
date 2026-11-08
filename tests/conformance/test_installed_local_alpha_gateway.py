@@ -186,6 +186,72 @@ class InstalledGatewayRealCipherTests(unittest.TestCase):
                 "SELECT owner_id FROM sec01_host_owners WHERE host_id=?",
                 ("host.remote",)).fetchone())
 
+    def test_host_admin_grants_require_session_scope_and_db_key(self):
+        # An installer-created mingleadmin grants only existing-user Host roles,
+        # not SQLCipher/database privileges or ownership.
+        store = AlphaAuthStore(self.path, sqlcipher_key_provider=lambda: CIPHER_KEY)
+        store.redeem(store.invite("user.friend"), password="FriendLoginPassword123!")
+        store.redeem(store.invite("user.other"), password="OtherLoginPassword123!")
+        server, worker = self.open_and_serve()
+        try:
+            admin_session = self.request(server, "POST", "/api/login", {
+                "user_id": "mingleadmin", "password": SIGNIN_KEY})[1]["session_token"]
+            friend_session = self.request(server, "POST", "/api/login", {
+                "user_id": "user.friend", "password": "FriendLoginPassword123!"
+            })[1]["session_token"]
+            uri = "/api/host/admin-users?host_id=host.local"
+            self.assertEqual(self.request(server, "GET", uri)[0], 401)
+            self.assertEqual(self.request(server, "GET", uri, session=friend_session)[0], 403)
+            status, listing = self.request(server, "GET", uri, session=admin_session)
+            self.assertEqual(status, 200)
+            users = {row["user_id"]: row for row in listing["users"]}
+            self.assertTrue(users["mingleadmin"]["is_host_owner"])
+            self.assertFalse(users["user.friend"]["is_host_admin"])
+            payload = {"host_id": "host.local", "user_ids": ["user.friend"],
+                       "database_password": CIPHER_KEY}
+            self.assertEqual(self.request(
+                server, "POST", "/api/host/admin-users", payload,
+                session=friend_session)[0], 403)
+            wrong = dict(payload, database_password="WrongDatabasePassword123!")
+            self.assertEqual(self.request(
+                server, "POST", "/api/host/admin-users", wrong,
+                session=admin_session)[0], 403)
+            self.assertEqual(self.request(
+                server, "GET", uri, session=admin_session)[1]["users"][1]["is_host_admin"],
+                False)
+            self.assertEqual(self.request(
+                server, "POST", "/api/host/admin-users", payload,
+                session=admin_session)[0], 200)
+            # An existing Host admin may grant another existing user for this
+            # Host using one DB-key confirmation; the original owner is intact.
+            other_payload = {"host_id": "host.local", "user_ids": ["user.other"],
+                             "database_password": CIPHER_KEY}
+            self.assertEqual(self.request(
+                server, "POST", "/api/host/admin-users", other_payload,
+                session=friend_session)[0], 200)
+            self.assertEqual(self.request(
+                server, "POST", "/api/host/admin-users", payload,
+                session=admin_session)[0], 200)
+            self.assertEqual(self.request(
+                server, "GET", uri, session=friend_session)[0], 200)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=5)
+        with store._tx() as db:
+            self.assertEqual(db.execute(
+                "SELECT owner_id FROM sec01_host_owners WHERE host_id='host.local'"
+            ).fetchone(), ("mingleadmin",))
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM sec01_host_owners").fetchone(), (1,))
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM sec01_host_admins WHERE host_id='host.local'"
+            ).fetchone(), (2,))
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM alpha_users").fetchone(), (3,))
+            self.assertEqual(db.execute(
+                "SELECT note FROM original_fixture").fetchone(), ("unchanged",))
+
     def test_wrong_key_rejects_launch_without_writing_database(self):
         before = self.path.read_bytes()
         with self.assertRaisesRegex(

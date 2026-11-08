@@ -785,8 +785,7 @@ class HostCommitPolicy:
 
     def host_settings(self, host_id, owner_id):
         with self.authority.store._tx() as db:
-            if not db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
-                              (host_id,owner_id)).fetchone():
+            if not self._admin(db, host_id, owner_id):
                 return None
             row=db.execute("SELECT settings FROM sec01_host_settings WHERE host_id=?",
                            (host_id,)).fetchone()
@@ -1313,8 +1312,7 @@ class HostCommitPolicy:
 
     def list_runtimes(self, host_id, owner_id):
         with self.authority.store._tx() as db:
-            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
-                          (host_id, owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return None
             rows = db.execute("SELECT config FROM sec01_host_runtimes WHERE host_id=? ORDER BY runtime_id",
                               (host_id,)).fetchall()
@@ -1571,6 +1569,8 @@ class HostCommitPolicy:
     def claim_comfy_execution(self, host_id, owner_id, job_id):
         """Atomically claim one reserved job for one explicit local submission."""
         with self.authority.store._tx() as db:
+            if not self._admin(db, host_id, owner_id):
+                return None
             row=db.execute("""SELECT j.effect_id,j.state,w.workflow,w.metadata,r.config,
                 p.workflow_sha256,p.parameters
                 FROM sec01_host_jobs j
@@ -1579,9 +1579,7 @@ class HostCommitPolicy:
                 JOIN sec01_host_runtimes r ON r.host_id=w.host_id
                     AND r.runtime_id=w.runtime_id
                 JOIN sec01_host_job_parameters p ON p.job_id=j.job_id
-                WHERE j.host_id=? AND j.job_id=? AND EXISTS
-                (SELECT 1 FROM sec01_host_owners o WHERE o.host_id=j.host_id
-                 AND o.owner_id=?)""",(host_id,job_id,owner_id)).fetchone()
+                WHERE j.host_id=? AND j.job_id=?""",(host_id,job_id)).fetchone()
             if row is None or row[1]!="reserved":
                 return None
             effect_id,state,workflow,metadata,runtime,sha,parameters=row
@@ -1642,8 +1640,7 @@ class HostCommitPolicy:
 
     def comfy_execution_context(self, host_id, owner_id, job_id):
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners
-                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return None
             db.execute("""CREATE TABLE IF NOT EXISTS sec01_host_comfy_executions(
                 job_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,
@@ -1674,8 +1671,7 @@ class HostCommitPolicy:
     def comfy_file_parameter_context(self, host_id, owner_id, effect_id):
         """Owner-scoped file enum bindings and configured ComfyUI runtime."""
         with self.authority.store._tx() as db:
-            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
-                          (host_id,owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return None
             row=db.execute("""SELECT w.runtime_id,w.metadata,r.config
                 FROM sec01_host_comfy_workflows w JOIN sec01_host_runtimes r
@@ -1695,8 +1691,7 @@ class HostCommitPolicy:
         if type(parameters) is not dict and parameters is not None:
             return HostDecision("denied","invalid_job_parameters")
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners
-                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return HostDecision("denied","not_host_owner")
             row=db.execute("""SELECT enabled FROM sec01_host_effect_definitions
                 WHERE host_id=? AND effect_id=?""",(host_id,effect_id)).fetchone()
@@ -1772,8 +1767,7 @@ class HostCommitPolicy:
     def list_host_jobs(self, host_id, owner_id):
         """Owner-scoped, read-only persisted manual intents."""
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners
-                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return None
             rows=db.execute("""SELECT job_id,effect_id,state,created_at
                 FROM sec01_host_jobs WHERE host_id=?
@@ -1816,8 +1810,7 @@ class HostCommitPolicy:
                 or type(now) is not int):
             return HostDecision("denied","invalid_evaluation")
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners
-                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return HostDecision("denied","not_host_owner")
             row=db.execute("""SELECT effect_id,state FROM sec01_host_jobs
                 WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()
@@ -1866,8 +1859,7 @@ class HostCommitPolicy:
                 or type(now) is not int):
             return HostDecision("denied","invalid_reservation")
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners
-                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return HostDecision("denied","not_host_owner")
             row=db.execute("""SELECT effect_id,state FROM sec01_host_jobs
                 WHERE host_id=? AND job_id=?""",(host_id,job_id)).fetchone()

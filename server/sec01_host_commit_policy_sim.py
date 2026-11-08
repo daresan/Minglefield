@@ -2139,6 +2139,66 @@ class HostCommitPolicy:
             return db.execute("""SELECT COUNT(*) FROM sec01_host_active_slots
                 WHERE host_id=?""",(host_id,)).fetchone()[0]
 
+    def list_host_admin_candidates(self, host_id, admin_id):
+        """Existing accounts and their Host-scoped administrator status only."""
+        if not ident(host_id) or not ident(admin_id):
+            return None
+        with self.authority.store._tx() as db:
+            if not self._admin(db, host_id, admin_id):
+                return None
+            owners = {row[0] for row in db.execute(
+                "SELECT owner_id FROM sec01_host_owners WHERE host_id=?", (host_id,))}
+            admins = {row[0] for row in db.execute(
+                "SELECT admin_id FROM sec01_host_admins WHERE host_id=?", (host_id,))}
+            return [
+                {"user_id": user_id, "is_host_admin": user_id in owners or user_id in admins,
+                 "is_host_owner": user_id in owners}
+                for user_id, in db.execute(
+                    "SELECT user_id FROM alpha_users WHERE disabled=0 ORDER BY user_id")
+            ]
+
+    def grant_host_admins(self, host_id, admin_id, user_ids, database_password):
+        """One authenticated, SQLCipher-key-confirmed Host-scoped grant batch.
+
+        Does not create identities, touch Host owners, or grant DB authority.
+        """
+        if (not ident(host_id) or not ident(admin_id)
+                or type(user_ids) is not list or not 1 <= len(user_ids) <= 200
+                or any(not ident(user_id) for user_id in user_ids)
+                or len(set(user_ids)) != len(user_ids)
+                or type(database_password) is not str):
+            return HostDecision("denied", "invalid_host_admin_request")
+        store = self.authority.store
+        provider = getattr(store, "_sqlcipher_key_provider", None)
+        if not callable(provider):
+            return HostDecision("denied", "encrypted_database_required")
+        with store._tx() as db:
+            if not self._admin(db, host_id, admin_id):
+                return HostDecision("denied", "not_host_admin")
+            if db.execute("SELECT active FROM alpha_executor_hosts WHERE host_id=?",
+                          (host_id,)).fetchone() != (1,):
+                return HostDecision("denied", "host_unavailable")
+            try:
+                key = provider()
+            except BaseException:
+                return HostDecision("denied", "database_key_unavailable")
+            if (type(key) is not str or not key
+                    or not hmac.compare_digest(key.encode("utf-8"),
+                                               database_password.encode("utf-8"))):
+                return HostDecision("denied", "invalid_database_password")
+            placeholders = ",".join("?" for _ in user_ids)
+            users = {row[0] for row in db.execute(
+                "SELECT user_id FROM alpha_users WHERE disabled=0 AND user_id IN ("
+                + placeholders + ")", user_ids)}
+            if users != set(user_ids):
+                return HostDecision("denied", "user_unavailable")
+            for user_id in user_ids:
+                if not self._admin(db, host_id, user_id):
+                    db.execute(
+                        "INSERT INTO sec01_host_admins(host_id,admin_id) VALUES(?,?)",
+                        (host_id, user_id))
+            return HostDecision("saved", "host_admins_added")
+
     def list_hosts(self, admin_id):
         """Only hosts administered by this authenticated Alpha user."""
         if not ident(admin_id):

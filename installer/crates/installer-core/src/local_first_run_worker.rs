@@ -75,8 +75,13 @@ pub fn run_verified_local_first_run_worker(
     local_host_id: &str,
 ) -> Result<LocalFirstRunResult, String> {
     call_local_admin_worker(
-        installed, database, database_password, login_user_id,
-        login_password, local_host_id, false,
+        installed,
+        database,
+        database_password,
+        login_user_id,
+        login_password,
+        local_host_id,
+        false,
     )
 }
 
@@ -92,8 +97,13 @@ pub fn ensure_verified_installer_local_admin(
     local_host_id: &str,
 ) -> Result<LocalFirstRunResult, String> {
     call_local_admin_worker(
-        installed, database, database_password, "mingleadmin",
-        login_password, local_host_id, true,
+        installed,
+        database,
+        database_password,
+        "mingleadmin",
+        login_password,
+        local_host_id,
+        true,
     )
 }
 
@@ -199,8 +209,10 @@ fn call_local_admin_worker(
     }
     let receipt: WorkerResponse = serde_json::from_slice(&response)
         .map_err(|_| "Unrecognized installed first-run receipt")?;
-    if !matches!(receipt.status.as_str(), "local_host_admin_created" | "local_host_admin_existing")
-        || (!allow_existing && receipt.status != "local_host_admin_created")
+    if !matches!(
+        receipt.status.as_str(),
+        "local_host_admin_created" | "local_host_admin_existing"
+    ) || (!allow_existing && receipt.status != "local_host_admin_created")
         || receipt.login_user_id != login_user_id
         || receipt.local_host_id != local_host_id
         || receipt.remote_host_authority_granted

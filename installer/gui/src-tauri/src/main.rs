@@ -3,8 +3,8 @@
 
 mod alpha_application_install;
 mod alpha_first_run;
-mod install_execution;
 mod full_database_review;
+mod install_execution;
 mod legacy_record_review;
 mod migration_review;
 

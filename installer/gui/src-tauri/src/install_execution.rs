@@ -73,9 +73,9 @@ fn absolute_path(raw: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(raw.trim());
     if !path.is_absolute()
         || path.file_name().is_none()
-        || path.components().any(|part| {
-            matches!(part, Component::CurDir | Component::ParentDir)
-        })
+        || path
+            .components()
+            .any(|part| matches!(part, Component::CurDir | Component::ParentDir))
     {
         return Err("Installations- und Datenbankpfade müssen absolut und eindeutig sein".into());
     }
@@ -110,7 +110,9 @@ fn check_existing_paths(
 }
 
 fn make_real_parent(path: &Path) -> Result<(), String> {
-    let parent = path.parent().ok_or("Zielpfad hat kein übergeordnetes Verzeichnis")?;
+    let parent = path
+        .parent()
+        .ok_or("Zielpfad hat kein übergeordnetes Verzeichnis")?;
     for ancestor in parent.ancestors() {
         match metadata_if_present(ancestor)? {
             Some(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
@@ -132,12 +134,14 @@ fn random_hex() -> Result<String, String> {
 /// never a user-run test, and remains available to inspect after failure.
 /// Its source database bytes are never published in an installer artifact.
 fn automatic_source_backup(source: &Path, destination: &Path) -> Result<PathBuf, String> {
-    let original = fs::symlink_metadata(source)
-        .map_err(|_| "Quelldatenbank kann nicht geöffnet werden")?;
+    let original =
+        fs::symlink_metadata(source).map_err(|_| "Quelldatenbank kann nicht geöffnet werden")?;
     if !original.is_file() || original.file_type().is_symlink() {
         return Err("Quelldatenbank muss eine reguläre Datei sein".into());
     }
-    let parent = destination.parent().ok_or("Datenbankziel ohne Elternordner")?;
+    let parent = destination
+        .parent()
+        .ok_or("Datenbankziel ohne Elternordner")?;
     let backup_dir = parent.join(format!(".minglefield-source-backup-{}", random_hex()?));
     #[cfg(unix)]
     let mut builder = fs::DirBuilder::new();
@@ -279,20 +283,20 @@ fn execute_install(
                 &request.database_password,
                 NEW_ENCRYPTED_DATABASE_CONFIRMATION,
             )
-            .map_err(|reason| format!("Neue SQLCipher-Datenbank konnte nicht erstellt werden: {reason}"))?;
+            .map_err(|reason| {
+                format!("Neue SQLCipher-Datenbank konnte nicht erstellt werden: {reason}")
+            })?;
             "created_encrypted_database"
         }
     };
     verify_encrypted_database(&database, &request.database_password)
         .map_err(|_| "Verschlüsselte Datenbank ist nach der Installation nicht lesbar")?;
     make_real_parent(&install_dir)?;
-    let (installed, reused) = install_or_reuse_application(
-        &package,
-        &install_dir,
-        digest,
-        request.continue_existing,
-    )
-    .map_err(|reason| format!("Minglefield-Anwendungsdateien konnten nicht installiert werden: {reason}"))?;
+    let (installed, reused) =
+        install_or_reuse_application(&package, &install_dir, digest, request.continue_existing)
+            .map_err(|reason| {
+                format!("Minglefield-Anwendungsdateien konnten nicht installiert werden: {reason}")
+            })?;
     verify_installed_application(Path::new(&installed.install_dir), digest)
         .map_err(|_| "Installierte Minglefield-Dateien konnten nicht verifiziert werden")?;
     let local_host_id = selected_local_host(&database, &request.database_password)?;
@@ -354,8 +358,7 @@ pub async fn install_minglefield(
             .path()
             .resource_dir()
             .map_err(|_| "Anwendungspaket ist nicht erreichbar")?;
-        let executable = std::env::current_exe()
-            .map_err(|_| "Setup Manager-Dateipfad fehlt")?;
+        let executable = std::env::current_exe().map_err(|_| "Setup Manager-Dateipfad fehlt")?;
         let manager_dir = executable
             .parent()
             .ok_or("Setup Manager-Verzeichnis fehlt")?
@@ -387,15 +390,20 @@ mod tests {
     use super::*;
     #[test]
     fn single_consent_and_existing_path_warning_are_independent_of_user_tests() {
-        let root = std::env::temp_dir()
-            .join(format!("mf-single-install-review-{}", random_hex().unwrap()));
+        let root = std::env::temp_dir().join(format!(
+            "mf-single-install-review-{}",
+            random_hex().unwrap()
+        ));
         let app = root.join("Minglefield");
         let db = root.join("minglefield.sqlite3");
         fs::create_dir_all(&app).unwrap();
         assert!(check_existing_paths(&app, &db, false)
             .unwrap_err()
             .starts_with("INSTALL_WARNING_EXISTING:"));
-        assert_eq!(check_existing_paths(&app, &db, true).unwrap(), (true, false));
+        assert_eq!(
+            check_existing_paths(&app, &db, true).unwrap(),
+            (true, false)
+        );
         assert!(absolute_path("relative/location").is_err());
         assert!(absolute_path("../database.sqlite3").is_err());
         fs::remove_dir_all(root).unwrap();

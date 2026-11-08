@@ -350,7 +350,6 @@ pub fn install_from_verified_root(
     })
 }
 
-
 /// An explicitly approved installation may reuse a valid existing application
 /// or archive *only conflicting managed top-level names* before installing a
 /// newly verified package. Foreign files are neither deleted nor replaced.
@@ -401,9 +400,9 @@ pub fn install_or_reuse_application(
     }
     roots.insert(std::ffi::OsString::from(INVENTORY_NAME));
     roots.insert(std::ffi::OsString::from("runtime-manifest.json"));
-    let has_conflicts = roots.iter().any(|name| {
-        fs::symlink_metadata(destination.join(name)).is_ok()
-    });
+    let has_conflicts = roots
+        .iter()
+        .any(|name| fs::symlink_metadata(destination.join(name)).is_ok());
     if !has_conflicts {
         return install_from_verified_root(source, destination, pinned_inventory)
             .map(|result| (result, false));
@@ -522,11 +521,19 @@ mod tests {
         assert!(!reused);
         assert_eq!(installed.status, "alpha_application_files_installed");
         assert!(verify_installed_application(&dest, &digest).is_ok());
-        assert_eq!(fs::read(dest.join("unrelated-user-file.txt")).unwrap(), b"do not touch");
+        assert_eq!(
+            fs::read(dest.join("unrelated-user-file.txt")).unwrap(),
+            b"do not touch"
+        );
         let archives: Vec<_> = fs::read_dir(dest.parent().unwrap())
             .unwrap()
             .filter_map(Result::ok)
-            .filter(|entry| entry.file_name().to_string_lossy().starts_with(".minglefield-previous-application-"))
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".minglefield-previous-application-")
+            })
             .collect();
         assert_eq!(archives.len(), 1);
         assert_eq!(

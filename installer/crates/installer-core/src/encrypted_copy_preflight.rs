@@ -1314,15 +1314,9 @@ mod tests {
         let original = fs::read(&target).unwrap();
         // A nonconforming migration key is rejected BEFORE any archival or
         // replacement, with both existing files byte-for-byte preserved.
-        assert!(replace_installer_encrypted_database(
-            &source,
-            &target,
-            "",
-            "short",
-            &[],
-            &[],
-        )
-        .is_err());
+        assert!(
+            replace_installer_encrypted_database(&source, &target, "", "short", &[], &[],).is_err()
+        );
         assert_eq!(fs::read(&target).unwrap(), original);
         assert_eq!(fs::read(&source).unwrap(), source_bytes);
         assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);

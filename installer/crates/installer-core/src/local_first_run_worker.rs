@@ -136,8 +136,7 @@ fn call_local_admin_worker(
     // migration may instead attach mingleadmin to an already verified Host
     // with its original ID (e.g. host.local). The trusted Python worker
     // rejects non-local IDs unless they exist and are active in the target DB.
-    if !valid_login_name(local_host_id)
-        || (!allow_existing && !local_host_id.starts_with("local."))
+    if !valid_login_name(local_host_id) || (!allow_existing && !local_host_id.starts_with("local."))
     {
         return Err("First-run Host ID must be local and well formed".into());
     }

@@ -657,6 +657,64 @@ pub async fn install_minglefield(
 mod tests {
     use super::*;
     #[test]
+    fn imported_host_local_is_reused_without_creating_another_host() {
+        let root = std::env::temp_dir().join(format!(
+            "minglefield-existing-host-{}",
+            random_hex().unwrap()
+        ));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("legacy-host.sqlite3");
+        {
+            let db = Connection::open(&path).unwrap();
+            db.pragma_update(None, "key", "HostDatabase9!").unwrap();
+            db.execute_batch(
+                "CREATE TABLE alpha_executor_hosts(
+                    host_id TEXT PRIMARY KEY,
+                    operator_id TEXT NOT NULL,
+                    active INTEGER NOT NULL
+                );
+                INSERT INTO alpha_executor_hosts
+                    VALUES('host.local','user.daniel',1);",
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            selected_local_host(&path, "HostDatabase9!", None).unwrap(),
+            "host.local"
+        );
+        assert_eq!(
+            selected_local_host(&path, "HostDatabase9!", Some("host.local"))
+                .unwrap(),
+            "host.local"
+        );
+        assert!(selected_local_host(
+            &path,
+            "HostDatabase9!",
+            Some("remote.other")
+        )
+        .is_err());
+        {
+            let db = Connection::open(&path).unwrap();
+            db.pragma_update(None, "key", "HostDatabase9!").unwrap();
+            db.execute(
+                "INSERT INTO alpha_executor_hosts VALUES('remote.other','otherowner',1)",
+                [],
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            selected_local_host(&path, "HostDatabase9!", None).unwrap(),
+            "host.local"
+        );
+        assert_eq!(
+            selected_local_host(&path, "HostDatabase9!", Some("host.local"))
+                .unwrap(),
+            "host.local"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn existing_encrypted_migration_reuses_matching_edits_without_deleting_user_db() {
         let root = std::env::temp_dir().join(format!(
             "minglefield-existing-migration-{}",

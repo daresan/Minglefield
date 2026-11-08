@@ -18,13 +18,15 @@ test("existing product DB editor retains all five domains plus extra tables", ()
   assert.ok(!main.includes('verify_temporary_encrypted_copy'));
 });
 
-test("schema migration is an explicit yes/no question, no additional installation checkbox", () => {
+test("schema migration remains an explicit yes/no choice, separate from installation and launch", () => {
   assert.deepEqual(approvedSchemaAdditions(["idx_A", "trigger_B"], "no"), []);
   assert.deepEqual(approvedSchemaAdditions(["idx_A", "trigger_B"], "yes"), ["idx_A", "trigger_B"]);
   assert.throws(() => approvedSchemaAdditions(["idx_A"], "maybe"));
   assert.throws(() => approvedSchemaAdditions(["idx_A", "idx_A"], "yes"));
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
-  assert.equal((html.match(/type="checkbox"/g) ?? []).length, 1);
+  assert.equal((html.match(/type="checkbox"/g) ?? []).length, 2);
+  assert.ok(html.includes('id="installation-approved"'));
+  assert.ok(html.includes('id="start-after-install"'));
   assert.ok(html.includes('id="schema-migrate-choice"'));
   assert.ok(html.includes('<option value="no" selected>'));
   assert.ok(html.includes('<option value="yes">'));

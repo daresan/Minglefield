@@ -246,6 +246,9 @@ for (const id of [
   });
 }
 byId("installation-approved").addEventListener("change", refreshReview);
+byId("selected-local-host").addEventListener("change", () => {
+  if (wizardIndex === 5) refreshReview();
+});
 byId("rescan-default-databases").addEventListener("click", discoverDefaultDatabases);
 byId("use-detected-as-source").addEventListener("click", () => useDiscoveredDatabase(false));
 byId("use-detected-as-target").addEventListener("click", () => useDiscoveredDatabase(true));

@@ -54,6 +54,7 @@ test("one click owns all operations and the summary contains no credentials", ()
     databasePassword: form.databasePassword, loginPassword: form.loginPassword,
     loginPasswordConfirmation: form.loginPasswordConfirmation,
     corrections: [], schemaAdditions: [],
+    localHostId: null,
     approved: true, continueExisting: true
   });
   assert.equal(isExistingTargetWarning("INSTALL_WARNING_EXISTING: caution"), true);
@@ -83,7 +84,7 @@ test("running-app receipt must be encrypted loopback, not a false install succes
     localAdminUser: "mingleadmin",
     installedApplication: "C:\\Programs\\Minglefield",
     encryptedDatabase: "C:\\Data\\minglefield.sqlite3",
-    localHostId: "local.0123456789abcdef0123456789abcdef",
+    localHostId: "host.local",
     nativeProcessId: 1421, localUrl: "http://127.0.0.1:42900/"
   };
   assert.deepEqual(verifyInstalledRunning(good), good);

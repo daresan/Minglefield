@@ -97,9 +97,19 @@ pub fn start_tray(native_exe: &Path, worker_pid: u32, port: u16) -> Result<Child
     use std::os::windows::process::CommandExt;
     let mut command = Command::new(powershell_executable()?);
     command
-        .args(["-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-Command"])
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-STA",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+        ])
         .arg(TRAY_SCRIPT)
-        .env("MINGLEFIELD_TRAY_NATIVE_PID", std::process::id().to_string())
+        .env(
+            "MINGLEFIELD_TRAY_NATIVE_PID",
+            std::process::id().to_string(),
+        )
         .env("MINGLEFIELD_TRAY_WORKER_PID", worker_pid.to_string())
         .env("MINGLEFIELD_TRAY_PORT", port.to_string())
         .env("MINGLEFIELD_TRAY_NATIVE_EXE", native_exe)
@@ -109,19 +119,30 @@ pub fn start_tray(native_exe: &Path, worker_pid: u32, port: u16) -> Result<Child
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .creation_flags(0x0800_0000);
-    let mut child = command.spawn().map_err(|_| "cannot start Minglefield tray")?;
-    let stdout = child.stdout.take().ok_or("Minglefield tray pipe unavailable")?;
+    let mut child = command
+        .spawn()
+        .map_err(|_| "cannot start Minglefield tray")?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("Minglefield tray pipe unavailable")?;
     let (sender, receiver) = mpsc::sync_channel(1);
     std::thread::spawn(move || {
         let mut line = String::new();
         let result = BufReader::new(stdout).read_line(&mut line);
         let _ = sender.send(result.ok().filter(|n| *n > 0).map(|_| line));
     });
-    let ready = receiver.recv_timeout(Duration::from_secs(12))
+    let ready = receiver
+        .recv_timeout(Duration::from_secs(12))
         .ok()
         .flatten()
         .is_some_and(|line| line.trim() == "minglefield_tray_ready");
-    if !ready || child.try_wait().map_err(|_| "Minglefield tray exited")?.is_some() {
+    if !ready
+        || child
+            .try_wait()
+            .map_err(|_| "Minglefield tray exited")?
+            .is_some()
+    {
         let _ = child.kill();
         let _ = child.wait();
         return Err("Minglefield tray failed to become visible");

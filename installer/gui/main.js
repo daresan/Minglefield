@@ -84,7 +84,8 @@ function collectForm() {
     databasePassword: byId("database-password").value,
     databasePasswordConfirmation: byId("database-password-confirm").value,
     loginPassword: byId("admin-password").value,
-    loginPasswordConfirmation: byId("admin-password-confirm").value
+    loginPasswordConfirmation: byId("admin-password-confirm").value,
+    launchAfterInstall: byId("start-after-install").checked
   };
 }
 
@@ -137,8 +138,10 @@ function refreshReview() {
       : "");
   byId("ready-status").textContent = issue || "Bereit zur Installation.";
   byId("ready-status").style.color = issue ? "#f5c898" : "#b1e3cd";
-  byId("install-now").disabled =
-    installing || complete || !!issue || !byId("installation-approved").checked;
+  if (wizardIndex === pages.length - 1) {
+    byId("wizard-next").disabled =
+      installing || complete || !!issue || !byId("installation-approved").checked;
+  }
 }
 
 function showPage(index) {
@@ -150,7 +153,10 @@ function showPage(index) {
     "Schritt " + (index + 1) + " von " + pages.length + " – " + WIZARD_PAGES[index];
   byId("wizard-step-label").textContent = WIZARD_PAGES[index];
   byId("wizard-back").disabled = index === 0 || complete;
-  byId("wizard-next").disabled = index === pages.length - 1 || complete;
+  byId("wizard-next").disabled =
+    installing || complete || (index === pages.length - 1 &&
+      !byId("installation-approved").checked);
+  if (index !== pages.length - 1) byId("existing-warning").hidden = true;
   if (index === 4) {
     databaseEditor.inspect(collectForm()).then(() => {
       if (wizardIndex === pages.length - 1) refreshReview();
@@ -192,27 +198,42 @@ async function install(continueExisting) {
   }
   installing = true;
   byId("existing-warning").hidden = true;
-  byId("install-now").disabled = true;
+  byId("wizard-next").disabled = true;
   byId("wizard-back").disabled = true;
   byId("installation-status").textContent =
     "Installation läuft: Datenbank übernehmen oder erstellen, Programmdateien installieren, " +
-    "mingleadmin einrichten und Minglefield starten…";
+    "mingleadmin einrichten" +
+    (form.launchAfterInstall ? " und Minglefield starten…" : " (ohne automatischen Start)…");
   try {
     const result = verifyInstalledRunning(await invoke("install_minglefield", {
       request: installationRequest(form, continueExisting, staged)
     }));
     complete = true;
     byId("installation-status").textContent =
-      "MINGLEFIELD INSTALLIERT UND GESTARTET.\n" +
+      (result.nativeApplicationRunning
+        ? "MINGLEFIELD INSTALLIERT UND GESTARTET.\n"
+        : "MINGLEFIELD INSTALLIERT (NICHT GESTARTET).\n") +
       "Anwendung: " + result.installedApplication + "\n" +
       "Datenbank: " + result.encryptedDatabase + "\n" +
-      "Lokaler Host: " + result.localHostId + "\n" +
-      "Minglefield läuft auf: " + result.localUrl + "\n" +
-      "Prozess-ID: " + result.nativeProcessId + "\n" +
-      "Der Setup Manager kann geschlossen werden. Anmeldung in Minglefield wie gewohnt.";
-    const link = byId("installed-url");
-    link.href = result.localUrl;
-    link.hidden = false;
+      "Lokaler Host: " + result.localHostId +
+      (result.nativeApplicationRunning
+        ? "\nMinglefield läuft auf: " + result.localUrl +
+          "\nProzess-ID: " + result.nativeProcessId
+        : "\nDie Anwendung kann später über den Windows-Programmeintrag gestartet werden.") +
+      "\nSetup Manager wird geschlossen.";
+    if (result.nativeApplicationRunning) {
+      const link = byId("installed-url");
+      link.href = result.localUrl;
+      link.hidden = false;
+    }
+    // Native installation/optional startup has been verified; this command
+    // is allowed only once the install_minglefield backend has completed.
+    try {
+      await invoke("close_completed_setup_manager");
+    } catch {
+      byId("installation-status").textContent +=
+        "\nDer Setup Manager konnte nicht automatisch geschlossen werden.";
+    }
   } catch (error) {
     if (isExistingTargetWarning(error) && !continueExisting) {
       byId("installation-status").textContent =
@@ -246,6 +267,7 @@ for (const id of [
   });
 }
 byId("installation-approved").addEventListener("change", refreshReview);
+byId("start-after-install").addEventListener("change", refreshReview);
 byId("selected-local-host").addEventListener("change", () => {
   if (wizardIndex === 5) refreshReview();
 });
@@ -260,9 +282,15 @@ byId("browse-data-dir").addEventListener("click",
 byId("browse-source-db").addEventListener("click",
   () => choosePath("source-database", "browse_sqlite_file"));
 byId("wizard-back").addEventListener("click", () => showPage(wizardIndex - 1));
-byId("wizard-next").addEventListener("click", () => showPage(wizardIndex + 1));
-byId("install-now").addEventListener("click", () => install(false));
-byId("existing-continue").addEventListener("click", () => install(true));
+byId("wizard-next").addEventListener("click", () => {
+  if (wizardIndex < pages.length - 1) {
+    showPage(wizardIndex + 1);
+  } else {
+    // The SAME Weiter control both begins the install and, if the native
+    // preflight warned, confirms reuse of the existing selected target.
+    install(!byId("existing-warning").hidden);
+  }
+});
 byId("existing-abort").addEventListener("click", () => {
   byId("existing-warning").hidden = true;
   byId("installation-status").textContent =

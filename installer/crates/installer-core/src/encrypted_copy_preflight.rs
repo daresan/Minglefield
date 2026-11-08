@@ -1228,6 +1228,105 @@ mod tests {
     }
 
     #[test]
+    fn consented_existing_target_is_archived_and_new_ciphertext_uses_same_name() {
+        let source = fixture(false);
+        let parent = target_volume_fixture();
+        let target = parent.join("minglefield.sqlite3");
+        {
+            let db = Connection::open(&target).unwrap();
+            db.pragma_update(None, "key", "PreviousPassword123!")
+                .unwrap();
+            db.execute_batch("CREATE TABLE old_user_data(notes TEXT);
+                              INSERT INTO old_user_data VALUES('retain as archive');")
+                .unwrap();
+        }
+        let original_target = fs::read(&target).unwrap();
+        let original_source = fs::read(&source).unwrap();
+        let report = replace_installer_encrypted_database(
+            &source,
+            &target,
+            "",
+            "NewCipherPassword123!",
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert!(report.destination_created && report.encrypted_destination_verified);
+        assert_eq!(fs::read(&source).unwrap(), original_source);
+        let archived = fs::read_dir(&parent)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.to_string_lossy().contains(".minglefield-previous-"))
+            .collect::<Vec<_>>();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(fs::read(&archived[0]).unwrap(), original_target);
+        let old = Connection::open(&archived[0]).unwrap();
+        old.pragma_update(None, "key", "PreviousPassword123!").unwrap();
+        assert_eq!(
+            old.query_row("SELECT notes FROM old_user_data", [], |row| row.get::<_, String>(0))
+                .unwrap(),
+            "retain as archive"
+        );
+        drop(old);
+        let new = Connection::open(&target).unwrap();
+        new.pragma_update(None, "key", "NewCipherPassword123!")
+            .unwrap();
+        let old_source = Connection::open(&source).unwrap();
+        assert!(verify_snapshot_equality(&old_source, &new)
+            .unwrap()
+            .values_verified);
+        drop(new);
+        drop(old_source);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    fn consented_same_source_and_target_path_exports_from_memory_and_preserves_original() {
+        let parent = target_volume_fixture();
+        let target = parent.join("legacy-source-and-target.sqlite3");
+        {
+            let source = Connection::open(&target).unwrap();
+            source
+                .execute_batch("CREATE TABLE olddata(user_id TEXT PRIMARY KEY);
+                                INSERT INTO olddata VALUES('user.daniel');")
+                .unwrap();
+        }
+        let original = fs::read(&target).unwrap();
+        let report = replace_installer_encrypted_database(
+            &target,
+            &target,
+            "",
+            "NewCipherPassword123!",
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert!(report.destination_created && report.encrypted_destination_verified);
+        let archived = fs::read_dir(&parent)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.to_string_lossy().contains(".minglefield-previous-"))
+            .collect::<Vec<_>>();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(fs::read(&archived[0]).unwrap(), original);
+        let new = Connection::open(&target).unwrap();
+        new.pragma_update(None, "key", "NewCipherPassword123!")
+            .unwrap();
+        assert_eq!(
+            new.query_row("SELECT user_id FROM olddata", [], |row| row.get::<_, String>(0))
+                .unwrap(),
+            "user.daniel"
+        );
+        drop(new);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
     fn product_install_applies_page_five_edits_and_schema_to_single_encrypted_db() {
         use crate::migration_dry_run::RawCell;
         let parent = target_volume_fixture();

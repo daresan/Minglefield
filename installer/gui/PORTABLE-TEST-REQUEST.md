@@ -1,3 +1,45 @@
+# M2.11 – einmaliger Shadow-Testbuild für Windows-Hostregel-Zeitzonen (2026-11-08)
+
+**Explizite neue Freigabe des Maintainers:** Genau einen portablen Testbuild auslösen,
+nach den erfolgreich abgeschlossenen relevanten CI-Gates. Diese neue Anforderung
+ersetzt keine vorherigen Abnahmeergebnisse und führt nicht zu einem Release,
+Merge, Deployment oder weiteren Wiederholungsbuilds.
+
+**Verifizierter Quellstand vor dem reinen Build-Marker:**
+`0e76d4fd4a923c1deed28b1bd1b86bcfd11445f1`
+auf `feat/game-integration-updates`.
+
+**Präziser Umfang:** Der bereits funktionierende Host-Job-Ablauf bleibt
+`queued → waiting → reserved → submitting`; der Installer packt jetzt das
+offizielle, SHA-256-geprüfte `tzdata==2026.6` in den selbstständigen
+Python-3.11-Runtime-Bestand. Ein Smoke-Test der tatsächlich paketierten
+Alpha-App verifiziert eine echte IANA-Zeitzone und die vorhandenen
+HTTP-Hostregel-/Jobreservierungswege einschließlich isoliertem
+ComfyUI-Claim bis `submitting`. Es findet **keine echte ComfyUI-/prompt-
+Ausführung** im CI-Test statt. Keine zusätzlichen Genehmigungsschritte,
+keine Hostregel- oder Jobstatus-Migration und keine Änderungen an Benutzern.
+
+**Erfolgreiche CI-Gates des Quellstands:**
+- [Installer Rust #42458375953](https://github.com/daresan/Minglefield/actions/runs/42458375953): Erfolg (Ubuntu, vollständiger Managed-Runtime-Job-Smoke).
+- [Installer native security #42458375888](https://github.com/daresan/Minglefield/actions/runs/42458375888): Erfolg (Windows/macOS, vollständiger Managed-Runtime-Job-Smoke).
+- [AGENTS security guard #42458375926](https://github.com/daresan/Minglefield/actions/runs/42458375926): Erfolg.
+
+**Abnahmehinweise für Shadow:** Mit einer passenden gespeicherten automatischen
+Hostregel sollte `Host-Regeln prüfen (Mock)` einen `queued`-Job nach `waiting`
+setzen; danach kann `Slot reservieren (Mock)` `reserved` setzen und
+`Jetzt ausführen (ComfyUI)` den vorhandenen Pfad versuchen. Bei aktiver
+Telemetriebedingung ist weiterhin `trusted_telemetry_required` zu erwarten.
+Die frühere erfolgreiche ComfyUI-`/prompt`-Ausführung auf Shadow ist
+durch diesen Test nicht erneut bewiesen. Separate bekannte Installer-Mängel
+(Migrations-Testartefakt-Wiederaufnahme, unbegründete Warnung für leeren
+Programmordner, Seite-6-`Installieren`-Button/optionaler App-Start)
+sind **nicht** Bestandteil dieses Builds und bleiben offen.
+
+**Keine automatische Wiederholung.** Portable Artefakte sind Testpakete,
+keine freigegebene Produktversion.
+
+---
+
 # M2.11 – einmaliger Shadow-Regressionstestbuild für bestehende Host-ID (2026-11-08)
 
 **Explizit freigegeben:** Genau eine neue portable Paketierung nach grüner CI.

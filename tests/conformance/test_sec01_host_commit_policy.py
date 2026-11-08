@@ -137,6 +137,56 @@ class HostPolicyTests(unittest.TestCase):
         self.assertEqual(again.decide(host_id="host.one",effect_key="effect.one",
             binding=self.binding,now=NOW).state,"duplicate")
 
+    def test_installer_scoped_host_admin_uses_existing_comfy_job_steps(self):
+        # Installed mingleadmin is an additional admin on the imported Host,
+        # not its owner or a newly invented Host identity.
+        host = "host.one"
+        self.policy.add_admin_fixture(host, "mingleadmin")
+        with self.store._tx() as db:
+            db.execute("INSERT INTO sec01_host_owners(host_id,owner_id) VALUES(?,?)",
+                       (host, "original.owner"))
+            db.execute("INSERT INTO sec01_host_runtimes VALUES(?,?,?)",
+                       (host, "comfy.local", json.dumps({
+                           "id": "comfy.local", "type": "comfyui",
+                           "enabled": True, "endpoint": "http://127.0.0.1:8188"
+                       })))
+            db.execute("INSERT INTO sec01_host_comfy_workflows VALUES(?,?,?,?,?)",
+                       (host, "effect.comfy", "comfy.local",
+                        json.dumps({"1": {"class_type": "TestNode", "inputs": {}}}),
+                        json.dumps({"workflow_sha256": "test-workflow-sha",
+                                    "parameters": []})))
+        self.assertEqual(self.policy.define_effect(
+            host, "mingleadmin", "effect.comfy", "Existing Comfy effect", True
+        ).state, "saved")
+        self.assertEqual(self.policy.upsert_rule(
+            host, "mingleadmin", "rule.comfy", priority=1, enabled=True,
+            config=rule()).state, "saved")
+        created = self.policy.manual_start_mock(
+            host, "mingleadmin", "effect.comfy", parameters={})
+        self.assertEqual(created.state, "queued_mock")
+        job_id = created.reason
+        self.assertEqual(self.policy.evaluate_queued_host_job(
+            host, "mingleadmin", job_id, now=NOW).state, "waiting")
+        self.assertEqual(self.policy.reserve_waiting_host_job_mock(
+            host, "mingleadmin", job_id, now=NOW).state, "reserved_mock")
+        self.assertEqual(self.policy.list_host_jobs(
+            host, "mingleadmin")[0]["state"], "reserved")
+        self.assertIsNone(self.policy.claim_comfy_execution(
+            host, "user.friend", job_id))
+        context = self.policy.claim_comfy_execution(
+            host, "mingleadmin", job_id)
+        self.assertIsNotNone(context)
+        self.assertEqual(context["runtime"]["type"], "comfyui")
+        self.assertEqual(self.policy.list_host_jobs(
+            host, "mingleadmin")[0]["state"], "submitting")
+        with self.store._tx() as db:
+            self.assertEqual(db.execute(
+                "SELECT owner_id FROM sec01_host_owners WHERE host_id=?",
+                (host,)).fetchone(), ("original.owner",))
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM sec01_host_active_slots WHERE host_id=? AND effect_key=?",
+                (host, job_id)).fetchone(), (1,))
+
     def test_bad_rule_rejected(self):
         self.assertEqual(
             self.save(rule(gpu_max_percent=101)).reason,

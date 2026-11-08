@@ -82,6 +82,19 @@ test("one click owns all operations and the summary contains no credentials", ()
   assert.equal(installationRequest(notStarted).launchAfterInstall, false);
   assert.ok(JSON.stringify(reviewRows(notStarted)).includes("später manuell starten"));
 });
+test("same source and destination database path remains selectable after existing-target Weiter", () => {
+  const sameFile = {
+    ...form,
+    sourceDatabase: form.databasePath,
+    sourcePassword: "",
+  };
+  assert.equal(validateInstallSelections(sameFile), null);
+  const request = installationRequest(sameFile, true);
+  assert.equal(request.sourceDatabase, request.databasePath);
+  assert.equal(request.continueExisting, true);
+  // A changed source and target file name is NOT an additional prerequisite.
+});
+
 test("existing mingleadmin can be preserved without resetting credentials", () => {
   const existing = { ...form, loginPassword: "", loginPasswordConfirmation: "" };
   assert.equal(validateInstallSelections(existing), null);

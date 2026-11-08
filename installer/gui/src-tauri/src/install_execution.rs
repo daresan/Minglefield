@@ -11,14 +11,16 @@ use minglefield_installer_core::encrypted_copy_preflight::{
     execute_reviewed_encrypted_copy_with_schema, EXPERIMENTAL_COPY_CONFIRMATION,
 };
 use minglefield_installer_core::local_first_run_worker::ensure_verified_installer_local_admin;
+use minglefield_installer_core::legacy_alpha_constraints::audit_registered_alpha_schema_objects;
 use minglefield_installer_core::managed_alpha_install::{
     install_or_reuse_application, verify_installed_application,
 };
-use minglefield_installer_core::migration_dry_run::ReviewCorrection;
+use minglefield_installer_core::migration_dry_run::{RawCell, ReviewCorrection};
+use minglefield_installer_core::sqlite_inspection::open_inspected_snapshot;
 use minglefield_installer_core::native_application_probe::{
     ensure_native_starter, start_installed_application,
 };
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{types::Value, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -286,6 +288,152 @@ pub async fn inspect_host_bindings(
     .map_err(|_| "Hostübersicht konnte nicht erstellt werden".to_owned())?
 }
 
+/// Reinstall-resume verification of a destination already created by a
+/// previous authorized migration attempt. Never delete, recreate, or write
+/// the occupied SQLCipher DB just to resume an interrupted install.
+fn db_value_matches(cell: &RawCell, value: &Value) -> bool {
+    match (cell.kind.as_str(), cell.value.as_deref(), value) {
+        ("null", None, Value::Null) => true,
+        ("integer", Some(raw), Value::Integer(actual)) => {
+            raw.parse::<i64>() == Ok(*actual)
+        }
+        ("real", Some(raw), Value::Real(actual)) => raw
+            .parse::<f64>()
+            .ok()
+            .filter(|number| number.is_finite())
+            == Some(*actual),
+        ("text", Some(raw), Value::Text(actual)) => raw == actual,
+        ("blob", Some(raw), Value::Blob(bytes)) => {
+            raw.len() == bytes.len() * 2
+                && bytes.iter().enumerate().all(|(index, byte)| {
+                    u8::from_str_radix(&raw[index * 2..index * 2 + 2], 16)
+                        .ok()
+                        == Some(*byte)
+                })
+        }
+        _ => false,
+    }
+}
+
+fn quoted_sqlite_identifier(identifier: &str) -> Result<String, String> {
+    if identifier.is_empty()
+        || identifier.len() > 256
+        || identifier.as_bytes().contains(&0)
+    {
+        return Err("Ungültiger Name in der Datenbearbeitung".into());
+    }
+    Ok(format!("\"{}\"", identifier.replace('"', "\"\"")))
+}
+
+fn match_rows(
+    db: &Connection,
+    changes: &[ReviewCorrection],
+    use_after: bool,
+) -> Result<(), String> {
+    for correction in changes {
+        let ReviewCorrection::FullRow {
+            table,
+            row_id,
+            columns,
+            before,
+            after,
+        } = correction
+        else {
+            return Err("Eine ältere Korrektur kann hier nicht automatisch übernommen werden".into());
+        };
+        if columns.len() < 1 || columns.len() > 1024
+            || before.len() != columns.len()
+            || after.len() != columns.len()
+        {
+            return Err("Unvollständige Datenkorrektur".into());
+        }
+        let expected = if use_after { after } else { before };
+        let table = quoted_sqlite_identifier(table)?;
+        let projection = columns
+            .iter()
+            .map(|column| quoted_sqlite_identifier(column))
+            .collect::<Result<Vec<_>, _>>()?
+            .join(",");
+        let query = if row_id.is_some() {
+            format!("SELECT {projection} FROM {table} WHERE rowid=?1")
+        } else {
+            format!("SELECT {projection} FROM {table}")
+        };
+        let mut stmt = db
+            .prepare(&query)
+            .map_err(|_| "Datensatzschema stimmt nicht mehr überein")?;
+        let mut rows = if let Some(id) = row_id {
+            let id = id.parse::<i64>().map_err(|_| "Ungültige Datensatz-ID")?;
+            stmt.query([id])
+        } else {
+            stmt.query([])
+        }
+        .map_err(|_| "Datenbankkorrektur konnte nicht verglichen werden")?;
+        let mut matches = 0usize;
+        let mut scanned = 0usize;
+        while let Some(row) = rows
+            .next()
+            .map_err(|_| "Datenbankdatensatz konnte nicht gelesen werden")?
+        {
+            scanned += 1;
+            if scanned > 5000 {
+                return Err("Zu viele Datensätze für die Wiederaufnahmeprüfung".into());
+            }
+            let actual = (0..columns.len())
+                .map(|index| row.get::<_, Value>(index))
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|_| "Datenbankwert konnte nicht verglichen werden")?;
+            if actual.iter().zip(expected.iter()).all(|(value, cell)| {
+                db_value_matches(cell, value)
+            }) {
+                matches += 1;
+            }
+        }
+        if matches != 1 {
+            return Err("Vorhandene DB enthält nicht die bestätigten Datenänderungen; anderer Zielpfad oder angepasste Auswahl erforderlich".into());
+        }
+    }
+    Ok(())
+}
+
+fn verify_existing_migration_intent(
+    source: &Path,
+    old_password: &str,
+    destination: &Path,
+    new_password: &str,
+    changes: &[ReviewCorrection],
+    additions: &[String],
+) -> Result<(), String> {
+    let (source_db, source_schema) = open_inspected_snapshot(source, old_password)
+        .map_err(|_| "Migrationquelle kann nicht unabhängig überprüft werden")?;
+    if !source_schema.integrity_ok || source_schema.foreign_key_violations != 0 {
+        return Err("Migrationsquelle ist nicht konsistent".into());
+    }
+    match_rows(&source_db, changes, false)?;
+    let source_audit = audit_registered_alpha_schema_objects(&source_db, &source_schema)
+        .map_err(|_| "Original-Schema konnte nicht überprüft werden")?;
+    if additions.iter().any(|name| {
+        !source_audit.missing_objects.contains(name)
+    }) {
+        return Err("Schemaauswahl entspricht nicht mehr der Migrationsquelle".into());
+    }
+    let (target_db, target_schema) = open_inspected_snapshot(destination, new_password)
+        .map_err(|_| "Bereits verschlüsselte DB konnte nicht gelesen werden")?;
+    if !target_schema.integrity_ok || target_schema.foreign_key_violations != 0 {
+        return Err("Vorhandene DB ist nicht konsistent".into());
+    }
+    match_rows(&target_db, changes, true)?;
+    let target_audit = audit_registered_alpha_schema_objects(&target_db, &target_schema)
+        .map_err(|_| "Ziel-Schema konnte nicht überprüft werden")?;
+    if additions.iter().any(|name| {
+        target_audit.missing_objects.contains(name)
+            || target_audit.incompatible_objects.contains(name)
+    }) {
+        return Err("Vorhandene DB enthält nicht alle gewählten Schemaergänzungen".into());
+    }
+    Ok(())
+}
+
 fn execute_install(
     request: InstallRequest,
     resources: PathBuf,
@@ -328,9 +476,6 @@ fn execute_install(
     }
     let (_existing_application, existing_db) =
         check_existing_paths(&install_dir, &database, request.continue_existing)?;
-    if existing_db && (!request.corrections.is_empty() || !request.schema_additions.is_empty()) {
-        return Err("Eine bereits vorhandene SQLCipher-Zieldatenbank bleibt unverändert. Für Daten- oder Schemaänderungen bitte einen neuen Zielpfad wählen.".into());
-    }
     let changes: Vec<ReviewCorrection> = request
         .corrections
         .into_iter()
@@ -353,6 +498,22 @@ fn execute_install(
         }
         verify_encrypted_database(&database, &request.database_password)
             .map_err(|_| "Vorhandene DB nicht mit dem angegebenen SQLCipher-Schlüssel verwendbar; anderer Zielpfad nötig")?;
+        if !changes.is_empty() || !request.schema_additions.is_empty() {
+            let source_path = source
+                .as_deref()
+                .ok_or("Für die Übernahme vorgemerkter Korrekturen ist eine Quelldatenbank erforderlich")?;
+            if source_path == database.as_path() {
+                return Err("Quelle und verschlüsselte Zieldatenbank dürfen nicht dieselbe Datei sein".into());
+            }
+            verify_existing_migration_intent(
+                source_path,
+                &request.source_password,
+                &database,
+                &request.database_password,
+                &changes,
+                &request.schema_additions,
+            )?;
+        }
         "reused_encrypted_database"
     } else {
         make_real_parent(&database)?;

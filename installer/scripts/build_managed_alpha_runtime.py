@@ -353,6 +353,102 @@ finally:
                     "GET", "/api/project-document?kind=" + kind)
                 if (status != 200 or not document.get("content", "").startswith(prefix)):
                     raise ValueError("embedded Alpha application documentation unavailable")
+
+            # Exercise the EXISTING Host-rule and reservation HTTP routes in
+            # the packaged interpreter. A non-UTC IANA zone catches Windows
+            # bundles whose ZoneInfo data was omitted from the runtime.
+            effect_id = "effect.packaged-smoke"
+            status, defined = call("POST", "/api/host/effects", {
+                "host_id": host_id, "effect_id": effect_id,
+                "description": "Isolated packaged job smoke", "enabled": True
+            }, session=session)
+            if status != 200 or defined.get("state") != "saved":
+                raise ValueError("packaged Alpha effect setup failed")
+            status, saved_rule = call("POST", "/api/host/rules", {
+                "host_id": host_id, "rule_id": "rule.packaged-smoke",
+                "priority": 1, "enabled": True,
+                "config": {
+                    "mode": "automatic", "idle_only": False,
+                    "gpu_max_percent": None, "timezone": "Europe/Vienna",
+                    "weekdays": list(range(7)), "start_minute": 0,
+                    "end_minute": 1440, "max_parallel_effects": 1
+                }
+            }, session=session)
+            if status != 200 or saved_rule.get("state") != "saved":
+                raise ValueError("packaged Alpha Host rule setup failed")
+            status, queued = call("POST", "/api/host/effects/manual", {
+                "host_id": host_id, "effect_id": effect_id
+            }, session=session)
+            if status != 200 or queued.get("state") != "queued_mock":
+                raise ValueError("packaged Alpha job was not queued")
+            job_id = queued["reason"]
+            status, evaluated = call("POST", "/api/host/jobs/evaluate", {
+                "host_id": host_id, "job_id": job_id
+            }, session=session)
+            if (status != 200 or evaluated.get("state") != "waiting"
+                    or evaluated.get("reason") != "awaiting_final_authorization"):
+                raise ValueError("packaged Alpha queued-to-waiting rule check failed")
+            status, reserved = call("POST", "/api/host/jobs/reserve", {
+                "host_id": host_id, "job_id": job_id
+            }, session=session)
+            if status != 200 or reserved.get("state") != "reserved_mock":
+                raise ValueError("packaged Alpha waiting-to-reserved slot check failed")
+            status, jobs = call(
+                "GET", "/api/host/jobs?host_id=" + host_id, session=session)
+            if status != 200 or not any(
+                job["job_id"] == job_id and job["state"] == "reserved"
+                for job in jobs["jobs"]
+            ):
+                raise ValueError("packaged Alpha reserved job did not persist")
+
+            # The real ComfyUI claimant also runs in bundled Python using
+            # this disposable SQLCipher fixture. Seed only mock workflow
+            # metadata; never contact ComfyUI or execute an external effect.
+            claim_script = """
+import json,sys
+p=json.loads(sys.stdin.read())
+sys.path.insert(0,p["moduleDir"])
+from private_alpha_auth import AlphaAuthStore
+from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+from sec01_host_commit_policy_sim import HostCommitPolicy
+store=AlphaAuthStore(p["database"],sqlcipher_key_provider=lambda:p["cipherKey"])
+policy=HostCommitPolicy(IntegratedAlphaAdmission(store))
+with store._tx() as db:
+    db.execute("INSERT INTO sec01_host_runtimes(host_id,runtime_id,config) VALUES(?,?,?)",
+               (p["hostId"],"runtime.smoke",
+                json.dumps({"id":"runtime.smoke","type":"comfyui",
+                            "endpoint":"http://127.0.0.1:8188","enabled":True})))
+    db.execute("INSERT INTO sec01_host_comfy_workflows(host_id,effect_id,runtime_id,workflow,metadata) VALUES(?,?,?,?,?)",
+               (p["hostId"],p["effectId"],"runtime.smoke",
+                json.dumps({"1":{"class_type":"TestNode","inputs":{}}}),
+                json.dumps({"workflow_sha256":"smoke-workflow-sha","parameters":[]})))
+    db.execute("INSERT INTO sec01_host_job_parameters(job_id,host_id,effect_id,workflow_sha256,parameters) VALUES(?,?,?,?,?)",
+               (p["jobId"],p["hostId"],p["effectId"],"smoke-workflow-sha","{}"))
+claim=policy.claim_comfy_execution(p["hostId"],"mingleadmin",p["jobId"])
+if claim is None or claim["runtime"]["type"]!="comfyui":
+    raise RuntimeError("packaged claimant rejected reserved job")
+state=next(j["state"] for j in policy.list_host_jobs(p["hostId"],"mingleadmin")
+           if j["job_id"]==p["jobId"])
+print(state)
+"""
+            claim_frame = {
+                "database": str(database), "moduleDir": str(application_entrypoint.parent),
+                "cipherKey": fixture["cipherKey"], "hostId": host_id,
+                "effectId": effect_id, "jobId": job_id,
+            }
+            claimed = subprocess.run(
+                [str(executable), "-I", "-B", "-c", claim_script],
+                input=json.dumps(claim_frame).encode("utf-8"),
+                capture_output=True, timeout=120, check=False)
+            if claimed.returncode != 0 or claimed.stdout.strip() != b"submitting":
+                raise ValueError("packaged Alpha reserved-to-submitting claim failed")
+            status, jobs = call(
+                "GET", "/api/host/jobs?host_id=" + host_id, session=session)
+            if status != 200 or not any(
+                job["job_id"] == job_id and job["state"] == "submitting"
+                for job in jobs["jobs"]
+            ):
+                raise ValueError("packaged Alpha submitting state not visible")
         finally:
             if process.poll() is None:
                 process.terminate()

@@ -18,6 +18,7 @@ on:
       - "installer/scripts/build_native_alpha_application.py"
       - "installer/crates/installer-cli/src/minglefield_app.rs"
       - "installer/crates/installer-cli/src/native_start_dialog.rs"
+      - "installer/crates/installer-cli/src/native_tray.rs"
       - "installer/crates/installer-cli/Cargo.toml"
       - "installer/crates/installer-cli/src/database.rs"
       - "installer/crates/installer-cli/src/main.rs"

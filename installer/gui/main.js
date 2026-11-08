@@ -206,6 +206,12 @@ async function initialize() {
   } catch {
     byId("license-text").textContent = "Lizenztext ist in dieser Vorschau nicht verfügbar.";
   }
+  try {
+    const readme = await invoke("application_readme");
+    byId("readme-text").textContent = readme.text || "Projektinformationen sind nicht verfügbar.";
+  } catch {
+    byId("readme-text").textContent = "Projektinformationen sind nicht verfügbar.";
+  }
   showPage(0);
 }
 initialize();

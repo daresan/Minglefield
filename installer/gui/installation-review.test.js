@@ -23,6 +23,8 @@ test("six-page product wizard has administrator on five and review only on six",
   assert.equal((html.match(/type="checkbox"/g) || []).length, 1);
   assert.ok(html.includes("Installation durchführen"));
   assert.ok(html.includes('id="install-now"'));
+  assert.ok(html.includes('id="license-text"'));
+  assert.ok(html.includes('id="readme-text"'));
   for (const forbidden of [
     "CREATE EXPERIMENTAL", "INSTALL MINGLEFIELD ALPHA", "Validate installation plan",
     "Geprüfte Alpha-Anwendungsdateien installieren", "Testkopie", "Migrationsprobe",

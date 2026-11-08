@@ -82,6 +82,7 @@ function refreshReview() {
 function showPage(index) {
   if (index < 0 || index >= pages.length || installing) return;
   wizardIndex = index;
+  document.body.classList.toggle("review-data", index === 4);
   pages.forEach((page, i) => { page.hidden = i !== index; });
   byId("wizard-progress").textContent =
     "Schritt " + (index + 1) + " von " + pages.length + " – " + WIZARD_PAGES[index];

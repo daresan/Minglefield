@@ -1899,11 +1899,9 @@ mod tests {
         assert!(result.staged_values_match_ciphertext);
         assert_eq!(result.staged_changes_verified, 1);
         assert_eq!(result.added_schema_objects, selected);
-        let target = Connection::open_with_flags(
-            &destination,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .unwrap();
+        let target =
+            Connection::open_with_flags(&destination, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
         target.pragma_update(None, "key", "NewKey123!").unwrap();
         let user_disabled: i64 = target
             .query_row(

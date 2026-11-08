@@ -1296,36 +1296,29 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_replacement_failure_restores_existing_destination_without_new_artifacts() {
+    fn invalid_review_does_not_archive_or_modify_the_existing_database() {
         let parent = target_volume_fixture();
         let source = parent.join("source.sqlite3");
+        let target = parent.join("previous.sqlite3");
         {
             let db = Connection::open(&source).unwrap();
-            db.execute_batch(
-                "CREATE TABLE source_data(value INTEGER);
-                              INSERT INTO source_data VALUES(7);",
-            )
-            .unwrap();
+            db.execute_batch("CREATE TABLE source_data(value INTEGER);")
+                .unwrap();
         }
-        // The destination filename is a prohibited source-sidecar name.
-        // Validation after temporary archival fails, so the ordinary
-        // reported-error path must restore the identical original bytes.
-        let target = parent.join("source.sqlite3-wal");
         {
             let db = Connection::open(&target).unwrap();
-            db.execute_batch(
-                "CREATE TABLE previous_data(value INTEGER);
-                              INSERT INTO previous_data VALUES(9);",
-            )
-            .unwrap();
+            db.execute_batch("CREATE TABLE previous_data(value INTEGER);")
+                .unwrap();
         }
-        let original = fs::read(&target).unwrap();
         let source_bytes = fs::read(&source).unwrap();
+        let original = fs::read(&target).unwrap();
+        // A nonconforming migration key is rejected BEFORE any archival or
+        // replacement, with both existing files byte-for-byte preserved.
         assert!(replace_installer_encrypted_database(
             &source,
             &target,
             "",
-            "NewCipherPassword123!",
+            "short",
             &[],
             &[],
         )

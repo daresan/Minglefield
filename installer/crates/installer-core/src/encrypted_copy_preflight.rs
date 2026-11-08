@@ -1296,6 +1296,43 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_replacement_failure_restores_existing_destination_without_new_artifacts() {
+        let parent = target_volume_fixture();
+        let source = parent.join("source.sqlite3");
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch("CREATE TABLE source_data(value INTEGER);
+                              INSERT INTO source_data VALUES(7);")
+                .unwrap();
+        }
+        // The destination filename is a prohibited source-sidecar name.
+        // Validation after temporary archival fails, so the ordinary
+        // reported-error path must restore the identical original bytes.
+        let target = parent.join("source.sqlite3-wal");
+        {
+            let db = Connection::open(&target).unwrap();
+            db.execute_batch("CREATE TABLE previous_data(value INTEGER);
+                              INSERT INTO previous_data VALUES(9);")
+                .unwrap();
+        }
+        let original = fs::read(&target).unwrap();
+        let source_bytes = fs::read(&source).unwrap();
+        assert!(replace_installer_encrypted_database(
+            &source,
+            &target,
+            "",
+            "NewCipherPassword123!",
+            &[],
+            &[],
+        )
+        .is_err());
+        assert_eq!(fs::read(&target).unwrap(), original);
+        assert_eq!(fs::read(&source).unwrap(), source_bytes);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
     fn consented_same_source_and_target_path_exports_from_memory_and_preserves_original() {
         let parent = target_volume_fixture();
         let target = parent.join("legacy-source-and-target.sqlite3");

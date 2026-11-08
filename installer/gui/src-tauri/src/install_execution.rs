@@ -105,9 +105,22 @@ fn check_existing_paths(
     database: &Path,
     continued: bool,
 ) -> Result<(bool, bool), String> {
-    let app = metadata_if_present(application)?.is_some();
+    let application_meta = metadata_if_present(application)?;
+    let app = application_meta.is_some();
+    // The normal Windows default is an existing, EMPTY Programs/Minglefield
+    // directory. Existence of that directory is not an overwrite conflict.
+    let populated_app = match application_meta {
+        Some(meta) if meta.is_dir() && !meta.file_type().is_symlink() => fs::read_dir(application)
+            .map_err(|_| "Anwendungsziel kann nicht gelesen werden")?
+            .next()
+            .transpose()
+            .map_err(|_| "Anwendungsziel kann nicht gelesen werden")?
+            .is_some(),
+        Some(_) => return Err("Anwendungsziel ist keine reguläre Verzeichnisstruktur".into()),
+        None => false,
+    };
     let db = metadata_if_present(database)?.is_some();
-    if (app || db) && !continued {
+    if (populated_app || db) && !continued {
         return Err(
             "INSTALL_WARNING_EXISTING: Bereits vorhandene Anwendungs- oder Datenbankziele. Weiter übernimmt eine gültige verschlüsselte DB unverändert und sichert vor dem Ersetzen alter Programmdateien deren bisherigen Inhalt; Abbruch verändert nichts."
                 .into(),
@@ -345,7 +358,11 @@ fn match_rows(
             .map(|column| quoted_sqlite_identifier(column))
             .collect::<Result<Vec<_>, _>>()?
             .join(",");
-        let query = if row_id.is_some() {
+        // rowid is an address inside the ORIGINAL source snapshot, not a
+        // persistent identity across sqlcipher_export and schema migration.
+        // For the exported target require exactly one entire matching row,
+        // regardless of the target's independently assigned rowid.
+        let query = if row_id.is_some() && !use_after {
             format!("SELECT {projection} FROM {table} WHERE rowid=?1")
         } else {
             format!("SELECT {projection} FROM {table}")
@@ -353,8 +370,12 @@ fn match_rows(
         let mut stmt = db
             .prepare(&query)
             .map_err(|_| "Datensatzschema stimmt nicht mehr überein")?;
-        let mut rows = if let Some(id) = row_id {
-            let id = id.parse::<i64>().map_err(|_| "Ungültige Datensatz-ID")?;
+        let mut rows = if row_id.is_some() && !use_after {
+            let id = row_id
+                .as_ref()
+                .ok_or("Ungültige Datensatz-ID")?
+                .parse::<i64>()
+                .map_err(|_| "Ungültige Datensatz-ID")?;
             stmt.query([id])
         } else {
             stmt.query([])

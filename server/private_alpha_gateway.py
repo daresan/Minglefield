@@ -1171,9 +1171,25 @@ document.getElementById("hostJobExecute").onclick=async()=>{
   const host_id=hv("jobHostSelect"),job_id=hv("hostJobId");
   if(!host_id||!job_id)return;
   if(!confirm("Reservierten Job "+job_id+" jetzt an ComfyUI übermitteln?"))return;
-  const result=await api("/api/host/jobs/execute",{host_id,job_id});
-  document.getElementById("jobActionOutput").textContent=JSON.stringify(result,null,2);
-  if(result.status===200)document.getElementById("hostJobsRefresh").click();
+  const output=document.getElementById("jobActionOutput");
+  output.textContent="Übertragung an ComfyUI wird geprüft…";
+  try{
+    const result=await api("/api/host/jobs/execute",{host_id,job_id});
+    // The browser confirmation is only approval to TRY; it is NEVER proof
+    // that /prompt was called or ComfyUI accepted a queued workflow.
+    const accepted=result.status===200 &&
+      typeof result.data?.prompt_id==="string" && result.data.prompt_id.length>0;
+    output.textContent=accepted
+      ? "ComfyUI hat den Workflow erhalten. Prompt-ID: "+result.data.prompt_id+
+        "\n"+JSON.stringify(result,null,2)
+      : "NICHT AN COMFYUI ÜBERGEBEN. "+
+        (result.data?.error||result.data?.reason||
+          "Keine bestätigte ComfyUI-Prompt-ID")+
+        "\n"+JSON.stringify(result,null,2);
+    if(accepted)document.getElementById("hostJobsRefresh").click();
+  }catch(error){
+    output.textContent="ComfyUI-Übertragung fehlgeschlagen: "+String(error);
+  }
 };
 document.getElementById("allJobResultsButton").onclick=async()=>{
   const selected=allJobsSelect.value;

@@ -465,7 +465,7 @@ fn use_or_replace_installer_database(
         false
     };
     if encrypted_usable && matches_selected_changes {
-        "reused_encrypted_database"
+        Ok("reused_encrypted_database")
     } else {
         // The same existing-target warning was already confirmed with
         // Weiter. Never discard an old DB: the core archives its actual
@@ -486,7 +486,7 @@ fn use_or_replace_installer_database(
         if !proof.destination_created || !proof.encrypted_destination_verified {
             return Err("Ersetzte Datenbank wurde nicht vollständig verifiziert".into());
         }
-        "replaced_encrypted_database"
+        Ok("replaced_encrypted_database")
     }
 }
 

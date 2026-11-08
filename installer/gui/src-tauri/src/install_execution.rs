@@ -427,15 +427,14 @@ fn use_or_replace_installer_database(
     confirmed: bool,
 ) -> Result<&'static str, String> {
     if !confirmed {
-    return Err("Datenbankersetzung erfordert bestätigtes Weiter".into());
+        return Err("Datenbankersetzung erfordert bestätigtes Weiter".into());
     }
     let meta = fs::symlink_metadata(database)
         .map_err(|_| "Vorhandene Datenbank kann nicht geprüft werden")?;
     if !meta.is_file() || meta.file_type().is_symlink() {
         return Err("Vorhandenes Datenbankziel ist keine reguläre Datei".into());
     }
-    let encrypted_usable =
-        verify_encrypted_database(database, new_password).is_ok();
+    let encrypted_usable = verify_encrypted_database(database, new_password).is_ok();
     // If the selected original is also the target filename, it can be
     // reused only when no migration changes were selected and the file
     // already is a valid SQLCipher database. Otherwise the explicit
@@ -559,7 +558,8 @@ fn execute_install(
             &changes,
             &request.schema_additions,
             request.continue_existing,
-        )?    } else {
+        )?
+    } else {
         make_real_parent(&database)?;
         if let Some(source) = source {
             let proof = export_installer_encrypted_database(
@@ -899,9 +899,11 @@ mod tests {
         let updated = Connection::open(&dest).unwrap();
         updated.pragma_update(None, "key", "VerifiedKey9!").unwrap();
         let disabled: i64 = updated
-            .query_row("SELECT disabled FROM alpha_users WHERE user_id='user.daniel'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT disabled FROM alpha_users WHERE user_id='user.daniel'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(disabled, 1);
         drop(updated);

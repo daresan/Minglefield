@@ -3,6 +3,7 @@ import {
   WIZARD_PAGES, validateInstallSelections, reviewRows,
   isExistingTargetWarning, installationRequest, verifyInstalledRunning
 } from "./installation-review.js";
+import { createInstallationDataEditor } from "./installation-data-edit.js";
 
 const byId = id => document.getElementById(id);
 const pages = [...document.querySelectorAll(".wizard-page")];
@@ -11,6 +12,7 @@ let installing = false;
 let complete = false;
 let databasePathCustomized = false;
 let defaultDirs = null;
+const databaseEditor = createInstallationDataEditor(document, invoke);
 
 function collectForm() {
   return {
@@ -54,16 +56,23 @@ function updateDefaultDatabasePath() {
 
 function refreshReview() {
   const form = collectForm();
+  let staged = { correctionCount: 0, missingCount: 0, schemaChoice: "no" };
+  let sourceIssue = "";
+  try {
+    staged = databaseEditor.selection(form);
+  } catch (error) {
+    sourceIssue = String(error);
+  }
   const summary = byId("install-summary");
   summary.replaceChildren();
-  for (const [name, value] of reviewRows(form)) {
+  for (const [name, value] of reviewRows(form, staged)) {
     const dt = document.createElement("dt");
     dt.textContent = name;
     const dd = document.createElement("dd");
     dd.textContent = value;
     summary.append(dt, dd);
   }
-  const issue = validateInstallSelections(form);
+  const issue = validateInstallSelections(form) || sourceIssue;
   byId("ready-status").textContent = issue || "Bereit zur Installation.";
   byId("ready-status").style.color = issue ? "#f5c898" : "#b1e3cd";
   byId("install-now").disabled =
@@ -79,6 +88,11 @@ function showPage(index) {
   byId("wizard-step-label").textContent = WIZARD_PAGES[index];
   byId("wizard-back").disabled = index === 0 || complete;
   byId("wizard-next").disabled = index === pages.length - 1 || complete;
+  if (index === 4) {
+    databaseEditor.inspect(collectForm()).then(() => {
+      if (wizardIndex === pages.length - 1) refreshReview();
+    });
+  }
   if (index === pages.length - 1) refreshReview();
 }
 
@@ -90,6 +104,7 @@ async function choosePath(id, command) {
       byId(id).value = chosen;
       if (id === "data-dir") updateDefaultDatabasePath();
       if (id === "database-path") databasePathCustomized = true;
+      if (id === "source-database" || (id === "database-path" && !byId("source-database").value.trim())) databaseEditor.clear();
       if (wizardIndex === 5) refreshReview();
     }
   } catch {
@@ -101,7 +116,10 @@ async function choosePath(id, command) {
 async function install(continueExisting) {
   if (installing || complete) return;
   const form = collectForm();
-  const issue = validateInstallSelections(form);
+  let staged;
+  let issue = validateInstallSelections(form);
+  try { staged = databaseEditor.selection(form); }
+  catch (error) { issue = issue || String(error); }
   if (issue || !byId("installation-approved").checked) {
     refreshReview();
     return;
@@ -115,7 +133,7 @@ async function install(continueExisting) {
     "mingleadmin einrichten und Minglefield starten…";
   try {
     const result = verifyInstalledRunning(await invoke("install_minglefield", {
-      request: installationRequest(form, continueExisting)
+      request: installationRequest(form, continueExisting, staged)
     }));
     complete = true;
     byId("installation-status").textContent =
@@ -156,11 +174,13 @@ for (const id of [
 ]) {
   byId(id).addEventListener("input", () => {
     if (id === "database-path") databasePathCustomized = true;
+    if (id === "source-database" || id === "source-password" || (id === "database-path" && !byId("source-database").value.trim()) || (id === "database-password" && !byId("source-database").value.trim())) databaseEditor.clear();
     if (id === "data-dir") updateDefaultDatabasePath();
     if (wizardIndex === 5) refreshReview();
   });
 }
 byId("installation-approved").addEventListener("change", refreshReview);
+byId("inspect-selected-database").addEventListener("click", () => databaseEditor.inspect(collectForm()));
 byId("browse-install-dir").addEventListener("click",
   () => choosePath("install-dir", "browse_directory"));
 byId("browse-data-dir").addEventListener("click",

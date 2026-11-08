@@ -1,3 +1,37 @@
+# M2.11 – einmaliger Shadow-Regressionstestbuild für bestehende Host-ID (2026-11-08)
+
+**Explizit freigegeben:** Genau eine neue portable Paketierung nach grüner CI.
+Der unmittelbar vorherige Testbuild scheiterte beim Anhängen/Übernehmen
+von `mingleadmin`. Der Rust-First-Run-Worker ließ für die Übernahme eines
+bereits verifizierten Hosts nur die ID-Form `local.*` zu, obwohl importierte
+Datenbanken beispielsweise `host.local` verwenden.
+
+**Geprüfter Code-Stand:** `4e4e8c75411285be7b90bedea2f76c706303e2c6`
+auf `feat/game-integration-updates`.
+
+**Gezielter Fix:** `installer/crates/installer-core/src/local_first_run_worker.rs`
+lässt bei `ensure_verified_installer_local_admin` gültige bestehende Host-IDs
+zu. Nur der neue First-Run-Host muss weiterhin `local.*` heißen.
+Vor der Installation muss der Host in der gewählten DB vorhanden sein;
+der installierte Python-Worker bestätigt ebenfalls die Existenz bzw. den
+erlaubten Hostbereich. Kein Rechte-Bypass, keine neue Datenbankänderung.
+Ein Rust-Regressionstest prüft vorhandene `host.local`, ungültige Namen
+und die weiterhin strenge Prüfung bei neuen Hosts.
+
+**Alle relevanten aktuellen CI-Gates erfolgreich:**
+- [Installer Tauri native checks #42451663376](https://github.com/daresan/Minglefield/actions/runs/42451663376) – Erfolg.
+- [Installer Rust checks #42451663337](https://github.com/daresan/Minglefield/actions/runs/42451663337) – Erfolg.
+- [Installer native security checks Windows/macOS #42451663321](https://github.com/daresan/Minglefield/actions/runs/42451663321) – beide erfolgreich, einschließlich realem installierten SQLCipher-/Host-Setup.
+- [AGENTS security guard #42451663329](https://github.com/daresan/Minglefield/actions/runs/42451663329) – Erfolg.
+
+**Abnahme weiterhin nötig:** Eine grüne Paketierung beweist nicht, dass
+der Installer auf Shadow nun erfolgreich durchläuft. Die vorhandenen
+Datenbanken, ursprünglichen User, Hostzuordnungen, SQLCipher-Migration
+und ComfyUI-Jobausführung müssen in der realen Installation erhalten bleiben.
+Keine automatische Wiederholung des Buildvorgangs.
+
+---
+
 # M2.11 – gezielter Shadow-Testbuild nach Host-Admin-Benutzerverwaltung (2026-11-08)
 
 **Explizite Benutzerfreigabe:** Der Eigentümer hat einen neuen portablen

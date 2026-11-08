@@ -193,8 +193,8 @@ mod tests {
             "$src,[ref]$tokens,[ref]$issues);",
             "if($issues.Count -gt 0){exit 1};exit 0"
         );
-        let powershell = super::system_executable("WindowsPowerShell\\v1.0\\powershell.exe")
-            .unwrap();
+        let powershell =
+            super::system_executable("WindowsPowerShell\\v1.0\\powershell.exe").unwrap();
         let mut parser = Command::new(powershell)
             .args(["-NoProfile", "-NonInteractive", "-Command", code])
             .stdin(Stdio::piped())

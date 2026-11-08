@@ -166,8 +166,7 @@ mod tests {
             "$src,[ref]$tokens,[ref]$issues);",
             "if($issues.Count -gt 0){exit 1};exit 0"
         );
-        let powershell = super::powershell_executable()
-            .unwrap();
+        let powershell = super::powershell_executable().unwrap();
         let mut parser = Command::new(powershell)
             .args(["-NoProfile", "-NonInteractive", "-Command", code])
             .stdin(Stdio::piped())

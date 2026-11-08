@@ -1420,13 +1420,13 @@ class HostCommitPolicy:
         Existing accounts and password verifiers are never reset; existing
         Host operators, owners/admins, rules, jobs and remote grants are never
         deleted or reassigned. A new account gains authority only for the
-        explicitly selected local.* Host, not an arbitrary imported Host.
+        explicitly selected existing local-machine Host, even if its older
+        database ID is not in the newer local.* namespace.
         """
         store = self.authority.store
         if (not callable(getattr(store, "_sqlcipher_key_provider", None))
                 or login_user_id != "mingleadmin"
-                or not ident(local_host_id)
-                or not local_host_id.startswith("local.")):
+                or not ident(local_host_id)):
             return HostDecision("denied", "invalid_installer_admin_scope")
         try:
             database_password = store._sqlcipher_key_provider()
@@ -1442,8 +1442,21 @@ class HostCommitPolicy:
             if row is not None:
                 if row[0] != 0:
                     return HostDecision("denied", "existing_installer_admin_disabled")
-                # The account is real. In particular, never rotate its
-                # password/session or create competing owner/Host records.
+                # Never rotate a real account password/session or change an
+                # existing owner/operator. Repair an older installer run that
+                # attached mingleadmin to the wrong Host by ADDING the scoped
+                # admin relation to the explicitly selected existing Host.
+                target = db.execute(
+                    "SELECT 1 FROM alpha_executor_hosts WHERE host_id=? AND active=1",
+                    (local_host_id,),
+                ).fetchone()
+                if target is None:
+                    return HostDecision("denied", "existing_admin_requires_existing_host")
+                if not self._admin(db, local_host_id, login_user_id):
+                    db.execute(
+                        "INSERT OR IGNORE INTO sec01_host_admins(host_id,admin_id) VALUES(?,?)",
+                        (local_host_id, login_user_id),
+                    )
                 return HostDecision("existing", "installer_admin_preserved")
             if (not store._password_ok(login_password)
                     or hmac.compare_digest(
@@ -1466,9 +1479,13 @@ class HostCommitPolicy:
                 ).fetchone():
                     return HostDecision("denied", "orphan_installer_admin_identity")
             host = db.execute(
-                "SELECT host_id FROM alpha_executor_hosts WHERE host_id=?",
+                "SELECT host_id FROM alpha_executor_hosts WHERE host_id=? AND active=1",
                 (local_host_id,),
             ).fetchone()
+            if host is None and not local_host_id.startswith("local."):
+                # New Host identity must always be a freshly generated local.*
+                # name. Legacy custom IDs may ONLY refer to existing Hosts.
+                return HostDecision("denied", "unverified_new_host_identity")
             salt = os.urandom(16)
             db.execute(
                 "INSERT INTO alpha_users(user_id) VALUES(?)",

@@ -1550,8 +1550,7 @@ class HostCommitPolicy:
         except (WorkflowError, ValueError, TypeError):
             return HostDecision("denied", "invalid_workflow_import")
         with self.authority.store._tx() as db:
-            if db.execute("SELECT 1 FROM sec01_host_owners WHERE host_id=? AND owner_id=?",
-                          (host_id, owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return HostDecision("denied", "not_host_owner")
             row = db.execute("SELECT config FROM sec01_host_runtimes WHERE host_id=? AND runtime_id=?",
                              (host_id, runtime_id)).fetchone()
@@ -1575,7 +1574,7 @@ class HostCommitPolicy:
                 or type(enabled) is not bool):
             return HostDecision("denied","invalid_effect_definition")
         with self.authority.store._tx() as db:
-            if db.execute("""SELECT 1 FROM sec01_host_owners\n                WHERE host_id=? AND owner_id=?""",(host_id,owner_id)).fetchone() is None:
+            if not self._admin(db, host_id, owner_id):
                 return HostDecision("denied","not_host_owner")
             db.execute("""INSERT INTO sec01_host_effect_definitions VALUES(?,?,?,?)
                 ON CONFLICT(host_id,effect_id) DO UPDATE SET

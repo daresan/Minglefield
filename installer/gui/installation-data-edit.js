@@ -43,6 +43,7 @@ export function createInstallationDataEditor(doc, invoke) {
   let busy = false;
   let missingObjects = [];
   let incompatibleObjects = [];
+  let hostBindings = [];
   let requestId = 0;
   let didInspect = false;
 
@@ -54,6 +55,15 @@ export function createInstallationDataEditor(doc, invoke) {
     loadedPassword = "";
     missingObjects = [];
     incompatibleObjects = [];
+    hostBindings = [];
+    const select = el("selected-local-host");
+    select.replaceChildren();
+    const placeholder = doc.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Lokalen Host automatisch erkennen";
+    select.append(placeholder);
+    el("host-selection-info").textContent =
+      "Vorhandene Hostzuordnungen werden aus der Datenbank gelesen.";
     error = "";
     didInspect = false;
     busy = false;
@@ -109,6 +119,32 @@ export function createInstallationDataEditor(doc, invoke) {
   function render() {
     renderDomainDatabaseReview(doc, () => edited, onEdit,
       problem => { el("data-editor-status").textContent = String(problem); });
+  }
+
+  function renderHostBindings(hosts) {
+    hostBindings = hosts;
+    const select = el("selected-local-host");
+    select.replaceChildren();
+    const placeholder = doc.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Lokalen Host automatisch erkennen";
+    select.append(placeholder);
+    for (const host of hosts) {
+      const option = doc.createElement("option");
+      option.value = host.hostId;
+      option.textContent = host.hostId + " (Operator: " + host.operatorId + ")";
+      select.append(option);
+    }
+    if (hosts.length === 1) {
+      select.value = hosts[0].hostId;
+    } else {
+      const knownLocal = hosts.filter(host =>
+        host.hostId === "host.local" || host.hostId.startsWith("local."));
+      if (knownLocal.length === 1) select.value = knownLocal[0].hostId;
+    }
+    el("host-selection-info").textContent = hosts.length
+      ? "Die vorhandene Hostzuordnung bleibt erhalten. Bei mehreren Hosts bitte genau den Host dieses PCs wählen, keinen Remote-Host."
+      : "Keine bestehende Hostzuordnung: Der Installer erstellt einen neuen lokalen Host.";
   }
 
   function renderSchema(inspection) {
@@ -174,8 +210,11 @@ export function createInstallationDataEditor(doc, invoke) {
             JSON.stringify(table.columns) !== JSON.stringify(tables.get(table.name)))) {
         throw new Error("Die gespeicherten Tabellen entsprechen nicht der geprüften Schemaübersicht.");
       }
+      const hosts = await invoke("inspect_host_bindings", { path, password: key });
+      if (currentId !== requestId) return;
       original = data;
       edited = createFullReview(data);
+      renderHostBindings(hosts);
       loadedSource = path;
       loadedPassword = key;
       loadedFromOriginalSource = Boolean(form.sourceDatabase);
@@ -229,7 +268,9 @@ export function createInstallationDataEditor(doc, invoke) {
       correctionCount: corrections.length,
       missingCount: missingObjects.length,
       schemaChoice: form.sourceDatabase ? schemaChoice : "no",
-      adminExists: existingInstallerAdmin(original)
+      adminExists: existingInstallerAdmin(original),
+      localHostId: el("selected-local-host").value || null,
+      hostBindings: hostBindings.length
     };
   }
 

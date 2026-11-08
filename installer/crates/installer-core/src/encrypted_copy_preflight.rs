@@ -521,22 +521,13 @@ fn rehearse_encrypted_test_copy_under_with_checkpoints(
 /// product installer operation's scope; a normally reported failure cleans
 /// up only the destination that this exact call created. An existing target
 /// is NEVER silently overwritten; it is handled separately by the caller.
-pub fn export_installer_encrypted_database(
+fn reviewed_installer_memory(
     source_path: &Path,
-    destination_path: &Path,
     existing_password: &str,
-    new_password: &str,
     corrections: &[ReviewCorrection],
     schema_additions: &[String],
-) -> Result<EncryptedTestCopy, String> {
-    validate_new_database_password(new_password)
-        .map_err(|_| "A strong new SQLCipher password is required")?;
-    if !existing_password.is_empty() && existing_password == new_password {
-        return Err("New SQLCipher key must differ from the existing key".into());
-    }
-    let before = preview_migration_destination(source_path, destination_path)
-        .map_err(|_| "Installer encrypted destination is unavailable")?;
-    let (original, inspection) = open_inspected_snapshot(&before.source, existing_password)
+) -> Result<(Connection, Vec<String>), String> {
+    let (original, inspection) = open_inspected_snapshot(source_path, existing_password)
         .map_err(|_| "Cannot inspect original installation source")?;
     if !inspection.integrity_ok || inspection.foreign_key_violations != 0 {
         return Err("Installation source failed integrity verification".into());
@@ -557,47 +548,54 @@ pub fn export_installer_encrypted_database(
     }
     let additions =
         add_selected_registered_schema_objects(&mut memory, schema_additions)?.added_objects;
+    Ok((memory, additions))
+}
 
-    // Validate the parent before writing. Never grant authority because a
-    // receipt exists, and do not change existing database contents.
-    crate::migration_destination::create_missing_destination_parent(&before.destination)?;
-    let checked = preview_migration_destination(&before.source, destination_path)
-        .map_err(|_| "Installer destination changed before export")?;
-    if checked.destination != before.destination {
-        return Err("Installer destination changed before export".into());
-    }
-    let guard = PinnedDestinationParent::open(&checked)?;
-    // Exclusive file creation protects an existing user-selected DB without
-    // introducing receipt-based reservation, source backups or disk staging.
-    let newly_created = fs::OpenOptions::new()
+/// Publish an already reviewed in-memory snapshot under a NEW, unoccupied
+/// filename. Used by both new installations and explicitly approved
+/// replacements. No scratch SQLCipher database or recovery receipt is made.
+fn publish_installer_memory(
+    preview_source: &Path,
+    destination_path: &Path,
+    new_password: &str,
+    memory: &Connection,
+    corrections_count: usize,
+    additions: Vec<String>,
+) -> Result<EncryptedTestCopy, String> {
+    crate::migration_destination::create_missing_destination_parent(destination_path)?;
+    let preview = preview_migration_destination(preview_source, destination_path)
+        .map_err(|_| "Installer encrypted destination is unavailable")?;
+    let guard = PinnedDestinationParent::open(&preview)?;
+    let created = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&before.destination)
+        .open(&preview.destination)
         .map_err(|_| "Selected database destination already exists or is unavailable")?;
-    drop(newly_created);
-
+    drop(created);
     let outcome = (|| -> Result<EncryptedTestCopy, String> {
-        export(&memory, &before.destination, new_password)?;
+        export(memory, &preview.destination, new_password)?;
         let mut header = [0u8; 16];
-        fs::File::open(&before.destination)
+        fs::File::open(&preview.destination)
             .map_err(|_| "Cannot reopen installed SQLCipher destination")?
             .read_exact(&mut header)
             .map_err(|_| "Installed SQLCipher destination header is truncated")?;
         if &header == b"SQLite format 3\0" {
             return Err("Installed destination has an unencrypted SQLite header".into());
         }
-        let verified =
-            Connection::open_with_flags(&before.destination, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|_| "Cannot reopen installed SQLCipher data")?;
+        let verified = Connection::open_with_flags(
+            &preview.destination,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(|_| "Cannot reopen installed SQLCipher data")?;
         verified
             .pragma_update(None, "key", new_password)
             .map_err(|_| "Cannot unlock installed encrypted database")?;
-        let fidelity = verify_snapshot_equality(&memory, &verified)?;
+        let fidelity = verify_snapshot_equality(memory, &verified)?;
         if !fidelity.values_verified {
             return Err("Installed encrypted database differs from reviewed memory copy".into());
         }
         drop(verified);
-        sync_verified_ciphertext_stage(&before.destination)?;
+        sync_verified_ciphertext_stage(&preview.destination)?;
         guard.revalidate_identity()?;
         Ok(EncryptedTestCopy {
             full_source_verified: true,
@@ -605,7 +603,7 @@ pub fn export_installer_encrypted_database(
             wrong_key_rejected: false,
             atomic_temporary_publication_verified: false,
             full_disk_copy_verified: true,
-            staged_changes_verified: corrections.len(),
+            staged_changes_verified: corrections_count,
             staged_values_match_ciphertext: true,
             rows_checked: fidelity.rows_checked,
             tables_checked: fidelity.tables_checked,
@@ -621,11 +619,133 @@ pub fn export_installer_encrypted_database(
         })
     })();
     if outcome.is_err() {
-        // Only the output created by this call can be removed on ordinary
-        // error; the original, other DBs and all older artifacts stay intact.
-        let _ = fs::remove_file(&before.destination);
+        // Remove only the newly created failed output, never the original
+        // source, an archived previous target or old test artifacts.
+        let _ = fs::remove_file(&preview.destination);
     }
     outcome
+}
+
+pub fn export_installer_encrypted_database(
+    source_path: &Path,
+    destination_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    schema_additions: &[String],
+) -> Result<EncryptedTestCopy, String> {
+    validate_new_database_password(new_password)
+        .map_err(|_| "A strong new SQLCipher password is required")?;
+    if !existing_password.is_empty() && existing_password == new_password {
+        return Err("New SQLCipher key must differ from the existing key".into());
+    }
+    // The original must remain untouched. Require a distinct unused output
+    // for normal migration; replacement uses the separate approved path.
+    let _ = preview_migration_destination(source_path, destination_path)
+        .map_err(|_| "Installer encrypted destination is unavailable")?;
+    let (memory, additions) =
+        reviewed_installer_memory(source_path, existing_password, corrections, schema_additions)?;
+    publish_installer_memory(
+        source_path,
+        destination_path,
+        new_password,
+        &memory,
+        corrections.len(),
+        additions,
+    )
+}
+
+/// After explicit existing-target confirmation, preserve the previous
+/// selected file by RENAMING it to a unique named archive, not by making a
+/// second temporary disk copy. Then export the reviewed memory snapshot
+/// directly at the requested destination. The normal error path restores
+/// the original name. No crash-recovery or concurrent-installer machinery.
+///
+/// This also supports a user explicitly choosing the SAME source and target
+/// path: the source is fully loaded and independently checked in RAM before
+/// any rename, and the original is retained as the named previous version.
+pub fn replace_installer_encrypted_database(
+    source_path: &Path,
+    destination_path: &Path,
+    existing_password: &str,
+    new_password: &str,
+    corrections: &[ReviewCorrection],
+    schema_additions: &[String],
+) -> Result<EncryptedTestCopy, String> {
+    validate_new_database_password(new_password)
+        .map_err(|_| "A strong SQLCipher password is required")?;
+    let target_meta = fs::symlink_metadata(destination_path)
+        .map_err(|_| "Selected existing database destination is unavailable")?;
+    if target_meta.file_type().is_symlink() || !target_meta.is_file() {
+        return Err("Selected database destination must be a regular file".into());
+    }
+    let source_id = fs::canonicalize(source_path)
+        .map_err(|_| "Cannot identify selected original database")?;
+    let target_id = fs::canonicalize(destination_path)
+        .map_err(|_| "Cannot identify existing destination database")?;
+    let same_source = source_id == target_id
+        || same_underlying_file(source_path, destination_path)?;
+
+    // All source reads, source-key verification, typed edits and DDL changes
+    // finish before touching the occupied destination pathname.
+    let (memory, additions) =
+        reviewed_installer_memory(source_path, existing_password, corrections, schema_additions)?;
+    let parent = destination_path.parent().ok_or("Destination parent unavailable")?;
+    let file_name = destination_path
+        .file_name()
+        .ok_or("Destination filename unavailable")?
+        .to_string_lossy();
+    let mut archive = None;
+    for _ in 0..8 {
+        let id: String = Connection::open_in_memory()
+            .and_then(|db| {
+                db.query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0))
+            })
+            .map_err(|_| "Cannot choose previous database archive name")?;
+        let candidate = parent.join(format!("{file_name}.minglefield-previous-{id}.sqlite3"));
+        match fs::symlink_metadata(&candidate) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                archive = Some(candidate);
+                break;
+            }
+            Ok(_) => {}
+            Err(_) => return Err("Cannot inspect previous database archive name".into()),
+        }
+    }
+    let archive = archive.ok_or("Cannot choose unique previous database archive name")?;
+    fs::rename(destination_path, &archive)
+        .map_err(|_| "Cannot preserve existing database as previous version")?;
+    let preview_source = if same_source { &archive } else { source_path };
+    let outcome = publish_installer_memory(
+        preview_source,
+        destination_path,
+        new_password,
+        &memory,
+        corrections.len(),
+        additions,
+    );
+    match outcome {
+        Ok(proof) => Ok(proof),
+        Err(reason) => {
+            // Restore only on a normal, reported installation error. If the
+            // new path exists, it was created by publish_installer_memory.
+            if fs::symlink_metadata(destination_path).is_ok()
+                && fs::remove_file(destination_path).is_err()
+            {
+                return Err(format!(
+                    "{reason}; previous database preserved at {} (destination could not be cleared)",
+                    archive.display()
+                ));
+            }
+            fs::rename(&archive, destination_path).map_err(|_| {
+                format!(
+                    "{reason}; previous database preserved at {} (could not restore original name)",
+                    archive.display()
+                )
+            })?;
+            Err(reason)
+        }
+    }
 }
 
 /// Explicitly permitted, experimental encrypted *copy*, not application

@@ -438,7 +438,10 @@ mod tests {
         let request: InstallRequest = serde_json::from_value(input).unwrap();
         assert!(request.approved);
         assert_eq!(request.schema_additions, ["registered_missing_index"]);
-        assert!(matches!(request.corrections[0], StagedCorrection::FullRow { .. }));
+        assert!(matches!(
+            request.corrections[0],
+            StagedCorrection::FullRow { .. }
+        ));
         let changes: Vec<ReviewCorrection> = request
             .corrections
             .drain(..)

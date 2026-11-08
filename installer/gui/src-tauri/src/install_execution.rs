@@ -657,6 +657,58 @@ pub async fn install_minglefield(
 mod tests {
     use super::*;
     #[test]
+    fn existing_encrypted_migration_reuses_matching_edits_without_deleting_user_db() {
+        let root = std::env::temp_dir().join(format!(
+            "minglefield-existing-migration-{}", random_hex().unwrap()
+        ));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("source.sqlite3");
+        let dest = root.join("previous-migration.sqlite3");
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch(
+                "CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);
+                 INSERT INTO alpha_users VALUES('user.daniel',0);"
+            ).unwrap();
+        }
+        {
+            let db = Connection::open(&dest).unwrap();
+            db.pragma_update(None, "key", "VerifiedKey9!").unwrap();
+            db.execute_batch(
+                "CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY,disabled INTEGER);
+                 INSERT INTO alpha_users VALUES('user.daniel',1);"
+            ).unwrap();
+        }
+        let correction = ReviewCorrection::FullRow {
+            table: "alpha_users".into(),
+            row_id: Some("1".into()),
+            columns: vec!["user_id".into(), "disabled".into()],
+            before: vec![
+                RawCell { kind:"text".into(), value:Some("user.daniel".into()) },
+                RawCell { kind:"integer".into(), value:Some("0".into()) },
+            ],
+            after: vec![
+                RawCell { kind:"text".into(), value:Some("user.daniel".into()) },
+                RawCell { kind:"integer".into(), value:Some("1".into()) },
+            ],
+        };
+        let before = fs::read(&dest).unwrap();
+        assert!(verify_existing_migration_intent(
+            &source, "", &dest, "VerifiedKey9!", &[correction.clone()], &[],
+        ).is_ok());
+        assert_eq!(before, fs::read(&dest).unwrap());
+        {
+            let db = Connection::open(&dest).unwrap();
+            db.pragma_update(None, "key", "VerifiedKey9!").unwrap();
+            db.execute("UPDATE alpha_users SET disabled=0", []).unwrap();
+        }
+        assert!(verify_existing_migration_intent(
+            &source, "", &dest, "VerifiedKey9!", &[correction], &[],
+        ).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn real_install_request_accepts_typed_staged_row_changes_and_selected_schema_objects() {
         let input = serde_json::json!({
             "installDir": "/tmp/minglefield-app",

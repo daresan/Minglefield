@@ -1838,6 +1838,108 @@ mod tests {
     }
 
     #[test]
+    fn one_consent_preserves_source_while_applying_edited_rows_and_selected_schema() {
+        // The exact two user-facing page-five options travel through the SAME
+        // real encrypted destination transaction. This is a CI-only test.
+        use crate::migration_dry_run::RawCell;
+        let parent = target_volume_fixture();
+        let source = parent.join("page-five-source.sqlite3");
+        crate::legacy_alpha_constraints::create_registered_alpha_test_file(&source).unwrap();
+        {
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch(
+                "DROP INDEX uq_game_install_one_active_project;
+                 INSERT INTO alpha_users(user_id,disabled) VALUES('old-user',0);",
+            )
+            .unwrap();
+        }
+        let backup = parent.join("page-five-source-backup.sqlite3");
+        let destination = parent.join("page-five-encrypted.sqlite3");
+        let original_bytes = fs::read(&source).unwrap();
+        fs::copy(&source, &backup).unwrap();
+        let correction = ReviewCorrection::FullRow {
+            table: "alpha_users".into(),
+            row_id: Some("1".into()),
+            columns: vec!["user_id".into(), "disabled".into()],
+            before: vec![
+                RawCell {
+                    kind: "text".into(),
+                    value: Some("old-user".into()),
+                },
+                RawCell {
+                    kind: "integer".into(),
+                    value: Some("0".into()),
+                },
+            ],
+            after: vec![
+                RawCell {
+                    kind: "text".into(),
+                    value: Some("old-user".into()),
+                },
+                RawCell {
+                    kind: "integer".into(),
+                    value: Some("1".into()),
+                },
+            ],
+        };
+        let selected = vec!["uq_game_install_one_active_project".to_owned()];
+        let result = execute_reviewed_encrypted_copy_with_schema(
+            &source,
+            &destination,
+            &backup,
+            "",
+            "NewKey123!",
+            &[correction],
+            &selected,
+            EXPERIMENTAL_COPY_CONFIRMATION,
+        )
+        .unwrap();
+        assert!(result.destination_created);
+        assert!(result.encrypted_destination_verified);
+        assert!(result.staged_values_match_ciphertext);
+        assert_eq!(result.staged_changes_verified, 1);
+        assert_eq!(result.added_schema_objects, selected);
+        let target = Connection::open_with_flags(
+            &destination,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        target.pragma_update(None, "key", "NewKey123!").unwrap();
+        let user_disabled: i64 = target
+            .query_row(
+                "SELECT disabled FROM alpha_users WHERE user_id='old-user'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(user_disabled, 1);
+        let registered_index: i64 = target
+            .query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE type='index' AND name='uq_game_install_one_active_project'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(registered_index, 1);
+        drop(target);
+        assert_eq!(fs::read(&source).unwrap(), original_bytes);
+        assert_eq!(fs::read(&backup).unwrap(), original_bytes);
+        let original = Connection::open(&source).unwrap();
+        assert_eq!(
+            original
+                .query_row(
+                    "SELECT disabled FROM alpha_users WHERE user_id='old-user'",
+                    [],
+                    |r| r.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
+        drop(original);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
     fn selected_missing_index_is_written_only_to_new_encrypted_destination() {
         let source_parent = target_volume_fixture();
         let source = source_parent.join("registered-alpha.sqlite3");

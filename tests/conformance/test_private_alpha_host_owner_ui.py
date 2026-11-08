@@ -56,6 +56,31 @@ class OwnerUiTests(unittest.TestCase):
         self.assertNotIn("Host-Admin-Rechte müssen lokal vergeben werden",PAGE)
         self.assertNotIn("Nur Hosts, für die dein angemeldeter Benutzer",PAGE)
 
+    def test_host_admin_user_tab_exists_and_plaintext_cannot_grant(self):
+        from private_alpha_gateway import PAGE
+        for marker in ('id="hostUsersPanel"', 'id="userAdminHost"',
+                       'id="userAdminList"', 'id="userAdminDatabasePassword"',
+                       'id="userAdminGrant"', 'data.tab'):
+            self.assertIn(marker, PAGE)
+        self.assertEqual(self.claim(self.owner)[0], 200)
+        status, users = self.req(
+            "/api/host/admin-users?host_id=host.local", self.owner)
+        self.assertEqual(status, 200)
+        self.assertFalse(any(user["is_host_admin"] for user in users["users"]
+                             if user["user_id"] == "user.other"))
+        self.assertEqual(self.req(
+            "/api/host/admin-users?host_id=host.local", self.other)[0], 403)
+        payload = dict(host_id="host.local", user_ids=["user.other"],
+                       database_password="AnyPassword123!")
+        self.assertEqual(self.req(
+            "/api/host/admin-users", self.owner, payload)[0], 403)
+        self.assertEqual(self.req(
+            "/api/host/admin-users", self.other, payload)[0], 403)
+        with self.store._tx() as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM sec01_host_admins WHERE host_id='host.local'"
+            ).fetchone(), (0,))
+
     def test_owner_can_claim_and_configure_without_admin_fixture(self):
         self.assertEqual(self.claim(self.owner)[0],200)
         self.assertEqual(self.req("/api/hosts",self.owner)[1]["hosts"][0]["host_id"],

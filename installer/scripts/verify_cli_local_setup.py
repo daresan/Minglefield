@@ -254,6 +254,26 @@ finally:
 store=AlphaAuthStore(msg["database"],sqlcipher_key_provider=lambda:msg["key"])
 assert store.login("originalowner",msg["old_login"]) is not None
 assert store.login("mingleadmin",msg["new_login"]) is not None
+from sec01_integrated_alpha_admission import IntegratedAlphaAdmission
+from sec01_host_commit_policy_sim import HostCommitPolicy
+policy=HostCommitPolicy(IntegratedAlphaAdmission(store))
+# Imported local Host admins must have the same job-control permissions
+# the current policy already grants to existing Host owners, without
+# weakening reservation or scheduler checks.
+assert policy.list_host_jobs(msg["host"],"mingleadmin")==[]
+assert policy.list_runtimes(msg["host"],"mingleadmin")==[]
+assert policy.host_settings(msg["host"],"mingleadmin") is not None
+assert policy.evaluate_queued_host_job(
+    msg["host"],"mingleadmin","hostjob.nonexistent",now=0
+).reason=="job_missing"
+assert policy.reserve_waiting_host_job_mock(
+    msg["host"],"mingleadmin","hostjob.nonexistent",now=0
+).reason=="job_not_waiting"
+assert policy.manual_start_mock(
+    msg["host"],"mingleadmin","missing.effect"
+).reason=="effect_unavailable"
+assert policy.list_host_jobs("remote.other","mingleadmin") is None
+assert policy.host_settings("remote.other","mingleadmin") is None
 """
         verify = subprocess.run(
             [str(embedded), "-I", "-B", "-c", verify_existing],

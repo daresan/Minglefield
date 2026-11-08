@@ -40,6 +40,8 @@ RUNTIME_REQUIREMENTS = (
     ("referencing", "0.36.2"),
     ("rpds_py", "0.27.1"),
     ("typing_extensions", "4.15.0"),
+    # Windows lacks system IANA data for the existing Host Rule ZoneInfo calls.
+    ("tzdata", "2026.6"),
 )
 
 # Exact build-time supply-chain inputs, not only version constraints.
@@ -58,6 +60,9 @@ PINNED_APPLICATION_WHEELS = {
         "e8699adbbf8b5c7de96d8ffa0eb5c158b3beafce084968e2ea8bb08c6794dcd0",
     "typing_extensions-4.15.0-py3-none-any.whl":
         "f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548",
+    # Python tzdata 2026.6 wheel SHA-256 published by PyPI, 2026-10-28.
+    "tzdata-2026.6-py2.py3-none-any.whl":
+        "0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec",
     "rpds_py-0.27.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl":
         "cb56c6210ef77caa58e16e8c17d35c63fe3f5b60fd9ba9d424470c3400bcf9ed",
     "rpds_py-0.27.1-cp311-cp311-win_amd64.whl":
@@ -534,7 +539,11 @@ def build_runtime(output, *, native_app_executable=None):
                  "from packaging.version import Version;"
                  "assert Version('1.2') < Version('2.0');"
                  "from jsonschema import Draft202012Validator;"
-                 "Draft202012Validator({'type':'object'}).validate({})"],
+                 "Draft202012Validator({'type':'object'}).validate({});"
+                 "from zoneinfo import ZoneInfo,reset_tzpath;"
+                 "reset_tzpath([]);"
+                 "assert ZoneInfo('Europe/Vienna').key=='Europe/Vienna';"
+                 "assert ZoneInfo('America/New_York').key=='America/New_York'"],
                 capture_output=True, timeout=60, check=False)
             if probe.returncode != 0:
                 raise ValueError("embedded Python/SQLCipher runtime self-test failed")

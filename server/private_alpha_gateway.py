@@ -265,6 +265,17 @@ sind erlaubt; der Wochentag bezeichnet den Starttag.</small></p>
 </details>
 </fieldset>
 </fieldset>
+<section id="hostUsersPanel" class="alphaPanel" hidden aria-label="Host-Benutzerverwaltung">
+<h2>Benutzerverwaltung – Host-Administratoren</h2>
+<p>Bestehende Benutzer können für den ausgewählten Host Administratorrechte erhalten, keine Datenbank-Administratorrechte. Bestehende Host-Eigentümer bleiben unverändert.</p>
+<label>Host <select id="userAdminHost"></select></label>
+<div id="userAdminList" role="group" aria-label="Registrierte Benutzer"></div>
+<label>SQLCipher-Datenbankpasswort zur einmaligen Bestätigung
+<input id="userAdminDatabasePassword" type="password" autocomplete="off"></label>
+<div class="action-row"><button type="button" id="userAdminRefresh">Benutzerliste laden</button>
+<button type="button" id="userAdminGrant">Ausgewählte Benutzer zu Host-Admins machen</button></div>
+<p id="userAdminStatus" role="status" aria-live="polite">Host auswählen.</p>
+</section>
 <section id="gameProjectPanel" class="alphaPanel" hidden>
 <h2>Game-Projekte (P1 Alpha)</h2>
 <p>Projektregistrierung und Einstellungen; keine Dateisystemänderungen.</p>
@@ -321,23 +332,27 @@ const alphaPanels={
   hosts:[alphaSections[7]],
   effects:[document.getElementById("effectPanel")],
   game:[document.getElementById("gameProjectPanel")],
-  documents:[document.getElementById("projectDocsPanel")]
+  documents:[document.getElementById("projectDocsPanel")],
+  users:[document.getElementById("hostUsersPanel")]
 };
 let alphaTab="login";
+let hostAdminEligible=false;
 for(const [key,label] of [["login","Anmeldung"],["hosts","Hosts"],
-                           ["effects","Effekte"],["jobs","Jobs"],["game","Game"],["agents","Agenten"],["documents","README & Lizenz"]]){
+                           ["effects","Effekte"],["jobs","Jobs"],["game","Game"],["agents","Agenten"],["users","Benutzerverwaltung"],["documents","README & Lizenz"]]){
   const button=document.createElement("button");
   button.textContent=label;button.type="button";button.dataset.tab=key;
-  button.onclick=()=>{alphaTab=key;renderAlphaTabs();if(key==="game")loadGameProjects();};
+  button.onclick=()=>{alphaTab=key;renderAlphaTabs();if(key==="game")loadGameProjects();if(key==="users")refreshHostAdminUsers();};
   alphaNav.append(button);
 }
 function renderAlphaTabs(){
   if(!credential&&alphaTab!=="documents")alphaTab="login";
+  if(alphaTab==="users" && (!credential || !hostAdminEligible))alphaTab="login";
   for(const button of alphaNav.querySelectorAll("button")){
+    if(button.dataset.tab==="users")button.hidden=!credential||!hostAdminEligible;
     button.disabled=!credential&&!["login","documents"].includes(button.dataset.tab);
     button.setAttribute("aria-current",button.dataset.tab===alphaTab?"page":"false");
   }
-  for(const section of [...alphaSections,document.getElementById("gameProjectPanel"),document.getElementById("projectDocsPanel")]){
+  for(const section of [...alphaSections,document.getElementById("gameProjectPanel"),document.getElementById("projectDocsPanel"),document.getElementById("hostUsersPanel")]){
     section.classList.add("alphaPanel");
     section.hidden=!(alphaPanels[alphaTab]||[]).includes(section);
   }
@@ -722,6 +737,17 @@ async function refreshHosts(){
   if(result.status!==200){hostOut.textContent=JSON.stringify(result,null,2);return;}
   const previous=hostSelect.value;
   hostCache=result.data.hosts;
+  hostAdminEligible=hostCache.length>0;
+  const userHost=document.getElementById("userAdminHost");
+  const previousUserHost=userHost.value;
+  userHost.replaceChildren();
+  for(const host of hostCache){
+    const option=document.createElement("option");
+    option.value=host.host_id;option.textContent=host.host_id;
+    userHost.append(option);
+  }
+  if(hostCache.some(host=>host.host_id===previousUserHost))userHost.value=previousUserHost;
+  renderAlphaTabs();
   hostSelect.replaceChildren();
   const jobHost=document.getElementById("jobHostSelect");jobHost.replaceChildren();
   const effectHost=document.getElementById("effectHostSelect");effectHost.replaceChildren();
@@ -1148,6 +1174,51 @@ document.getElementById("hostLoadRule").onclick=()=>{
   if(rule)loadRule(rule);
 };
 document.getElementById("hostRefresh").onclick=refreshHosts;
+document.getElementById("userAdminHost").onchange=refreshHostAdminUsers;
+document.getElementById("userAdminRefresh").onclick=refreshHostAdminUsers;
+async function refreshHostAdminUsers(){
+  const host_id=document.getElementById("userAdminHost").value;
+  const list=document.getElementById("userAdminList");
+  const status=document.getElementById("userAdminStatus");
+  list.replaceChildren();
+  document.getElementById("userAdminDatabasePassword").value="";
+  if(!credential||!host_id||!hostCache.some(host=>host.host_id===host_id)){
+    status.textContent="Kein verwalteter Host ausgewählt.";return;
+  }
+  const result=await request("/api/host/admin-users?host_id="+encodeURIComponent(host_id));
+  if(host_id!==document.getElementById("userAdminHost").value)return;
+  if(result.status!==200){status.textContent="Benutzerliste nicht verfügbar (HTTP "+result.status+").";return;}
+  for(const user of result.data.users){
+    const label=document.createElement("label");
+    label.style.display="block";
+    const checkbox=document.createElement("input");
+    checkbox.type="checkbox";checkbox.value=user.user_id;
+    checkbox.checked=user.is_host_admin;
+    checkbox.disabled=user.is_host_admin;
+    label.append(checkbox,document.createTextNode(" "+user.user_id+
+      (user.is_host_owner?" (Host-Eigentümer)":user.is_host_admin?" (Host-Admin)":"")));
+    list.append(label);
+  }
+  status.textContent=result.data.users.length+" aktive Benutzer. Nur neue Host-Admins auswählen.";
+}
+document.getElementById("userAdminGrant").onclick=async()=>{
+  const host_id=document.getElementById("userAdminHost").value;
+  const keyField=document.getElementById("userAdminDatabasePassword");
+  const database_password=keyField.value;
+  keyField.value="";
+  const user_ids=[...document.querySelectorAll("#userAdminList input[type=checkbox]")]
+    .filter(box=>box.checked&&!box.disabled).map(box=>box.value);
+  const status=document.getElementById("userAdminStatus");
+  if(!host_id||!user_ids.length||!database_password){
+    status.textContent="Neue Benutzer auswählen und Datenbankpasswort einmal eingeben.";return;
+  }
+  status.textContent="Host-Rechte werden gespeichert…";
+  const result=await api("/api/host/admin-users", {host_id,user_ids,database_password});
+  status.textContent=result.status===200
+    ?"Host-Adminrechte für den ausgewählten Host gespeichert."
+    :"Host-Adminrechte nicht geändert: "+(result.data?.error||result.data?.reason||result.status);
+  if(result.status===200)await refreshHostAdminUsers();
+};
 document.getElementById("claimHostButton").onclick=async()=>{
   const secret=hv("claimSecret");
   document.getElementById("claimSecret").value="";
@@ -1749,7 +1820,7 @@ document.getElementById("gameProjectCreate").onclick=async()=>{
 };
 document.getElementById("logout").onclick=async()=>{
   const result=credential?await request("/api/logout",{method:"POST"}):{status:401};
-  credential="";expiresAt=0;updateStatus();
+  credential="";expiresAt=0;hostAdminEligible=false;updateStatus();
   show(result,"login");
 };
 </script></html>"""

@@ -20,6 +20,21 @@ test("six-page product wizard has administrator on five and review only on six",
   assert.equal((html.match(/class="wizard-page"/g) || []).length, 6);
   assert.ok(html.indexOf('data-wizard-page="admin"') <
             html.indexOf('data-wizard-page="review"'));
+  // Page 5 retains the complete original domain editor and schema review;
+  // mingleadmin is ADDED to this page, never substituted for the editor.
+  const pageFive = html.split('data-wizard-page="admin"')[1]
+    .split('data-wizard-page="review"')[0];
+  for (const id of [
+    "inspect-selected-database", "data-editor", "data-fields-login",
+    "data-fields-hosts", "data-fields-effects", "data-fields-jobs",
+    "data-fields-games", "data-fields-all", "schema-audit-status",
+    "missing-schema-choices", "schema-migrate-choice",
+    "admin-login", "admin-password", "admin-password-confirm"
+  ]) assert.ok(pageFive.includes('id="' + id + '"'), id);
+  assert.ok(pageFive.includes("Sollen die fehlenden registrierten Schemaobjekte"));
+  const pageSix = html.split('data-wizard-page="review"')[1];
+  assert.ok(!pageSix.includes('id="data-editor"'));
+  assert.ok(!pageSix.includes('id="admin-password"'));
   assert.equal((html.match(/type="checkbox"/g) || []).length, 1);
   assert.ok(html.includes("Installation durchführen"));
   assert.ok(html.includes('id="install-now"'));
@@ -38,12 +53,23 @@ test("one click owns all operations and the summary contains no credentials", ()
     sourceDatabase: form.sourceDatabase, sourcePassword: form.sourcePassword,
     databasePassword: form.databasePassword, loginPassword: form.loginPassword,
     loginPasswordConfirmation: form.loginPasswordConfirmation,
+    corrections: [], schemaAdditions: [],
     approved: true, continueExisting: true
   });
   assert.equal(isExistingTargetWarning("INSTALL_WARNING_EXISTING: caution"), true);
   assert.equal(isExistingTargetWarning("other error"), false);
   assert.ok(!JSON.stringify(reviewRows(form)).includes(form.databasePassword));
   assert.ok(!JSON.stringify(reviewRows(form)).includes(form.loginPassword));
+  const selected = {
+    corrections: [{ kind: "full_row", table: "alpha_users", row_id: "1", columns: ["disabled"], before: [{kind:"integer",value:"0"}], after:[{kind:"integer",value:"1"}] }],
+    schemaAdditions: ["registered_index"]
+  };
+  const receipt = installationRequest(form, false, selected);
+  assert.deepEqual(receipt.corrections, selected.corrections);
+  assert.deepEqual(receipt.schemaAdditions, selected.schemaAdditions);
+  assert.ok(JSON.stringify(reviewRows(form, {
+    correctionCount: 1, missingCount: 1, schemaChoice: "yes"
+  })).includes("Schema migrieren"));
 });
 test("existing mingleadmin can be preserved without resetting credentials", () => {
   const existing = { ...form, loginPassword: "", loginPasswordConfirmation: "" };

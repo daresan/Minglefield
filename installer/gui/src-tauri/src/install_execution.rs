@@ -39,6 +39,7 @@ pub struct InstallRequest {
     login_password_confirmation: String,
     corrections: Vec<StagedCorrection>,
     schema_additions: Vec<String>,
+    local_host_id: Option<String>,
     approved: bool,
     continue_existing: bool,
 }
@@ -177,10 +178,14 @@ fn automatic_source_backup(source: &Path, destination: &Path) -> Result<PathBuf,
     Ok(backup)
 }
 
-/// Prefer a single previously recorded local.* Host. Never silently bind a
-/// new administrator to arbitrary imported/remote host IDs. An additional
-/// local.* Host is prepared when no unique local mapping is known.
-fn selected_local_host(database: &Path, password: &str) -> Result<String, String> {
+/// Reuse the actual Host ID stored in the imported SQLCipher database.
+/// Older installations use 'host.local' or custom IDs, not necessarily local.*.
+/// If several IDs exist, page 5 requires a deliberate local-Host choice.
+fn selected_local_host(
+    database: &Path,
+    password: &str,
+    requested: Option<&str>,
+) -> Result<String, String> {
     let db = Connection::open_with_flags(
         database,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -194,23 +199,91 @@ fn selected_local_host(database: &Path, password: &str) -> Result<String, String
             [],
             |row| row.get(0),
         )
-        .map_err(|_| "Lokale Hostzuordnungen können nicht geprüft werden")?;
+        .map_err(|_| "Hostzuordnungen können nicht geprüft werden")?;
+    let mut hosts = Vec::new();
     if exists > 0 {
         let mut stmt = db
-            .prepare(
-                "SELECT host_id FROM alpha_executor_hosts WHERE host_id LIKE 'local.%' ORDER BY host_id LIMIT 2",
-            )
-            .map_err(|_| "Lokale Hostzuordnungen können nicht gelesen werden")?;
-        let hosts = stmt
+            .prepare("SELECT host_id FROM alpha_executor_hosts WHERE active=1 ORDER BY host_id")
+            .map_err(|_| "Hostzuordnungen können nicht gelesen werden")?;
+        hosts = stmt
             .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|_| "Lokale Hostzuordnungen können nicht gelesen werden")?
+            .map_err(|_| "Hostzuordnungen können nicht gelesen werden")?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| "Lokale Hostzuordnungen sind unvollständig")?;
-        if hosts.len() == 1 {
-            return Ok(hosts[0].clone());
+            .map_err(|_| "Hostzuordnungen sind unvollständig")?;
+    }
+    if let Some(id) = requested.filter(|id| !id.is_empty()) {
+        if hosts.iter().any(|existing| existing == id) {
+            return Ok(id.to_owned());
+        }
+        return Err("Der ausgewählte lokale Host existiert nicht in der Datenbank".into());
+    }
+    match hosts.as_slice() {
+        [] => Ok(format!("local.{}", random_hex()?)),
+        [only] => Ok(only.clone()),
+        _ => {
+            let local: Vec<_> = hosts
+                .iter()
+                .filter(|id| id.as_str() == "host.local" || id.starts_with("local."))
+                .collect();
+            if local.len() == 1 {
+                Ok(local[0].to_string())
+            } else {
+                Err("Mehrere Hosts: Auf Seite 5 bitte den lokalen Host auswählen".into())
+            }
         }
     }
-    Ok(format!("local.{}", random_hex()?))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExistingHostBinding {
+    host_id: String,
+    operator_id: String,
+}
+
+/// Show stored Host IDs without claiming, modifying, or creating a Host.
+/// Read-only inspection never authorizes a remote Host.
+#[tauri::command]
+pub async fn inspect_host_bindings(
+    path: String,
+    password: String,
+) -> Result<Vec<ExistingHostBinding>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = absolute_path(&path)?;
+        let db = Connection::open_with_flags(
+            file,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|_| "Datenbank kann nicht geöffnet werden")?;
+        db.pragma_update(None, "key", &password)
+            .map_err(|_| "Datenbank kann nicht entschlüsselt werden")?;
+        let exists: i64 = db
+            .query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='alpha_executor_hosts'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| "Hosttabelle kann nicht geprüft werden")?;
+        if exists == 0 {
+            return Ok(Vec::new());
+        }
+        let mut stmt = db
+            .prepare("SELECT host_id,operator_id FROM alpha_executor_hosts WHERE active=1 ORDER BY host_id")
+            .map_err(|_| "Hosttabelle kann nicht gelesen werden")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(ExistingHostBinding {
+                    host_id: row.get(0)?,
+                    operator_id: row.get(1)?,
+                })
+            })
+            .map_err(|_| "Hosttabelle kann nicht gelesen werden")?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| "Hosttabelle ist unvollständig")?;
+        Ok(rows)
+    })
+    .await
+    .map_err(|_| "Hostübersicht konnte nicht erstellt werden".to_owned())?
 }
 
 fn execute_install(
@@ -324,7 +397,11 @@ fn execute_install(
             })?;
     verify_installed_application(Path::new(&installed.install_dir), digest)
         .map_err(|_| "Installierte Minglefield-Dateien konnten nicht verifiziert werden")?;
-    let local_host_id = selected_local_host(&database, &request.database_password)?;
+    let local_host_id = selected_local_host(
+        &database,
+        &request.database_password,
+        request.local_host_id.as_deref(),
+    )?;
     let admin = ensure_verified_installer_local_admin(
         Path::new(&installed.install_dir),
         &database,
@@ -432,6 +509,7 @@ mod tests {
                 "after": [{"kind":"integer","value":"1"}]
             }],
             "schemaAdditions": ["registered_missing_index"],
+            "localHostId": "host.local",
             "approved": true,
             "continueExisting": false
         });

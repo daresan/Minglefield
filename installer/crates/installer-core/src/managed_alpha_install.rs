@@ -511,6 +511,29 @@ mod tests {
     }
 
     #[test]
+    fn empty_or_nonconflicting_existing_directory_needs_no_overwrite_confirmation() {
+        let (root, source, digest) = fixture();
+        let empty = root.join("Programs-Minglefield");
+        fs::create_dir(&empty).unwrap();
+        let (_, reused) = install_or_reuse_application(&source, &empty, &digest, false).unwrap();
+        assert!(!reused);
+        assert!(verify_installed_application(&empty, &digest).is_ok());
+
+        let with_user_files = root.join("Minglefield-with-unrelated-files");
+        fs::create_dir(&with_user_files).unwrap();
+        fs::write(with_user_files.join("private.sqlite3"), b"user database").unwrap();
+        let (_, reused) =
+            install_or_reuse_application(&source, &with_user_files, &digest, false).unwrap();
+        assert!(!reused);
+        assert_eq!(
+            fs::read(with_user_files.join("private.sqlite3")).unwrap(),
+            b"user database"
+        );
+        assert!(verify_installed_application(&with_user_files, &digest).is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn existing_directory_update_archives_old_managed_entries_without_touching_user_files() {
         let (root, source, digest) = fixture();
         let dest = root.join("existing-with-user-files");

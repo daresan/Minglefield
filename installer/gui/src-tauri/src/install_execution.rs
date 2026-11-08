@@ -427,72 +427,68 @@ fn use_or_replace_installer_database(
     confirmed: bool,
 ) -> Result<&'static str, String> {
     if !confirmed {
-        return Err("Datenbankersetzung erfordert bestätigtes Weiter".into());
+    return Err("Datenbankersetzung erfordert bestätigtes Weiter".into());
     }
-        let meta = fs::symlink_metadata(database)
-            .map_err(|_| "Vorhandene Datenbank kann nicht geprüft werden")?;
-        if !meta.is_file() || meta.file_type().is_symlink() {
-            return Err("Vorhandenes Datenbankziel ist keine reguläre Datei".into());
+    let meta = fs::symlink_metadata(database)
+        .map_err(|_| "Vorhandene Datenbank kann nicht geprüft werden")?;
+    if !meta.is_file() || meta.file_type().is_symlink() {
+        return Err("Vorhandenes Datenbankziel ist keine reguläre Datei".into());
+    }
+    let encrypted_usable =
+        verify_encrypted_database(database, new_password).is_ok();
+    // If the selected original is also the target filename, it can be
+    // reused only when no migration changes were selected and the file
+    // already is a valid SQLCipher database. Otherwise the explicit
+    // Weiter approval authorizes an archive-and-replace in place.
+    let source_is_target = source.is_some_and(|chosen| {
+        chosen == database
+            || (fs::canonicalize(chosen).is_ok()
+                && fs::canonicalize(chosen).ok() == fs::canonicalize(database).ok())
+    });
+    let has_migration_changes = !changes.is_empty() || !schema_additions.is_empty();
+    let matches_selected_changes = if !encrypted_usable {
+        false
+    } else if !has_migration_changes {
+        true
+    } else if source_is_target {
+        false
+    } else if let Some(source_path) = source {
+        verify_existing_migration_intent(
+            source_path,
+            old_password,
+            database,
+            new_password,
+            changes,
+            schema_additions,
+        )
+        .is_ok()
+    } else {
+        false
+    };
+    if encrypted_usable && matches_selected_changes {
+        "reused_encrypted_database"
+    } else {
+        // The same existing-target warning was already confirmed with
+        // Weiter. Never discard an old DB: the core archives its actual
+        // file by rename, then exports a reviewed memory snapshot to the
+        // original filename (also works for source == destination).
+        let original = source.ok_or(
+            "Vorhandene Datenbank kann ohne ausgewählte Migrationquelle nicht ersetzt werden",
+        )?;
+        let proof = replace_installer_encrypted_database(
+            original,
+            database,
+            old_password,
+            new_password,
+            changes,
+            schema_additions,
+        )
+        .map_err(|reason| format!("Bestätigte Datenbankersetzung fehlgeschlagen: {reason}"))?;
+        if !proof.destination_created || !proof.encrypted_destination_verified {
+            return Err("Ersetzte Datenbank wurde nicht vollständig verifiziert".into());
         }
-        let encrypted_usable =
-            verify_encrypted_database(database, new_password).is_ok();
-        // If the selected original is also the target filename, it can be
-        // reused only when no migration changes were selected and the file
-        // already is a valid SQLCipher database. Otherwise the explicit
-        // Weiter approval authorizes an archive-and-replace in place.
-        let source_is_target = source.is_some_and(|chosen| {
-            chosen == database
-                || (fs::canonicalize(chosen).is_ok()
-                    && fs::canonicalize(chosen).ok() == fs::canonicalize(database).ok())
-        });
-        let has_migration_changes = !changes.is_empty() || !schema_additions.is_empty();
-        let matches_selected_changes = if !encrypted_usable {
-            false
-        } else if !has_migration_changes {
-            true
-        } else if source_is_target {
-            false
-        } else if let Some(source_path) = source {
-            verify_existing_migration_intent(
-                source_path,
-                old_password,
-                database,
-                new_password,
-                changes,
-                schema_additions,
-            )
-            .is_ok()
-        } else {
-            false
-        };
-        if encrypted_usable && matches_selected_changes {
-            "reused_encrypted_database"
-        } else {
-            // The same existing-target warning was already confirmed with
-            // Weiter. Never discard an old DB: the core archives its actual
-            // file by rename, then exports a reviewed memory snapshot to the
-            // original filename (also works for source == destination).
-            if !confirmed {
-                return Err("Datenbankersetzung erfordert bestätigtes Weiter".into());
-            }
-            let original = source.ok_or(
-                "Vorhandene Datenbank kann ohne ausgewählte Migrationquelle nicht ersetzt werden",
-            )?;
-            let proof = replace_installer_encrypted_database(
-                original,
-                database,
-                old_password,
-                new_password,
-                changes,
-                schema_additions,
-            )
-            .map_err(|reason| format!("Bestätigte Datenbankersetzung fehlgeschlagen: {reason}"))?;
-            if !proof.destination_created || !proof.encrypted_destination_verified {
-                return Err("Ersetzte Datenbank wurde nicht vollständig verifiziert".into());
-            }
-            "replaced_encrypted_database"
-        }
-
+        "replaced_encrypted_database"
+    }
 }
 
 fn execute_install(
@@ -867,11 +863,56 @@ mod tests {
             "",
             &dest,
             "VerifiedKey9!",
-            &[correction],
+            std::slice::from_ref(&correction),
             &[],
         )
         .is_err());
         assert_eq!(fs::read(&dest).unwrap(), mismatched_bytes);
+        assert_eq!(
+            fs::read(root.join("minglefield-target-stale.receipt")).unwrap(),
+            b"old-operation"
+        );
+        assert!(use_or_replace_installer_database(
+            Some(&source),
+            &dest,
+            "",
+            "VerifiedKey9!",
+            std::slice::from_ref(&correction),
+            &[],
+            false,
+        )
+        .is_err());
+        assert_eq!(fs::read(&dest).unwrap(), mismatched_bytes);
+        assert_eq!(
+            use_or_replace_installer_database(
+                Some(&source),
+                &dest,
+                "",
+                "VerifiedKey9!",
+                std::slice::from_ref(&correction),
+                &[],
+                true,
+            )
+            .unwrap(),
+            "replaced_encrypted_database"
+        );
+        let updated = Connection::open(&dest).unwrap();
+        updated.pragma_update(None, "key", "VerifiedKey9!").unwrap();
+        let disabled: i64 = updated
+            .query_row("SELECT disabled FROM alpha_users WHERE user_id='user.daniel'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(disabled, 1);
+        drop(updated);
+        let preserved = fs::read_dir(&root)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.to_string_lossy().contains(".minglefield-previous-"))
+            .collect::<Vec<_>>();
+        assert_eq!(preserved.len(), 1);
+        assert_eq!(fs::read(&preserved[0]).unwrap(), mismatched_bytes);
         assert_eq!(
             fs::read(root.join("minglefield-target-stale.receipt")).unwrap(),
             b"old-operation"

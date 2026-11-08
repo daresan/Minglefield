@@ -212,3 +212,17 @@ soll Anwendungsdateien, nicht persönliche DB-Daten entfernen.
 Regressionsfall.**
 
 **Produktfreigabe: NEIN. Shadow-Abnahme: OFFEN.**
+
+---
+
+# M2.11 – ausdrücklich freigegebener neuer Shadow-Abnahmebuild (2026-11-08)
+
+**Benutzerfreigabe im aktuellen Chat:** Einmalige neue portable Paketierung nach Prüfung der aktuellen CI-Gates. Keine automatische Wiederholung, kein Merge, kein Release und kein Deployment.
+
+**Geprüfter Quellstand:** `37607f5564ddb2c6925ed8433b2ecb01c30c9e86` auf `feat/game-integration-updates`.
+
+**Erfolgreiche relevante CI:** Installer Rust #42487408204 und Installer native security #42487408220 auf obigem Commit; Tauri native #42487328178 auf Parent `05f9e710`; Frontend #42487158266 auf vorhergehendem `3121fb7f`; AGENTS security #42487408215 auf obigem Commit.
+
+**Abnahmeumfang:** Alle zuletzt dokumentierten M2.11-Korrekturen einschließlich Ignorieren alter Test-/Recovery-Artefakte, Nutzung bestehender leerer App-Verzeichnisse, Seite-6-Installation über Weiter und automatischem Schließen nach optional verifiziertem App-Start; zusätzlich DB-Auswahl/-Ersetzung, Host-ID/`mingleadmin`, stabiler Port 8765, Windows-Appregistrierung/Tray sowie Daten-/Schema-Erhalt.
+
+**Grenze:** Ein grüner Paketierungsworkflow ist keine Windows-Shadow-Abnahme und keine Bestätigung der echten ComfyUI-`/prompt`-Ausführung. Keine Benutzeraufforderung zu internen Migrationstests.

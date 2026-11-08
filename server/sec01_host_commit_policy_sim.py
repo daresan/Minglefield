@@ -2168,7 +2168,7 @@ class HostCommitPolicy:
                 or len(set(user_ids)) != len(user_ids)
                 or type(database_password) is not str
                 or not 1 <= len(database_password) <= 4096
-                or "\\x00" in database_password):
+                or "\x00" in database_password):
             return HostDecision("denied", "invalid_host_admin_request")
         store = self.authority.store
         provider = getattr(store, "_sqlcipher_key_provider", None)

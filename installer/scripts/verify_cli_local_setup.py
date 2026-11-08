@@ -311,6 +311,78 @@ assert policy.host_settings("remote.other","mingleadmin") is None
         assert previous_owner_digest != fingerprint(imported_db), (
             "additive administrator was not actually persisted"
         )
+        # Regression for the previously observed Shadow bug: mingleadmin
+        # already exists, but an earlier installer attached it to a separate
+        # accidental Host. Re-running must ADD the correct existing local
+        # host's scoped admin role without rotating either password or
+        # changing the original owner's or the accidental Host's grants.
+        wrong_host = root / "private-data" / "legacy-wrong-admin-host.sqlite3"
+        shutil.copyfile(imported_db, wrong_host)
+        wrong_host_fixture = r"""
+import json,sys
+from pathlib import Path
+msg=json.loads(sys.stdin.buffer.read())
+sys.path.insert(0,str(Path(msg["installed"])/"application"/"server"))
+from alpha_sqlcipher_runtime import open_alpha_database
+db=open_alpha_database(msg["database"],key_provider=lambda:msg["key"])
+try:
+    db.execute("DELETE FROM sec01_host_admins WHERE host_id='host.local' AND admin_id='mingleadmin'")
+    db.execute("INSERT INTO alpha_executor_hosts(host_id,operator_id,active) VALUES('local.wrong-installer-host','mingleadmin',1)")
+    db.execute("INSERT INTO sec01_host_owners(host_id,owner_id) VALUES('local.wrong-installer-host','mingleadmin')")
+    db.commit()
+finally:
+    db.close()
+"""
+        stale = subprocess.run(
+            [str(embedded), "-I", "-B", "-c", wrong_host_fixture],
+            input=json.dumps({
+                "installed": str(installed), "database": str(wrong_host),
+                "key": TEST_DB_KEY,
+            }), capture_output=True, encoding="utf-8", errors="replace",
+            check=False, timeout=90,
+        )
+        assert stale.returncode == 0, "could not prepare misplaced Host identity fixture"
+        repaired = subprocess.run(
+            [str(embedded), "-I", "-B",
+             str(installed / "application/server/installed_alpha_first_run.py")],
+            input=json.dumps({
+                **ensure, "databasePath": str(wrong_host), "loginPassword": "",
+            }), capture_output=True, encoding="utf-8", errors="replace",
+            check=False, timeout=90,
+        )
+        assert repaired.returncode == 0, "existing mingleadmin Host binding not repaired"
+        assert json.loads(repaired.stdout)["status"] == "local_host_admin_existing"
+        verify_repair = r"""
+import json,sys
+from pathlib import Path
+msg=json.loads(sys.stdin.buffer.read())
+sys.path.insert(0,str(Path(msg["installed"])/"application"/"server"))
+from alpha_sqlcipher_runtime import open_alpha_database
+from private_alpha_auth import AlphaAuthStore
+db=open_alpha_database(msg["database"],key_provider=lambda:msg["key"])
+try:
+    assert db.execute("SELECT owner_id FROM sec01_host_owners WHERE host_id='host.local'").fetchone()==("originalowner",)
+    assert db.execute("SELECT admin_id FROM sec01_host_admins WHERE host_id='host.local' AND admin_id='mingleadmin'").fetchone()==("mingleadmin",)
+    assert db.execute("SELECT owner_id FROM sec01_host_owners WHERE host_id='local.wrong-installer-host'").fetchone()==("mingleadmin",)
+    assert db.execute("SELECT count(*) FROM alpha_users").fetchone()[0]==2
+finally:
+    db.close()
+store=AlphaAuthStore(msg["database"],sqlcipher_key_provider=lambda:msg["key"])
+assert store.login("originalowner",msg["old_login"]) is not None
+assert store.login("mingleadmin",msg["new_login"]) is not None
+"""
+        confirmed = subprocess.run(
+            [str(embedded), "-I", "-B", "-c", verify_repair],
+            input=json.dumps({
+                "installed": str(installed), "database": str(wrong_host),
+                "key": TEST_DB_KEY, "old_login": TEST_LOGIN,
+                "new_login": ensure["loginPassword"],
+            }), capture_output=True, encoding="utf-8", errors="replace",
+            check=False, timeout=90,
+        )
+        assert confirmed.returncode == 0, (
+            "existing host.owner plus restored mingleadmin must survive re-install"
+        )
         has_native = manifest.get("nativeApplicationIncluded") is True
         if require_native:
             assert has_native, "build did not include OS-native Minglefield executable"

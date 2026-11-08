@@ -30,6 +30,7 @@ body>p{color:var(--muted)}#alphaNav{display:flex;flex-wrap:wrap;gap:8px;margin:2
 #alphaNav button{flex:1 1 120px;background:transparent;border-color:transparent;box-shadow:none;font-weight:600}
 #alphaNav button[aria-current=page]{background:#2a426b;color:#fff;border-color:#5579b3}
 #alphaNav button:disabled{opacity:.4;cursor:not-allowed}
+#alphaNav button[hidden]{display:none!important}
 .alphaPanel[hidden]{display:none!important}
 fieldset{margin:0 0 22px;border:1px solid var(--line);border-radius:18px;padding:clamp(16px,2.5vw,28px);display:flex;flex-wrap:wrap;gap:16px;align-items:end;background:var(--surface);box-shadow:0 12px 30px #0002;min-width:0}
 fieldset fieldset{background:#10192b;box-shadow:none;margin:8px 0}

@@ -7,7 +7,9 @@ use minglefield_installer_core::database_password::validate_new_database_passwor
 use minglefield_installer_core::db_operations::{
     create_new_encrypted_database, verify_encrypted_database, NEW_ENCRYPTED_DATABASE_CONFIRMATION,
 };
-use minglefield_installer_core::encrypted_copy_preflight::export_installer_encrypted_database;
+use minglefield_installer_core::encrypted_copy_preflight::{
+    export_installer_encrypted_database, replace_installer_encrypted_database,
+};
 use minglefield_installer_core::legacy_alpha_constraints::audit_registered_alpha_schema_objects;
 use minglefield_installer_core::local_first_run_worker::ensure_verified_installer_local_admin;
 use minglefield_installer_core::managed_alpha_install::{
@@ -126,7 +128,7 @@ fn check_existing_paths(
     let db = metadata_if_present(database)?.is_some();
     if (populated_app || db) && !continued {
         return Err(
-            "INSTALL_WARNING_EXISTING: Bereits vorhandene Anwendungs- oder Datenbankziele. Weiter übernimmt eine gültige verschlüsselte DB unverändert und sichert vor dem Ersetzen alter Programmdateien deren bisherigen Inhalt; Abbruch verändert nichts."
+            "INSTALL_WARNING_EXISTING: Im gewählten Ziel liegen Anwendungsdateien oder bereits die ausgewählte Datenbankdatei. Weiter verwendet passende Datenbanken wieder oder ersetzt ein abweichendes Datenbankziel nach Erhalt seiner Vorgängerversion. Vorhandene Programmdateien werden vor Aktualisierung gesichert. Abbruch verändert nichts."
                 .into(),
         );
     }
@@ -478,18 +480,25 @@ fn execute_install(
         if !meta.is_file() || meta.file_type().is_symlink() {
             return Err("Vorhandenes Datenbankziel ist keine reguläre Datei".into());
         }
-        verify_encrypted_database(&database, &request.database_password)
-            .map_err(|_| "Vorhandene DB nicht mit dem angegebenen SQLCipher-Schlüssel verwendbar; anderer Zielpfad nötig")?;
-        if !changes.is_empty() || !request.schema_additions.is_empty() {
-            let source_path = source.as_deref().ok_or(
-                "Für die Übernahme vorgemerkter Korrekturen ist eine Quelldatenbank erforderlich",
-            )?;
-            if source_path == database.as_path() {
-                return Err(
-                    "Quelle und verschlüsselte Zieldatenbank dürfen nicht dieselbe Datei sein"
-                        .into(),
-                );
-            }
+        let encrypted_usable =
+            verify_encrypted_database(&database, &request.database_password).is_ok();
+        // If the selected original is also the target filename, it can be
+        // reused only when no migration changes were selected and the file
+        // already is a valid SQLCipher database. Otherwise the explicit
+        // Weiter approval authorizes an archive-and-replace in place.
+        let source_is_target = source.as_deref().is_some_and(|chosen| {
+            chosen == database.as_path()
+                || (fs::canonicalize(chosen).is_ok()
+                    && fs::canonicalize(chosen).ok() == fs::canonicalize(&database).ok())
+        });
+        let has_migration_changes = !changes.is_empty() || !request.schema_additions.is_empty();
+        let matches_selected_changes = if !encrypted_usable {
+            false
+        } else if !has_migration_changes {
+            true
+        } else if source_is_target {
+            false
+        } else if let Some(source_path) = source.as_deref() {
             verify_existing_migration_intent(
                 source_path,
                 &request.source_password,
@@ -497,9 +506,38 @@ fn execute_install(
                 &request.database_password,
                 &changes,
                 &request.schema_additions,
+            )
+            .is_ok()
+        } else {
+            false
+        };
+        if encrypted_usable && matches_selected_changes {
+            "reused_encrypted_database"
+        } else {
+            // The same existing-target warning was already confirmed with
+            // Weiter. Never discard an old DB: the core archives its actual
+            // file by rename, then exports a reviewed memory snapshot to the
+            // original filename (also works for source == destination).
+            if !request.continue_existing {
+                return Err("Datenbankersetzung erfordert bestätigtes Weiter".into());
+            }
+            let original = source.as_deref().ok_or(
+                "Vorhandene Datenbank kann ohne ausgewählte Migrationquelle nicht ersetzt werden",
             )?;
+            let proof = replace_installer_encrypted_database(
+                original,
+                &database,
+                &request.source_password,
+                &request.database_password,
+                &changes,
+                &request.schema_additions,
+            )
+            .map_err(|reason| format!("Bestätigte Datenbankersetzung fehlgeschlagen: {reason}"))?;
+            if !proof.destination_created || !proof.encrypted_destination_verified {
+                return Err("Ersetzte Datenbank wurde nicht vollständig verifiziert".into());
+            }
+            "replaced_encrypted_database"
         }
-        "reused_encrypted_database"
     } else {
         make_real_parent(&database)?;
         if let Some(source) = source {

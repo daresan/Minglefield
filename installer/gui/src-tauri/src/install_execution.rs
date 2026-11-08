@@ -469,6 +469,9 @@ fn execute_install(
     )?;
     ensure_native_starter(&package, digest).map_err(str::to_owned)?;
     // Everything above is read-only and requires no user-run probes.
+    // Existing test receipts, backup directories and stage leftovers are
+    // deliberately irrelevant to the normal end-user installation. Only
+    // the actual selected destination DB filename determines reuse.
     let database_action = if existing_db {
         let meta = fs::symlink_metadata(&database)
             .map_err(|_| "Vorhandene Datenbank kann nicht geprüft werden")?;

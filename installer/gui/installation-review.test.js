@@ -35,9 +35,16 @@ test("six-page product wizard has administrator on five and review only on six",
   const pageSix = html.split('data-wizard-page="review"')[1];
   assert.ok(!pageSix.includes('id="data-editor"'));
   assert.ok(!pageSix.includes('id="admin-password"'));
-  assert.equal((html.match(/type="checkbox"/g) || []).length, 1);
+  assert.equal((html.match(/type="checkbox"/g) || []).length, 2);
   assert.ok(html.includes("Installation durchführen"));
-  assert.ok(html.includes('id="install-now"'));
+  assert.ok(html.includes('id="start-after-install" checked'));
+  assert.ok(!html.includes('id="install-now"'));
+  assert.ok(!html.includes('id="existing-continue"'));
+  const js = readFileSync(new URL("./main.js", import.meta.url), "utf8");
+  assert.ok(js.includes('byId("wizard-next").addEventListener("click"'));
+  assert.ok(js.includes('install(!byId("existing-warning").hidden)'));
+  assert.ok(js.includes('await invoke("close_completed_setup_manager")'));
+  assert.ok(!js.includes('byId("install-now")'));
   assert.ok(html.includes('id="license-text"'));
   assert.ok(html.includes('id="readme-text"'));
   for (const forbidden of [
@@ -55,7 +62,7 @@ test("one click owns all operations and the summary contains no credentials", ()
     loginPasswordConfirmation: form.loginPasswordConfirmation,
     corrections: [], schemaAdditions: [],
     localHostId: null,
-    approved: true, continueExisting: true
+    approved: true, continueExisting: true, launchAfterInstall: true
   });
   assert.equal(isExistingTargetWarning("INSTALL_WARNING_EXISTING: caution"), true);
   assert.equal(isExistingTargetWarning("other error"), false);
@@ -71,6 +78,9 @@ test("one click owns all operations and the summary contains no credentials", ()
   assert.ok(JSON.stringify(reviewRows(form, {
     correctionCount: 1, missingCount: 1, schemaChoice: "yes"
   })).includes("Schema migrieren"));
+  const notStarted = { ...form, launchAfterInstall: false };
+  assert.equal(installationRequest(notStarted).launchAfterInstall, false);
+  assert.ok(JSON.stringify(reviewRows(notStarted)).includes("später manuell starten"));
 });
 test("existing mingleadmin can be preserved without resetting credentials", () => {
   const existing = { ...form, loginPassword: "", loginPasswordConfirmation: "" };
@@ -93,4 +103,16 @@ test("running-app receipt must be encrypted loopback, not a false install succes
     { localUrl: "http://0.0.0.0:42900/" }, { localAdminUser: "globaladmin" },
     { nativeProcessId: 0 }
   ]) assert.throws(() => verifyInstalledRunning({ ...good, ...invalid }));
+  const installedOnly = {
+    ...good, status: "minglefield_installed",
+    nativeApplicationRunning: false, nativeProcessId: null, localUrl: null
+  };
+  assert.deepEqual(verifyInstalledRunning(installedOnly), installedOnly);
+  for (const invalid of [
+    { status: "minglefield_installed_and_running" },
+    { nativeApplicationRunning: true },
+    { nativeProcessId: 12 },
+    { localUrl: "http://127.0.0.1:8765/" },
+    { encryptedDatabaseVerified: false }
+  ]) assert.throws(() => verifyInstalledRunning({ ...installedOnly, ...invalid }));
 });

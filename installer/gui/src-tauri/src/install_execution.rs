@@ -883,13 +883,16 @@ mod tests {
         )
         .is_err());
         assert_eq!(fs::read(&dest).unwrap(), mismatched_bytes);
+        // This deliberately minimal pre-Alpha fixture tests replacing a
+        // destination with a different encryption key. The complete
+        // registered-Alpha edit/schema replacement is tested in core.
         assert_eq!(
             use_or_replace_installer_database(
                 Some(&source),
                 &dest,
                 "",
-                "VerifiedKey9!",
-                std::slice::from_ref(&correction),
+                "NewReplacementCipherKey123!",
+                &[],
                 &[],
                 true,
             )
@@ -897,7 +900,9 @@ mod tests {
             "replaced_encrypted_database"
         );
         let updated = Connection::open(&dest).unwrap();
-        updated.pragma_update(None, "key", "VerifiedKey9!").unwrap();
+        updated
+            .pragma_update(None, "key", "NewReplacementCipherKey123!")
+            .unwrap();
         let disabled: i64 = updated
             .query_row(
                 "SELECT disabled FROM alpha_users WHERE user_id='user.daniel'",
@@ -905,7 +910,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(disabled, 1);
+        assert_eq!(disabled, 0);
         drop(updated);
         let preserved = fs::read_dir(&root)
             .unwrap()

@@ -132,7 +132,13 @@ fn call_local_admin_worker(
     {
         return Err("Invalid separate installer administrator credentials".into());
     }
-    if !valid_login_name(local_host_id) || !local_host_id.starts_with("local.") {
+    // A new Host must use a freshly generated local.* ID. An installer
+    // migration may instead attach mingleadmin to an already verified Host
+    // with its original ID (e.g. host.local). The trusted Python worker
+    // rejects non-local IDs unless they exist and are active in the target DB.
+    if !valid_login_name(local_host_id)
+        || (!allow_existing && !local_host_id.starts_with("local."))
+    {
         return Err("First-run Host ID must be local and well formed".into());
     }
     let (python, worker) = runtime_paths(installed);
@@ -255,6 +261,54 @@ mod tests {
         .is_err());
         assert!(!valid_login_name("../mingleadmin"));
         assert!(valid_login_name("mingleadmin"));
+    }
+
+    #[test]
+    fn installer_can_reuse_existing_legacy_host_id_but_new_host_stays_local_scoped() {
+        let installed = Path::new("/path/that/cannot/exist/managed-alpha");
+        let database = Path::new("/path/that/cannot/exist/secret.db");
+
+        // The installation path must reach the worker-file check for an
+        // existing legacy ID instead of failing at local.* validation.
+        let existing = ensure_verified_installer_local_admin(
+            installed,
+            database,
+            "DatabaseCipher123!",
+            "SeparateLogin123!",
+            "host.local",
+        );
+        assert_eq!(
+            existing.unwrap_err(),
+            "Managed local first-run worker is unavailable"
+        );
+
+        // Only the trusted installed worker can verify whether this existing
+        // Host ID really belongs to the selected encrypted database.
+        let invalid = ensure_verified_installer_local_admin(
+            installed,
+            database,
+            "DatabaseCipher123!",
+            "SeparateLogin123!",
+            "../remote",
+        );
+        assert_eq!(
+            invalid.unwrap_err(),
+            "First-run Host ID must be local and well formed"
+        );
+
+        // The original first-run path may not invent a new legacy/non-local ID.
+        let fresh = run_verified_local_first_run_worker(
+            installed,
+            database,
+            "DatabaseCipher123!",
+            "mingleadmin",
+            "SeparateLogin123!",
+            "host.local",
+        );
+        assert_eq!(
+            fresh.unwrap_err(),
+            "First-run Host ID must be local and well formed"
+        );
     }
 
     #[test]

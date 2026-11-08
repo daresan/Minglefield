@@ -1053,6 +1053,53 @@ mod tests {
         path
     }
     #[test]
+    fn product_install_exports_one_db_ignoring_old_receipts_and_stage_garbage() {
+        let source = fixture(false);
+        let original = fs::read(&source).unwrap();
+        let output_dir = source.with_extension("product-migration");
+        fs::create_dir(&output_dir).unwrap();
+        let target = output_dir.join("minglefield.sqlite3");
+
+        // These are residues from OLD installations, not active operations.
+        // The normal installer must never read, delete or honor them.
+        let prior_receipt = crate::recovery_receipt::reserved_destination_receipt_path(&target)
+            .unwrap();
+        fs::write(&prior_receipt, b"unrelated old test receipt").unwrap();
+        fs::create_dir(output_dir.join("minglefield-stage-old")).unwrap();
+        fs::create_dir(output_dir.join(".minglefield-source-backup-old")).unwrap();
+
+        let report = export_installer_encrypted_database(
+            &source, &target, "", "StrongCipherPass123!", &[], &[],
+        )
+        .unwrap();
+        assert!(report.destination_created && report.encrypted_destination_verified);
+        assert!(report.full_disk_copy_verified && report.staged_values_match_ciphertext);
+        assert!(report.recovery_operation_id.is_none());
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read(&prior_receipt).unwrap(), b"unrelated old test receipt");
+
+        let original_db = Connection::open(&source).unwrap();
+        let output = Connection::open(&target).unwrap();
+        output.pragma_update(None, "key", "StrongCipherPass123!").unwrap();
+        let data = verify_snapshot_equality(&original_db, &output).unwrap();
+        assert!(data.values_verified);
+        drop(output);
+        drop(original_db);
+        let before = fs::read(&target).unwrap();
+        assert!(export_installer_encrypted_database(
+            &source, &target, "", "StrongCipherPass123!", &[], &[]
+        ).is_err());
+        assert_eq!(fs::read(&target).unwrap(), before);
+        let entries: Vec<_> = fs::read_dir(&output_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries.len(), 4); // output DB + three untouched old artifacts
+        fs::remove_dir_all(output_dir).unwrap();
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
     fn plaintext_source_exports_to_encrypted_file_and_cleans() {
         let path = fixture(false);
         let original = fs::read(&path).unwrap();

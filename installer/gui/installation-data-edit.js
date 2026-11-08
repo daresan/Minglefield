@@ -19,6 +19,19 @@ export function selectedDataCorrections(original, edited) {
   return fullRowCorrections(original, edited);
 }
 
+// The new-local-admin password is mandatory when no existing account was
+// observed in the read-only user inventory. This prevents initiating an
+// installation that would necessarily fail after copying application files.
+export function existingInstallerAdmin(review) {
+  const table = review?.tables?.find(item => item.name === "alpha_users");
+  if (!table) return false;
+  const index = table.columns.indexOf("user_id");
+  return index >= 0 && table.rows.some(row =>
+    row.cells[index]?.kind === "text" &&
+    row.cells[index]?.value === "mingleadmin"
+  );
+}
+
 export function createInstallationDataEditor(doc, invoke) {
   const el = id => doc.getElementById(id);
   let original = null;
@@ -215,7 +228,8 @@ export function createInstallationDataEditor(doc, invoke) {
       schemaAdditions,
       correctionCount: corrections.length,
       missingCount: missingObjects.length,
-      schemaChoice: form.sourceDatabase ? schemaChoice : "no"
+      schemaChoice: form.sourceDatabase ? schemaChoice : "no",
+      adminExists: existingInstallerAdmin(original)
     };
   }
 

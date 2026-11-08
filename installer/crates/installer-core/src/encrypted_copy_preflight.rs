@@ -553,13 +553,7 @@ pub fn export_installer_encrypted_database(
     if !corrections.is_empty() {
         validate_alpha_schema(&inspection)?;
         let counts = table_counts(&original, &inspection)?;
-        apply_staged_to_isolated_copy(
-            &mut memory,
-            &inspection,
-            &counts,
-            corrections,
-            true,
-        )?;
+        apply_staged_to_isolated_copy(&mut memory, &inspection, &counts, corrections, true)?;
     }
     let additions =
         add_selected_registered_schema_objects(&mut memory, schema_additions)?.added_objects;
@@ -592,11 +586,9 @@ pub fn export_installer_encrypted_database(
         if &header == b"SQLite format 3\0" {
             return Err("Installed destination has an unencrypted SQLite header".into());
         }
-        let verified = Connection::open_with_flags(
-            &before.destination,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .map_err(|_| "Cannot reopen installed SQLCipher data")?;
+        let verified =
+            Connection::open_with_flags(&before.destination, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|_| "Cannot reopen installed SQLCipher data")?;
         verified
             .pragma_update(None, "key", new_password)
             .map_err(|_| "Cannot unlock installed encrypted database")?;
@@ -1062,33 +1054,49 @@ mod tests {
 
         // These are residues from OLD installations, not active operations.
         // The normal installer must never read, delete or honor them.
-        let prior_receipt = crate::recovery_receipt::reserved_destination_receipt_path(&target)
-            .unwrap();
+        let prior_receipt =
+            crate::recovery_receipt::reserved_destination_receipt_path(&target).unwrap();
         fs::write(&prior_receipt, b"unrelated old test receipt").unwrap();
         fs::create_dir(output_dir.join("minglefield-stage-old")).unwrap();
         fs::create_dir(output_dir.join(".minglefield-source-backup-old")).unwrap();
 
         let report = export_installer_encrypted_database(
-            &source, &target, "", "StrongCipherPass123!", &[], &[],
+            &source,
+            &target,
+            "",
+            "StrongCipherPass123!",
+            &[],
+            &[],
         )
         .unwrap();
         assert!(report.destination_created && report.encrypted_destination_verified);
         assert!(report.full_disk_copy_verified && report.staged_values_match_ciphertext);
         assert!(report.recovery_operation_id.is_none());
         assert_eq!(fs::read(&source).unwrap(), original);
-        assert_eq!(fs::read(&prior_receipt).unwrap(), b"unrelated old test receipt");
+        assert_eq!(
+            fs::read(&prior_receipt).unwrap(),
+            b"unrelated old test receipt"
+        );
 
         let original_db = Connection::open(&source).unwrap();
         let output = Connection::open(&target).unwrap();
-        output.pragma_update(None, "key", "StrongCipherPass123!").unwrap();
+        output
+            .pragma_update(None, "key", "StrongCipherPass123!")
+            .unwrap();
         let data = verify_snapshot_equality(&original_db, &output).unwrap();
         assert!(data.values_verified);
         drop(output);
         drop(original_db);
         let before = fs::read(&target).unwrap();
         assert!(export_installer_encrypted_database(
-            &source, &target, "", "StrongCipherPass123!", &[], &[]
-        ).is_err());
+            &source,
+            &target,
+            "",
+            "StrongCipherPass123!",
+            &[],
+            &[]
+        )
+        .is_err());
         assert_eq!(fs::read(&target).unwrap(), before);
         let entries: Vec<_> = fs::read_dir(&output_dir)
             .unwrap()

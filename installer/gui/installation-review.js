@@ -40,7 +40,7 @@ export function reviewRows(form, staged = { correctionCount: 0, missingCount: 0,
     ["Lokaler Host", staged.localHostId ||
       (staged.hostBindings ? "Automatisch aus bestehenden Hosts" : "Neuen lokalen Host anlegen")],
     ["Neues Loginpasswort", form.loginPassword ? "Festgelegt (nur bei Neuanlage)" : "Vorhandenen Zugang verwenden"],
-    ["Anwendungsstart", "Automatisch nach erfolgreicher Installation"]
+    ["Anwendungsstart", form.launchAfterInstall === false ? "Nein – später manuell starten" : "Ja – nach erfolgreicher Installation"]
   ];
 }
 export function isExistingTargetWarning(error) {
@@ -57,22 +57,30 @@ export function installationRequest(form, continueExisting = false, staged = { c
     corrections: staged.corrections,
     schemaAdditions: staged.schemaAdditions,
     localHostId: staged.localHostId || null,
-    approved: true, continueExisting
+    approved: true, continueExisting,
+    launchAfterInstall: form.launchAfterInstall !== false
   };
 }
 export function verifyInstalledRunning(result) {
-  if (!result || result.status !== "minglefield_installed_and_running" ||
-      result.encryptedDatabaseVerified !== true ||
-      result.nativeApplicationRunning !== true ||
-      result.localAdminUser !== "mingleadmin" ||
-      typeof result.installedApplication !== "string" ||
-      typeof result.encryptedDatabase !== "string" ||
-      typeof result.localHostId !== "string" ||
-      !/^[a-zA-Z0-9._-]+$/.test(result.localHostId) ||
-      !Number.isInteger(result.nativeProcessId) || result.nativeProcessId < 1 ||
-      typeof result.localUrl !== "string" ||
-      !/^http:\/\/127\.0\.0\.1:[0-9]{1,5}\/$/.test(result.localUrl)) {
-    throw new Error("Die native Minglefield-Installation und ihr Start wurden nicht vollständig bestätigt.");
+  const commonVerified = result &&
+    result.encryptedDatabaseVerified === true &&
+    result.localAdminUser === "mingleadmin" &&
+    typeof result.installedApplication === "string" &&
+    typeof result.encryptedDatabase === "string" &&
+    typeof result.localHostId === "string" &&
+    /^[a-zA-Z0-9._-]+$/.test(result.localHostId);
+  const launched = result &&
+    result.status === "minglefield_installed_and_running" &&
+    result.nativeApplicationRunning === true &&
+    Number.isInteger(result.nativeProcessId) && result.nativeProcessId > 0 &&
+    typeof result.localUrl === "string" &&
+    /^http:\/\/127\.0\.0\.1:[0-9]{1,5}\/$/.test(result.localUrl);
+  const installedOnly = result &&
+    result.status === "minglefield_installed" &&
+    result.nativeApplicationRunning === false &&
+    result.nativeProcessId === null && result.localUrl === null;
+  if (!commonVerified || (!launched && !installedOnly)) {
+    throw new Error("Die native Minglefield-Installation wurde nicht vollständig bestätigt.");
   }
   return result;
 }

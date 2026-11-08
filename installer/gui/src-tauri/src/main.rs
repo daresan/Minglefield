@@ -643,6 +643,7 @@ fn main() {
             alpha_first_run::activate_first_run_local_admin,
             alpha_first_run::start_installed_minglefield,
             install_execution::install_minglefield,
+            install_execution::inspect_host_bindings,
             browse_directory,
             browse_sqlite_file,
             preview_install_plan

@@ -840,6 +840,7 @@ mod tests {
             db.pragma_update(None, "key", "VerifiedKey9!").unwrap();
             db.execute("UPDATE alpha_users SET disabled=0", []).unwrap();
         }
+        let mismatched_bytes = fs::read(&dest).unwrap();
         assert!(verify_existing_migration_intent(
             &source,
             "",
@@ -849,6 +850,11 @@ mod tests {
             &[],
         )
         .is_err());
+        assert_eq!(fs::read(&dest).unwrap(), mismatched_bytes);
+        assert_eq!(
+            fs::read(root.join("minglefield-target-stale.receipt")).unwrap(),
+            b"old-operation"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

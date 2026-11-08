@@ -7,9 +7,7 @@ use minglefield_installer_core::database_password::validate_new_database_passwor
 use minglefield_installer_core::db_operations::{
     create_new_encrypted_database, verify_encrypted_database, NEW_ENCRYPTED_DATABASE_CONFIRMATION,
 };
-use minglefield_installer_core::encrypted_copy_preflight::{
-    execute_reviewed_encrypted_copy_with_schema, EXPERIMENTAL_COPY_CONFIRMATION,
-};
+use minglefield_installer_core::encrypted_copy_preflight::export_installer_encrypted_database;
 use minglefield_installer_core::legacy_alpha_constraints::audit_registered_alpha_schema_objects;
 use minglefield_installer_core::local_first_run_worker::ensure_verified_installer_local_admin;
 use minglefield_installer_core::managed_alpha_install::{
@@ -156,48 +154,8 @@ fn random_hex() -> Result<String, String> {
         .map_err(|_| "Zufallskennung nicht verfügbar".into())
 }
 
-/// An automatically made private backup is an internal migration safeguard,
-/// never a user-run test, and remains available to inspect after failure.
-/// Its source database bytes are never published in an installer artifact.
-fn automatic_source_backup(source: &Path, destination: &Path) -> Result<PathBuf, String> {
-    let original =
-        fs::symlink_metadata(source).map_err(|_| "Quelldatenbank kann nicht geöffnet werden")?;
-    if !original.is_file() || original.file_type().is_symlink() {
-        return Err("Quelldatenbank muss eine reguläre Datei sein".into());
-    }
-    let parent = destination
-        .parent()
-        .ok_or("Datenbankziel ohne Elternordner")?;
-    let backup_dir = parent.join(format!(".minglefield-source-backup-{}", random_hex()?));
-    #[cfg(unix)]
-    let mut builder = fs::DirBuilder::new();
-    #[cfg(not(unix))]
-    let builder = fs::DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder
-        .create(&backup_dir)
-        .map_err(|_| "Private Migrationssicherung kann nicht angelegt werden")?;
-    let backup = backup_dir.join("source.sqlite3");
-    fs::copy(source, &backup)
-        .map_err(|_| "Quelldatenbank kann nicht unabhängig gesichert werden")?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&backup, fs::Permissions::from_mode(0o600))
-            .map_err(|_| "Private Migrationssicherung kann nicht geschützt werden")?;
-    }
-    fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&backup)
-        .and_then(|file| file.sync_all())
-        .map_err(|_| "Migrationssicherung konnte nicht geschrieben werden")?;
-    Ok(backup)
-}
+// The normal product installer uses an inspected in-memory source snapshot.
+// No disk source backup or crash-recovery receipt is created by this path.
 
 /// Reuse the actual Host ID stored in the imported SQLCipher database.
 /// Older installations use 'host.local' or custom IDs, not necessarily local.*.
@@ -542,16 +500,13 @@ fn execute_install(
     } else {
         make_real_parent(&database)?;
         if let Some(source) = source {
-            let backup = automatic_source_backup(&source, &database)?;
-            let proof = execute_reviewed_encrypted_copy_with_schema(
+            let proof = export_installer_encrypted_database(
                 &source,
                 &database,
-                &backup,
                 &request.source_password,
                 &request.database_password,
                 &changes,
                 &request.schema_additions,
-                EXPERIMENTAL_COPY_CONFIRMATION,
             )
             .map_err(|reason| format!("Datenbankmigration fehlgeschlagen: {reason}"))?;
             if !proof.destination_created || !proof.encrypted_destination_verified {

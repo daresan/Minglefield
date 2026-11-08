@@ -985,6 +985,60 @@ mod tests {
     }
 
     #[test]
+    fn consented_gui_replaces_the_same_plaintext_source_and_target_path() {
+        let root = std::env::temp_dir().join(format!(
+            "minglefield-same-name-gui-{}",
+            random_hex().unwrap()
+        ));
+        fs::create_dir(&root).unwrap();
+        let database = root.join("minglefield.sqlite3");
+        {
+            let db = Connection::open(&database).unwrap();
+            db.execute_batch(
+                "CREATE TABLE alpha_users(user_id TEXT PRIMARY KEY);
+                 INSERT INTO alpha_users VALUES('user.daniel');",
+            )
+            .unwrap();
+        }
+        let original = fs::read(&database).unwrap();
+        assert!(use_or_replace_installer_database(
+            Some(&database),
+            &database,
+            "",
+            "EncryptedDatabasePassword123!",
+            &[],
+            &[],
+            false,
+        )
+        .is_err());
+        assert_eq!(fs::read(&database).unwrap(), original);
+        assert_eq!(
+            use_or_replace_installer_database(
+                Some(&database),
+                &database,
+                "",
+                "EncryptedDatabasePassword123!",
+                &[],
+                &[],
+                true,
+            )
+            .unwrap(),
+            "replaced_encrypted_database"
+        );
+        verify_encrypted_database(&database, "EncryptedDatabasePassword123!").unwrap();
+        let archives = fs::read_dir(&root)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.to_string_lossy().contains(".minglefield-previous-"))
+            .collect::<Vec<_>>();
+        assert_eq!(archives.len(), 1);
+        assert_eq!(fs::read(&archives[0]).unwrap(), original);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn single_consent_and_existing_path_warning_are_independent_of_user_tests() {
         let root = std::env::temp_dir().join(format!(
             "mf-single-install-review-{}",

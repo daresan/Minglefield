@@ -444,7 +444,7 @@ mod tests {
         ));
         let changes: Vec<ReviewCorrection> = request
             .corrections
-            .drain(..)
+            .into_iter()
             .map(ReviewCorrection::from)
             .collect();
         assert_eq!(changes.len(), 1);

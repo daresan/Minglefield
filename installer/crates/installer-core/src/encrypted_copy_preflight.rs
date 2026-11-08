@@ -1301,9 +1301,11 @@ mod tests {
         let source = parent.join("source.sqlite3");
         {
             let db = Connection::open(&source).unwrap();
-            db.execute_batch("CREATE TABLE source_data(value INTEGER);
-                              INSERT INTO source_data VALUES(7);")
-                .unwrap();
+            db.execute_batch(
+                "CREATE TABLE source_data(value INTEGER);
+                              INSERT INTO source_data VALUES(7);",
+            )
+            .unwrap();
         }
         // The destination filename is a prohibited source-sidecar name.
         // Validation after temporary archival fails, so the ordinary
@@ -1311,9 +1313,11 @@ mod tests {
         let target = parent.join("source.sqlite3-wal");
         {
             let db = Connection::open(&target).unwrap();
-            db.execute_batch("CREATE TABLE previous_data(value INTEGER);
-                              INSERT INTO previous_data VALUES(9);")
-                .unwrap();
+            db.execute_batch(
+                "CREATE TABLE previous_data(value INTEGER);
+                              INSERT INTO previous_data VALUES(9);",
+            )
+            .unwrap();
         }
         let original = fs::read(&target).unwrap();
         let source_bytes = fs::read(&source).unwrap();

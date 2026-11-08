@@ -213,6 +213,62 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn actual_windows_uninstaller_removes_only_managed_fixture_files() {
+        use super::UNINSTALL_SCRIPT;
+        use std::fs;
+        use std::process::Command;
+        let root = std::env::temp_dir().join(format!(
+            "minglefield-uninstall-fixture-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(root.join("application")).unwrap();
+        let managed_exe = root.join("Minglefield.exe");
+        fs::write(&managed_exe, b"fixture").unwrap();
+        let managed_file = root.join("application/app.py");
+        fs::write(&managed_file, b"fixture").unwrap();
+        let user_data = root.join("my-private-project.sqlite3");
+        fs::write(&user_data, b"do not delete").unwrap();
+        let foreign_file = root.join("not-installed-by-minglefield.txt");
+        fs::write(&foreign_file, b"keep this").unwrap();
+        let inventory = root.join("managed-file-inventory.json");
+        fs::write(
+            &inventory,
+            r#"{"schemaVersion":1,"files":{"Minglefield.exe":{},"application/app.py":{}}}"#,
+        )
+        .unwrap();
+        let manifest = root.join("runtime-manifest.json");
+        fs::write(&manifest, b"fixture").unwrap();
+        let uninstaller = root.join("MinglefieldUninstall.ps1");
+        fs::write(&uninstaller, UNINSTALL_SCRIPT).unwrap();
+        let outcome = Command::new(
+            super::system_executable("WindowsPowerShell\\v1.0\\powershell.exe")
+                .unwrap(),
+        )
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(&uninstaller)
+        .status()
+        .unwrap();
+        assert!(outcome.success(), "Windows app uninstaller could not complete");
+        assert!(!managed_exe.exists());
+        assert!(!managed_file.exists());
+        assert!(!inventory.exists());
+        assert!(!manifest.exists());
+        assert!(user_data.exists());
+        assert_eq!(fs::read(&user_data).unwrap(), b"do not delete");
+        assert_eq!(fs::read(&foreign_file).unwrap(), b"keep this");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn script_is_bound_to_the_managed_application_and_preserves_user_data() {
         use super::UNINSTALL_SCRIPT;
         assert!(UNINSTALL_SCRIPT.contains("managed-file-inventory.json"));

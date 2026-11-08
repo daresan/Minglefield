@@ -243,8 +243,7 @@ mod tests {
         let uninstaller = root.join("MinglefieldUninstall.ps1");
         fs::write(&uninstaller, UNINSTALL_SCRIPT).unwrap();
         let outcome = Command::new(
-            super::system_executable("WindowsPowerShell\\v1.0\\powershell.exe")
-                .unwrap(),
+            super::system_executable("WindowsPowerShell\\v1.0\\powershell.exe").unwrap(),
         )
         .args([
             "-NoProfile",
@@ -256,7 +255,10 @@ mod tests {
         .arg(&uninstaller)
         .status()
         .unwrap();
-        assert!(outcome.success(), "Windows app uninstaller could not complete");
+        assert!(
+            outcome.success(),
+            "Windows app uninstaller could not complete"
+        );
         assert!(!managed_exe.exists());
         assert!(!managed_file.exists());
         assert!(!inventory.exists());

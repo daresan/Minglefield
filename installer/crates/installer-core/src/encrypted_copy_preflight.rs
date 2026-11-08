@@ -582,11 +582,9 @@ fn publish_installer_memory(
         if &header == b"SQLite format 3\0" {
             return Err("Installed destination has an unencrypted SQLite header".into());
         }
-        let verified = Connection::open_with_flags(
-            &preview.destination,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .map_err(|_| "Cannot reopen installed SQLCipher data")?;
+        let verified =
+            Connection::open_with_flags(&preview.destination, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|_| "Cannot reopen installed SQLCipher data")?;
         verified
             .pragma_update(None, "key", new_password)
             .map_err(|_| "Cannot unlock installed encrypted database")?;
@@ -643,8 +641,12 @@ pub fn export_installer_encrypted_database(
     // for normal migration; replacement uses the separate approved path.
     let _ = preview_migration_destination(source_path, destination_path)
         .map_err(|_| "Installer encrypted destination is unavailable")?;
-    let (memory, additions) =
-        reviewed_installer_memory(source_path, existing_password, corrections, schema_additions)?;
+    let (memory, additions) = reviewed_installer_memory(
+        source_path,
+        existing_password,
+        corrections,
+        schema_additions,
+    )?;
     publish_installer_memory(
         source_path,
         destination_path,
@@ -679,18 +681,24 @@ pub fn replace_installer_encrypted_database(
     if target_meta.file_type().is_symlink() || !target_meta.is_file() {
         return Err("Selected database destination must be a regular file".into());
     }
-    let source_id = fs::canonicalize(source_path)
-        .map_err(|_| "Cannot identify selected original database")?;
+    let source_id =
+        fs::canonicalize(source_path).map_err(|_| "Cannot identify selected original database")?;
     let target_id = fs::canonicalize(destination_path)
         .map_err(|_| "Cannot identify existing destination database")?;
-    let same_source = source_id == target_id
-        || same_underlying_file(source_path, destination_path)?;
+    let same_source =
+        source_id == target_id || same_underlying_file(source_path, destination_path)?;
 
     // All source reads, source-key verification, typed edits and DDL changes
     // finish before touching the occupied destination pathname.
-    let (memory, additions) =
-        reviewed_installer_memory(source_path, existing_password, corrections, schema_additions)?;
-    let parent = destination_path.parent().ok_or("Destination parent unavailable")?;
+    let (memory, additions) = reviewed_installer_memory(
+        source_path,
+        existing_password,
+        corrections,
+        schema_additions,
+    )?;
+    let parent = destination_path
+        .parent()
+        .ok_or("Destination parent unavailable")?;
     let file_name = destination_path
         .file_name()
         .ok_or("Destination filename unavailable")?
@@ -698,9 +706,7 @@ pub fn replace_installer_encrypted_database(
     let mut archive = None;
     for _ in 0..8 {
         let id: String = Connection::open_in_memory()
-            .and_then(|db| {
-                db.query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0))
-            })
+            .and_then(|db| db.query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0)))
             .map_err(|_| "Cannot choose previous database archive name")?;
         let candidate = parent.join(format!("{file_name}.minglefield-previous-{id}.sqlite3"));
         match fs::symlink_metadata(&candidate) {
@@ -1236,9 +1242,11 @@ mod tests {
             let db = Connection::open(&target).unwrap();
             db.pragma_update(None, "key", "PreviousPassword123!")
                 .unwrap();
-            db.execute_batch("CREATE TABLE old_user_data(notes TEXT);
-                              INSERT INTO old_user_data VALUES('retain as archive');")
-                .unwrap();
+            db.execute_batch(
+                "CREATE TABLE old_user_data(notes TEXT);
+                              INSERT INTO old_user_data VALUES('retain as archive');",
+            )
+            .unwrap();
         }
         let original_target = fs::read(&target).unwrap();
         let original_source = fs::read(&source).unwrap();
@@ -1262,9 +1270,11 @@ mod tests {
         assert_eq!(archived.len(), 1);
         assert_eq!(fs::read(&archived[0]).unwrap(), original_target);
         let old = Connection::open(&archived[0]).unwrap();
-        old.pragma_update(None, "key", "PreviousPassword123!").unwrap();
+        old.pragma_update(None, "key", "PreviousPassword123!")
+            .unwrap();
         assert_eq!(
-            old.query_row("SELECT notes FROM old_user_data", [], |row| row.get::<_, String>(0))
+            old.query_row("SELECT notes FROM old_user_data", [], |row| row
+                .get::<_, String>(0))
                 .unwrap(),
             "retain as archive"
         );
@@ -1273,9 +1283,11 @@ mod tests {
         new.pragma_update(None, "key", "NewCipherPassword123!")
             .unwrap();
         let old_source = Connection::open(&source).unwrap();
-        assert!(verify_snapshot_equality(&old_source, &new)
-            .unwrap()
-            .values_verified);
+        assert!(
+            verify_snapshot_equality(&old_source, &new)
+                .unwrap()
+                .values_verified
+        );
         drop(new);
         drop(old_source);
         assert_eq!(fs::read_dir(&parent).unwrap().count(), 2);
@@ -1290,8 +1302,10 @@ mod tests {
         {
             let source = Connection::open(&target).unwrap();
             source
-                .execute_batch("CREATE TABLE olddata(user_id TEXT PRIMARY KEY);
-                                INSERT INTO olddata VALUES('user.daniel');")
+                .execute_batch(
+                    "CREATE TABLE olddata(user_id TEXT PRIMARY KEY);
+                                INSERT INTO olddata VALUES('user.daniel');",
+                )
                 .unwrap();
         }
         let original = fs::read(&target).unwrap();
@@ -1317,7 +1331,8 @@ mod tests {
         new.pragma_update(None, "key", "NewCipherPassword123!")
             .unwrap();
         assert_eq!(
-            new.query_row("SELECT user_id FROM olddata", [], |row| row.get::<_, String>(0))
+            new.query_row("SELECT user_id FROM olddata", [], |row| row
+                .get::<_, String>(0))
                 .unwrap(),
             "user.daniel"
         );

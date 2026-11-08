@@ -37,6 +37,8 @@ export function reviewRows(form, staged = { correctionCount: 0, missingCount: 0,
     ["Schemaüberprüfung", staged.missingCount + " fehlende registrierte Objekte"],
     ["Schema migrieren", staged.schemaChoice === "yes" ? "Ja – fehlende Objekte ergänzen" : "Nein – Schema beibehalten"],
     ["Host-Administrator", "mingleadmin (vorhandenen Zugang beibehalten)"],
+    ["Lokaler Host", staged.localHostId ||
+      (staged.hostBindings ? "Automatisch aus bestehenden Hosts" : "Neuen lokalen Host anlegen")],
     ["Neues Loginpasswort", form.loginPassword ? "Festgelegt (nur bei Neuanlage)" : "Vorhandenen Zugang verwenden"],
     ["Anwendungsstart", "Automatisch nach erfolgreicher Installation"]
   ];
@@ -54,6 +56,7 @@ export function installationRequest(form, continueExisting = false, staged = { c
     loginPasswordConfirmation: form.loginPasswordConfirmation,
     corrections: staged.corrections,
     schemaAdditions: staged.schemaAdditions,
+    localHostId: staged.localHostId || null,
     approved: true, continueExisting
   };
 }
@@ -65,7 +68,7 @@ export function verifyInstalledRunning(result) {
       typeof result.installedApplication !== "string" ||
       typeof result.encryptedDatabase !== "string" ||
       typeof result.localHostId !== "string" ||
-      !/^local\.[a-zA-Z0-9._-]+$/.test(result.localHostId) ||
+      !/^[a-zA-Z0-9._-]+$/.test(result.localHostId) ||
       !Number.isInteger(result.nativeProcessId) || result.nativeProcessId < 1 ||
       typeof result.localUrl !== "string" ||
       !/^http:\/\/127\.0\.0\.1:[0-9]{1,5}\/$/.test(result.localUrl)) {

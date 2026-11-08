@@ -153,10 +153,9 @@ body.review-data main{max-width:1280px}
 <dl class="summary" id="install-summary" aria-label="Gewählte Installationsoptionen"></dl>
 <p id="ready-status" role="status" aria-live="polite">Konfiguration wird geprüft…</p>
 <div class="confirm"><label><input type="checkbox" id="installation-approved"> Installation durchführen</label></div>
-<button type="button" id="install-now" disabled>Installieren</button>
+<div class="confirm"><label><input type="checkbox" id="start-after-install" checked> Minglefield nach der Installation starten</label></div>
 <section id="existing-warning" hidden aria-live="polite">
-<p>Ein Anwendungsordner oder eine Zieldatenbank ist bereits vorhanden. Eine gültige SQLCipher-Datenbank wird unverändert übernommen; bisherige Programmdateien werden vor einer Aktualisierung gesichert. Vorhandene Fremddateien werden nicht gelöscht.</p>
-<button type="button" id="existing-continue">Weiter</button>
+<p>Das ausgewählte Ziel enthält bereits Programmdateien oder die ausgewählte Zieldatenbank existiert. Nur bei bestätigtem Klick auf das <strong>vorhandene Weiter</strong> werden nach Prüfung zulässige Daten und Anwendungsdateien übernommen oder gesichert. Vorhandene Fremddateien werden nicht gelöscht.</p>
 <button type="button" class="secondary" id="existing-abort">Abbruch</button>
 </section>
 <p id="installation-status" role="status" aria-live="polite">Noch keine Installation gestartet.</p>

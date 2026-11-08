@@ -334,7 +334,7 @@ fn match_rows(
                 "Eine ältere Korrektur kann hier nicht automatisch übernommen werden".into(),
             );
         };
-        if columns.len() < 1
+        if columns.is_empty()
             || columns.len() > 1024
             || before.len() != columns.len()
             || after.len() != columns.len()
@@ -713,7 +713,7 @@ mod tests {
             "",
             &dest,
             "VerifiedKey9!",
-            &[correction.clone()],
+            std::slice::from_ref(&correction),
             &[],
         )
         .is_ok());
